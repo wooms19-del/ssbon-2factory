@@ -1245,6 +1245,17 @@ async function fbGetOpenThawing() {
   }
 }
 
+// 미종료 포장 진행중 조회 (종료시간 없는 것 전체)
+async function fbGetOpenPacking() {
+  try {
+    const snap = await db.collection('packing_pending').where('end', '==', '').get();
+    return snap.docs.map(d => ({fbId: d.id, ...d.data()}));
+  } catch(e) {
+    console.error('Firebase 미종료 포장 조회 오류:', e);
+    return [];
+  }
+}
+
 // 날짜 범위 조회 (분석용)
 async function fbGetRange(colName, startDate, endDate) {
   const key = colName + '__range__' + startDate + '__' + endDate;
@@ -1306,6 +1317,33 @@ async function loadOpenThawing() {
   }
 }
 
+// 미종료 포장 pending 로드
+async function loadOpenPacking() {
+  try {
+    // 로컬에 fbId 없는 pending → Firebase에 올리기
+    const localOnly = (L.packing_pending||[]).filter(r => !r.fbId && (!r.end || r.end === ''));
+    for(const rec of localOnly) {
+      const fbId = await fbSave('packing_pending', rec);
+      if(fbId) { rec.fbId = fbId; }
+    }
+    if(localOnly.length) saveL();
+
+    // Firebase에서 전체 미종료 로드
+    const recs = await fbGetOpenPacking();
+    const completed = (L.packing_pending||[]).filter(r => r.end && r.end !== '');
+    L.packing_pending = [...completed, ...recs];
+    const seen = new Set();
+    L.packing_pending = L.packing_pending.filter(r => {
+      const k = r.fbId || r.id;
+      if(seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+    saveL();
+  } catch(e) {
+    console.error('미종료 포장 로드 오류:', e);
+  }
+}
+
 // ============================================================
 // 자동 갱신 (30초)
 // ============================================================
@@ -1335,6 +1373,7 @@ async function fetchTodayFromServer() {
   _isRefreshing = true;
   try {
     await loadFromServer(tod());
+    await loadOpenPacking();
     refreshCurrentTab_();
   } catch(e) {
     console.warn('자동갱신 오류:', e);
@@ -3752,6 +3791,12 @@ function renderPkWagonList() {
     ...L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean)),
     ...(L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
   ]);
+  const inPkDone = new Set(
+    L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
+  );
+  const inPkPending = new Set(
+    (L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
+  );
   const el = document.getElementById('pk_wagonList');
   if(!el) return;
   const wagons = [];
@@ -3762,23 +3807,23 @@ function renderPkWagonList() {
     });
   });
   if(!wagons.length) { el.innerHTML='<div class="emp">파쇄 완료된 와건 없음</div>'; return; }
-  const pending = wagons.filter(w=>!w.used);
-  const done    = wagons.filter(w=>w.used);
-  el.innerHTML =
-    pending.map(w => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px">
-        <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
+
+  const getBadge = (wNum) => {
+    let badge = '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#e0f2fe;color:#0369a1;font-weight:600">파쇄완료</span>';
+    if(inPkDone.has(wNum)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--sl);color:var(--s);font-weight:600">포장완료</span>';
+    else if(inPkPending.has(wNum)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--pl);color:var(--p);font-weight:600">포장중</span>';
+    return badge;
+  };
+
+  el.innerHTML = wagons.map(w => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;${w.used?'opacity:0.8':''}">
+      <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
+      <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:13px;color:var(--g5)">${w.kg}kg</span>
-      </div>`).join('') +
-    done.map(w => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;opacity:0.7">
-        <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
-        <span style="font-size:13px;color:var(--g5)">${w.kg}kg</span>
-        <span style="font-size:12px;color:#4caf50;font-weight:600">✅포장완료</span>
-      </div>`).join('');
+        ${getBadge(w.num)}
+      </div>
+    </div>`).join('');
 }
-
-
 function onShWagonChange() {
   const checked = [...document.querySelectorAll('.sh-wagon-cb:checked')];
   if(!checked.length) return;
@@ -4470,7 +4515,7 @@ function showTab(mode,tab){
     loadFromServer(today).then(()=>{ renderShWagonList(); renderPL('shredding'); });
   } else if(tab==='packing'){
     if(!L.packing_pending) L.packing_pending = [];
-    loadFromServer(today).then(()=>{
+    Promise.all([loadFromServer(today), loadOpenPacking()]).then(()=>{
       renderPkWagonList();
       renderPL('packing');
       renderPkPending();
@@ -5220,7 +5265,7 @@ function setPkRowNow(idx){
 }
 
 // 시작 → pending 레코드 생성
-function onPkStartBtn(){
+async function onPkStartBtn(){
   const rows = document.querySelectorAll('#pk_machRows > div');
   if(!rows.length){ toast('설비를 먼저 추가하세요','d'); return; }
 
@@ -5254,6 +5299,14 @@ function onPkStartBtn(){
   });
 
   if(!added) return;
+  saveL();
+
+  // Firebase에 pending 저장 (다른 기기에서도 보이게)
+  const pendingToSave = L.packing_pending.filter(r => !r.fbId && String(r.date||'').slice(0,10) === tod());
+  for(const rec of pendingToSave) {
+    const fbId = await fbSave('packing_pending', rec);
+    if(fbId) { rec.fbId = fbId; }
+  }
   saveL();
 
   document.getElementById('pk_machRows').innerHTML='';
@@ -5370,7 +5423,10 @@ async function savePkEnd(id){
   L.packing.push(completed);
   saveL();
 
-  // Firebase 저장
+  // Firebase packing_pending 삭제
+  if(rec.fbId) fbDelete('packing_pending', rec.fbId);
+
+  // Firebase packing 저장
   const fbId = await fbSave('packing', completed);
   if(fbId){
     completed.fbId = fbId;
@@ -5958,6 +6014,12 @@ function renderPkWagonList() {
     ...L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean)),
     ...(L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
   ]);
+  const inPkDone = new Set(
+    L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
+  );
+  const inPkPending = new Set(
+    (L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
+  );
   const el = document.getElementById('pk_wagonList');
   if(!el) return;
   const wagons = [];
@@ -5968,23 +6030,23 @@ function renderPkWagonList() {
     });
   });
   if(!wagons.length) { el.innerHTML='<div class="emp">파쇄 완료된 와건 없음</div>'; return; }
-  const pending = wagons.filter(w=>!w.used);
-  const done    = wagons.filter(w=>w.used);
-  el.innerHTML =
-    pending.map(w => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px">
-        <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
+
+  const getBadge = (wNum) => {
+    let badge = '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#e0f2fe;color:#0369a1;font-weight:600">파쇄완료</span>';
+    if(inPkDone.has(wNum)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--sl);color:var(--s);font-weight:600">포장완료</span>';
+    else if(inPkPending.has(wNum)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--pl);color:var(--p);font-weight:600">포장중</span>';
+    return badge;
+  };
+
+  el.innerHTML = wagons.map(w => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;${w.used?'opacity:0.8':''}">
+      <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
+      <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:13px;color:var(--g5)">${w.kg}kg</span>
-      </div>`).join('') +
-    done.map(w => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;opacity:0.7">
-        <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
-        <span style="font-size:13px;color:var(--g5)">${w.kg}kg</span>
-        <span style="font-size:12px;color:#4caf50;font-weight:600">✅포장완료</span>
-      </div>`).join('');
+        ${getBadge(w.num)}
+      </div>
+    </div>`).join('');
 }
-
-
 function onShWagonChange() {
   const checked = [...document.querySelectorAll('.sh-wagon-cb:checked')];
   if(!checked.length) return;
@@ -6618,13 +6680,10 @@ function opCalc(i, innerEa) {
   const defp   = parseInt(document.getElementById('op_d0_'+i).value)||0;
   const sample = parseInt(document.getElementById('op_sample_'+i).value)||0;
 
-  // 레시피에서 perBox 계산
-  const prodName = document.getElementById('op_row_'+i)
-    ? document.getElementById('op_row_'+i).querySelector('.sn').textContent : '';
-  const rc = (L.recipes||{})[prodName] || {};
-  const outerMats = rc.outer || [];
-  const firstQty = outerMats.length ? outerMats[0].qty : 0;
-  const perBox = firstQty > 0 ? Math.round(1/firstQty) : 0;
+  // 제품명 → 레시피에서 입수(perBox) 계산
+  const snEl = document.querySelector('#op_row_'+i+' .sn');
+  const prodName = snEl ? snEl.textContent.trim() : '';
+  const perBox = getPerBox(prodName) || 0;
 
   // 잔여 = 내포장 - (박스×입수) - 제품불량 - 샘플
   const rem = innerEa - boxes * perBox - defp - sample;
@@ -6633,24 +6692,22 @@ function opCalc(i, innerEa) {
   const sbox = document.getElementById('op_sbox_'+i);
   const sdefp = document.getElementById('op_sdefp_'+i);
   const srem = document.getElementById('op_srem_'+i);
-  const remEl = document.getElementById('op_rem_'+i);
   const rateEl = document.getElementById('op_rate_'+i);
 
   if(sbox) sbox.textContent = boxes.toLocaleString();
   if(sdefp){ sdefp.textContent = defp.toLocaleString()+' EA'; sdefp.style.color = defp>0?'var(--d)':''; }
 
-  // 외포장 완료 EA = 내포장 - 불량 - 샘플
-  const outerCalc = Math.max(0, innerEa - defp - sample);
+  // 외포장 완료 EA = 박스 × 입수 (입수 모르면 내포장 - 불량 - 샘플)
+  const outerCalc = (boxes > 0 && perBox > 0) ? boxes * perBox : Math.max(0, innerEa - defp - sample);
   const sOuter = document.getElementById('op_souter_'+i);
   const outerInput = document.getElementById('op_outer_'+i);
   if(sOuter){ sOuter.textContent = outerCalc.toLocaleString(); }
   if(outerInput){ outerInput.value = outerCalc; }
 
-  // 잔여 EA 자동계산 → input에 반영 (직접 수정 가능)
+  // 잔여 EA
   const remInput = document.getElementById('op_rem_'+i);
   if(remInput){ remInput.value = rem >= 0 ? rem : 0; }
-
-  if(srem){ srem.textContent = rem.toLocaleString(); srem.style.color = rem<0?'var(--d)':rem===0?'var(--s)':''; }
+  if(srem){ srem.textContent = (rem >= 0 ? rem : 0).toLocaleString(); srem.style.color = rem<0?'var(--d)':rem===0?'var(--s)':''; }
 
   // 불량률
   if(rateEl){
@@ -6659,11 +6716,12 @@ function opCalc(i, innerEa) {
     rateEl.style.color = parseFloat(rate)>0 ? 'var(--d)' : '';
   }
 
-  // 제품 행 - 이론 사용량만 표시, 실제 사용량은 건드리지 않음
+  // 포장재 이론 사용량
+  const rc = (L.recipes||{})[prodName] || {};
+  const outerMats = rc.outer || [];
   const t0El = document.getElementById('op_t0_'+i);
   if(t0El) t0El.textContent = (boxes*perBox).toLocaleString();
 
-  // 포장재 행 (불량 시 +) - 이론 사용량은 출하 EA × qty 로 계산
   const packedEa = boxes * perBox;
   outerMats.forEach((m,j) => {
     const theory = parseFloat((packedEa * m.qty).toFixed(2));
