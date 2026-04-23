@@ -40,12 +40,6 @@ async function loadSettings_(){
   }
 }
 
-if(document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
-
 // ============================================================
 // 설정 탭 - 제품/소스/부재료/GTIN 관리
 // ============================================================
