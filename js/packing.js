@@ -1,0 +1,351 @@
+// ============================================================
+// 포장 탭 - 시작/진행중/종료 3단계
+// ============================================================
+
+var _pkRowIdx = 0;
+
+// 설비 시작 행 추가
+function addPkMachRow(){
+  const idx = _pkRowIdx++;
+  const prodOpts = '<option value="">선택</option>'+L.products.map(p=>`<option>${p.name}</option>`).join('');
+  const subOpts = '<option value="">없음</option>'+(L.submats||[]).map(s=>`<option>${s}</option>`).join('');
+
+  // 파쇄 완료 와건 목록 생성
+  const today = tod();
+  const yesterday = getYesterday_();
+  const shWagons = [];
+  L.shredding.filter(r=>{
+    const d = String(r.date||'').slice(0,10);
+    return (d===today||d===yesterday) && r.wagonOut && r.end;
+  }).forEach(sh=>{
+    (sh.wagonOut||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(w=>{
+      if(!shWagons.includes(w)) shWagons.push(w);
+    });
+  });
+  const wagonOpts = '<option value="">직접입력</option>' + shWagons.map(w=>`<option value="${w}">${w}번 와건</option>`).join('');
+
+  const row = document.createElement('div');
+  row.id = 'pkRow_'+idx;
+  row.style.cssText = 'background:var(--g1);border-radius:8px;padding:12px;margin-bottom:8px;position:relative';
+  row.innerHTML = `
+    <button onclick="removePkRow(${idx})" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--g4);font-size:16px;cursor:pointer">✕</button>
+    <div style="font-size:12px;font-weight:700;color:var(--g6);margin-bottom:8px">설비 ${idx+1}</div>
+    <div class="fg">
+      <div class="fgrp cs2">
+        <label class="fl">제품명 <span class="req">*</span></label>
+        <select class="fc pk-row-prod" data-idx="${idx}" onchange="onPkRowProd(${idx})">${prodOpts}</select>
+      </div>
+      <div class="fgrp">
+        <label class="fl">설비 번호</label>
+        <select class="fc pk-row-mach" data-idx="${idx}">
+          <option value="">선택</option><option>1호기</option><option>2호기</option><option>3호기</option><option>4호기</option>
+        </select>
+      </div>
+      <div class="fgrp cs2">
+        <label class="fl">투입 와건번호 <span style="font-size:11px;color:var(--g4)">(여러 개 선택 가능)</span></label>
+        <div id="pkWagonBtns_${idx}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+          ${shWagons.map(w=>`<button type="button" class="pk-wagon-btn" data-idx="${idx}" data-w="${w}" onclick="togglePkWagon(${idx},'${w}')" style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#fff;cursor:pointer;font-size:13px">${w}번</button>`).join('')}
+        </div>
+        <input class="fc pk-row-wagon-input" type="text" placeholder="직접입력 (예: 14,15)" data-idx="${idx}" oninput="onPkWagonDirectInput(${idx})">
+        <input type="hidden" class="pk-row-wagon" data-idx="${idx}" value="">
+      </div>
+      <div class="fgrp">
+        <label class="fl">원육 타입 <span style="font-size:11px;color:var(--g4)">(와건 선택 시 자동)</span></label>
+        <select class="fc pk-row-type" data-idx="${idx}">
+          <option value="">자동감지</option><option>설도</option><option>홍두깨</option><option>우둔</option>
+        </select>
+      </div>
+      <div class="fgrp">
+        <label class="fl">인원</label>
+        <input class="fc pk-row-workers" type="number" placeholder="0" data-idx="${idx}">
+      </div>
+      <div class="fgrp">
+        <label class="fl">시작시간 <span class="req">*</span></label>
+        <input class="fc pk-row-start" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" data-idx="${idx}">
+      </div>
+      <div class="fgrp" style="display:flex;align-items:flex-end">
+        <button type="button" class="btn bo bsm" onclick="setPkRowNow(${idx})">🕐 지금으로</button>
+      </div>
+      <div class="fgrp">
+        <label class="fl">소스 탱크</label>
+        <select class="fc pk-row-stank" data-idx="${idx}">
+          <option value="">선택</option>
+          <option>1번탱크</option><option>2번탱크</option><option>3번탱크</option><option>4번탱크</option>
+          <option>5번탱크</option><option>6번탱크</option><option>7번탱크</option>
+        </select>
+      </div>
+      <div class="fgrp">
+        <label class="fl">부재료명</label>
+        <select class="fc pk-row-subnm" data-idx="${idx}">${subOpts}</select>
+      </div>
+      <div class="fgrp cs2">
+        <div class="fc" id="pkRowSi_${idx}" style="background:var(--g2);color:var(--g5);font-size:13px;margin-top:4px">제품 선택 후 원료육 자동 계산</div>
+      </div>
+    </div>`;
+  document.getElementById('pk_machRows').appendChild(row);
+}
+
+// 와건 버튼 토글 (다중 선택)
+function togglePkWagon(idx, w){
+  const btn = document.querySelector(`#pkWagonBtns_${idx} [data-w="${w}"]`);
+  const hidden = document.querySelector(`#pkRow_${idx} .pk-row-wagon`);
+  const directInput = document.querySelector(`#pkRow_${idx} .pk-row-wagon-input`);
+  if(!btn||!hidden) return;
+
+  // 현재 선택 목록 관리
+  const current = hidden.value ? hidden.value.split(',').map(x=>x.trim()).filter(Boolean) : [];
+  const idx2 = current.indexOf(w);
+  if(idx2 >= 0) {
+    current.splice(idx2,1);
+    btn.style.background='#fff'; btn.style.borderColor='var(--g3)'; btn.style.color='';
+  } else {
+    current.push(w);
+    btn.style.background='var(--p)'; btn.style.borderColor='var(--p)'; btn.style.color='#fff';
+  }
+  hidden.value = current.join(',');
+  if(directInput) directInput.value = current.join(',');
+
+  // 원육타입 자동 추적 (첫 번째 와건 기준)
+  if(current.length > 0){
+    const wNum = current[0];
+    const shRec = L.shredding.find(r=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(wNum));
+    if(shRec){
+      const wIns = (shRec.wagonIn||'').split(',').map(x=>x.trim()).filter(Boolean);
+      for(const wIn of wIns){
+        const ckRec = L.cooking.find(r=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn));
+        if(ckRec && ckRec.type){
+          const row = document.getElementById('pkRow_'+idx);
+          const typeEl = row&&row.querySelector('.pk-row-type');
+          if(typeEl) typeEl.value = ckRec.type.split(',')[0].trim();
+          break;
+        }
+      }
+    }
+  }
+}
+
+function removePkRow(idx){
+  const el = document.getElementById('pkRow_'+idx);
+  if(el) el.remove();
+}
+
+function onPkRowProd(idx){
+  const row = document.getElementById('pkRow_'+idx);
+  if(!row) return;
+  const p = L.products.find(x=>x.name===row.querySelector('.pk-row-prod').value);
+  const si = document.getElementById('pkRowSi_'+idx);
+  if(!si) return;
+  if(p){ si.textContent=`원료육 ${p.kgea}kg/EA · Capa ${p.capa}EA · 소스 ${p.sauce||'-'}`; si.style.color='var(--p)'; }
+  else { si.textContent='제품 선택 후 원료육 자동 계산'; si.style.color='var(--g5)'; }
+}
+
+// 지금 시간으로 자동 입력
+function setPkNow(){
+  document.getElementById('pk_startTime').value = nowHM();
+}
+
+function setPkRowNow(idx){
+  const row = document.getElementById('pkRow_'+idx);
+  if(row){ const inp = row.querySelector('.pk-row-start'); if(inp) inp.value = nowHM(); }
+}
+
+// 시작 → pending 레코드 생성
+async function onPkStartBtn(){
+  const rows = document.querySelectorAll('#pk_machRows > div');
+  if(!rows.length){ toast('설비를 먼저 추가하세요','d'); return; }
+
+  // 각 행별 시작시간은 행 내부에서 읽음
+  if(!L.packing_pending) L.packing_pending = [];
+
+  let added = 0;
+  rows.forEach(row => {
+    const product = row.querySelector('.pk-row-prod').value;
+    const startTime = row.querySelector('.pk-row-start')?.value || '';
+    if(!startTime){ toast('시작시간을 입력하세요','d'); return; }
+    if(!product){ toast('제품명을 선택하세요','d'); return; }
+    const machine = row.querySelector('.pk-row-mach').value;
+    const wagonHidden = row.querySelector('.pk-row-wagon');
+    const wagonDirect = row.querySelector('.pk-row-wagon-input');
+    const wagon = (wagonHidden ? wagonHidden.value : (wagonDirect ? wagonDirect.value : '')).trim();
+    const workers = parseFloat(row.querySelector('.pk-row-workers').value)||0;
+    const type = row.querySelector('.pk-row-type')?.value||'';
+    const sauceTank = row.querySelector('.pk-row-stank').value;
+    const subName = row.querySelector('.pk-row-subnm').value;
+
+    const rec = {
+      id: gid(), date: DDATE||tod(),
+      product, machine, wagon, workers, type,
+      start: startTime,
+      sauceTank, subName,
+      end:'', ea:0, pouch:0, defect:0, sauceKg:0, subKg:0
+    };
+    L.packing_pending.push(rec);
+    added++;
+  });
+
+  if(!added) return;
+  saveL();
+
+  // Firebase에 pending 저장 (다른 기기에서도 보이게)
+  const pendingToSave = L.packing_pending.filter(r => !r.fbId && String(r.date||'').slice(0,10) === tod());
+  for(const rec of pendingToSave) {
+    const fbId = await fbSave('packing_pending', rec);
+    if(fbId) { rec.fbId = fbId; }
+  }
+  saveL();
+
+  document.getElementById('pk_machRows').innerHTML='';
+  _pkRowIdx = 0;
+  document.querySelectorAll('.pk-wagon-cb').forEach(c=>c.checked=false);
+
+  document.getElementById('pk_startCard').style.display='none';
+  document.getElementById('pk_pendingCard').style.display='';
+
+  renderPkPending();
+  toast(`포장 시작 — ${added}개 설비 진행중 ✓`,'i');
+}
+
+// + 추가 설비 시작 버튼
+function showPkStartCard(){
+  document.getElementById('pk_startCard').style.display='';
+  document.getElementById('pk_startCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// 진행중 설비 렌더링
+function renderPkPending(){
+  if(!L.packing_pending) L.packing_pending = [];
+  const pending = L.packing_pending.filter(r => String(r.date||'').slice(0,10) === tod());
+  const el = document.getElementById('pk_pendingList');
+  const cntEl = document.getElementById('pk_pendingCnt');
+  const card = document.getElementById('pk_pendingCard');
+  if(!el) return;
+
+  if(cntEl) cntEl.textContent = pending.length + '개';
+
+  if(!pending.length){
+    card.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  card.style.display = '';
+
+  el.innerHTML = pending.map(r => `
+    <div id="pkPend_${r.id}" style="border:1px solid var(--g2);border-radius:8px;margin-bottom:10px;overflow:hidden">
+      <!-- 헤더 -->
+      <div style="background:var(--pl);padding:12px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--g8)">${r.machine||'설비미정'} · ${r.product}</div>
+          <div style="font-size:12px;color:var(--g5);margin-top:3px">
+            와건 ${r.wagon||'-'} · 시작 ${r.start} · ${r.workers}명
+            ${r.sauceTank ? ' · 소스 '+r.sauceTank : ''}
+          </div>
+        </div>
+        <button class="btn bs bsm" onclick="togglePkEndForm('${r.id}')">종료 입력</button>
+      </div>
+      <!-- 종료 입력 폼 (숨김) -->
+      <div id="pkEndForm_${r.id}" style="display:none;padding:12px;background:#fff">
+        <div class="fg">
+          <div class="fgrp">
+            <label class="fl">종료시간 <span class="req">*</span></label>
+            <input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" id="pkEnd_t_${r.id}">
+          </div>
+          <div class="fgrp">
+            <label class="fl">생산 EA <span class="req">*</span></label>
+            <input class="fc" type="number" id="pkEnd_ea_${r.id}" placeholder="0">
+          </div>
+          <div class="fgrp">
+            <label class="fl">파우치 사용량</label>
+            <input class="fc" type="number" id="pkEnd_pouch_${r.id}" placeholder="0">
+          </div>
+          <div class="fgrp">
+            <label class="fl">불량 수량(EA)</label>
+            <input class="fc" type="number" id="pkEnd_defect_${r.id}" placeholder="0">
+          </div>
+          <div class="fgrp">
+            <label class="fl">소스 사용량(KG)</label>
+            <input class="fc" type="number" step="0.01" id="pkEnd_skg_${r.id}" placeholder="0.00">
+          </div>
+          <div class="fgrp">
+            <label class="fl">부재료량</label>
+            <input class="fc" type="number" step="0.01" id="pkEnd_subkg_${r.id}" placeholder="0.00">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn bs bblk" style="flex:1" onclick="savePkEnd('${r.id}')">종료 저장</button>
+          <button class="btn bo bsm" onclick="togglePkEndForm('${r.id}')">취소</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function togglePkEndForm(id){
+  const form = document.getElementById('pkEndForm_'+id);
+  if(!form) return;
+  const isOpen = form.style.display !== 'none';
+  form.style.display = isOpen ? 'none' : '';
+}
+
+async function savePkEnd(id){
+  if(!L.packing_pending) L.packing_pending = [];
+  const rec = L.packing_pending.find(r=>r.id===id);
+  if(!rec){ toast('데이터 없음','d'); return; }
+
+  const end = document.getElementById('pkEnd_t_'+id).value;
+  const ea = parseFloat(document.getElementById('pkEnd_ea_'+id).value)||0;
+  const pouch = parseFloat(document.getElementById('pkEnd_pouch_'+id).value)||0;
+  const defect = parseFloat(document.getElementById('pkEnd_defect_'+id).value)||0;
+  const sauceKg = parseFloat(document.getElementById('pkEnd_skg_'+id).value)||0;
+  const subKg = parseFloat(document.getElementById('pkEnd_subkg_'+id).value)||0;
+
+  if(!end){ toast('종료시간을 입력하세요','d'); return; }
+  if(!ea){ toast('생산 EA를 입력하세요','d'); return; }
+
+  // 완성된 레코드
+  const completed = {...rec, end, ea, pouch, defect, sauceKg, subKg};
+
+  // pending에서 제거 → packing에 추가
+  L.packing_pending = L.packing_pending.filter(r=>r.id!==id);
+  L.packing.push(completed);
+  saveL();
+
+  // Firebase packing_pending 삭제
+  if(rec.fbId) fbDelete('packing_pending', rec.fbId);
+
+  // Firebase packing 저장
+  const fbId = await fbSave('packing', completed);
+  if(fbId){
+    completed.fbId = fbId;
+    saveL();
+    gasRecord('savePacking', completed);
+    toast(`${completed.machine||'설비'} 종료 저장됨 ✓`);
+  } else {
+    toast('저장 실패 - 로컬에만 저장됨','d');
+  }
+
+  renderPkPending();
+  renderPL('packing');
+}
+
+// onPkWagonChange - 마지막 설비 행 와건에 자동 입력
+function onPkWagonChange(){
+  const checked = [...document.querySelectorAll('.pk-wagon-cb:checked')];
+  if(!checked.length) return;
+  const rows = document.querySelectorAll('#pk_machRows > div');
+  if(rows.length){
+    const lastRow = rows[rows.length-1];
+    const wInput = lastRow.querySelector('.pk-row-wagon');
+    if(wInput) wInput.value = checked.map(w=>w.dataset.wagon).join(',');
+  }
+}
+
+// onProd - 레거시 호환 (pk_prod 없어도 에러 안 나게)
+function onProd(){
+  const el = document.getElementById('pk_prod');
+  if(!el) return;
+  const nm = el.value;
+  const p = L.products.find(x=>x.name===nm);
+  const siEl = document.getElementById('pkSi');
+  if(!p||!siEl){ if(siEl) siEl.classList.add('hid'); return; }
+  siEl.innerHTML=`<div class="al al-i">원료육 ${p.kgea}kg/EA · FullCapa ${p.capa}EA · 소스 ${p.sauce||'-'}</div>`;
+  siEl.classList.remove('hid');
+}
