@@ -392,3 +392,6 @@ function refreshCurrentTab_() {
     else renderPL(ITAB);
   }
 }
+
+// L 초기화 (페이지 로드 시 즉시)
+if(!L) L = loadL();
