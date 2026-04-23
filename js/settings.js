@@ -304,3 +304,24 @@ function expAll(){
   const ks=[...new Set(all.flatMap(r=>Object.keys(r)))];
   dlCSV('생산데이터_전체.csv',[ks,...all.map(r=>ks.map(k=>r[k]??''))]);
 }
+function startEditProd(i){
+  _editProdIdx = i;
+  const p = L.products[i];
+  if(!p) return;
+  document.getElementById('np_nm').value = p.name;
+  document.getElementById('np_ke').value = p.kgea||'';
+  document.getElementById('np_cp').value = p.capa||'';
+  const npSc = document.getElementById('np_sc');
+  if(npSc) npSc.value = p.sauce||'';
+  fillRecipeForm(p.recipe||null);
+  const addBtn = document.querySelector('#p-settings .btn.bs[onclick="addProd()"]');
+  if(addBtn){ addBtn.textContent='✔ 수정 저장'; addBtn.style.background='var(--w)'; }
+  const cancelBtn = document.getElementById('prodEditCancel');
+  if(cancelBtn) cancelBtn.style.display='';
+  document.querySelectorAll('[id^="pdItem_"]').forEach(el=>el.style.background='');
+  const item = document.getElementById('pdItem_'+i);
+  if(item) item.style.background='var(--wl)';
+  toast('수정 모드: '+p.name,'i');
+  document.getElementById('np_nm').scrollIntoView({behavior:'smooth', block:'center'});
+  document.getElementById('np_nm').focus();
+}
