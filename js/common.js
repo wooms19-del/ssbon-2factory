@@ -1,0 +1,394 @@
+var GAS_URL = 'https://script.google.com/macros/s/AKfycby_Vr6xrvhnal5p9OQ5uXimY1tug5wt_qSH1eK6G2RDvzidWaYyZzWTJ9mZsHf0Rt-l8g/exec';
+
+
+// GAS 백업 URL (구글시트 실시간 기록용)
+
+var firebaseConfig = {
+  apiKey: "AIzaSyA0Y6VK8EOahDE6O7LEWtyG9-U8YP3yqDE",
+  authDomain: "ssbon-factory.firebaseapp.com",
+  projectId: "ssbon-factory",
+  storageBucket: "ssbon-factory.firebasestorage.app",
+  messagingSenderId: "815013258298",
+  appId: "1:815013258298:web:a80156143cf742ece8c103"
+};
+
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
+
+// ============================================================
+// 상태 변수
+// ============================================================
+var SK = 'ssbon_v6';
+var MODE='i', ITAB='barcode', DTAB='daily', DDATE=tod(), PD='week';
+var PEND=null, _lastCode='';
+var _ppSelectedWagons = []; // 전처리 지금시작 시 선택된 대차 저장
+var L; // Firebase 초기화 후 로드
+var _unsubscribes = [];
+
+// ============================================================
+// 로컬 스토리지 (오프라인 버퍼)
+// ============================================================
+function pruneOldData(d) {
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
+  const cutStr = cutoff.toISOString().slice(0,10);
+  ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce'].forEach(k => {
+    if(Array.isArray(d[k])) d[k] = d[k].filter(r => String(r.date||'').slice(0,10) >= cutStr);
+  });
+}
+function loadL(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(SK));
+    if(!raw) return nL();
+    const base = nL();
+    ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce',
+     'packing_pending','cooking_pending'].forEach(k => { if(!Array.isArray(raw[k])) raw[k]=base[k]||[]; });
+    if(!raw.products || !raw.products.length) raw.products = base.products;
+    if(!raw.sauces)   raw.sauces   = base.sauces;
+    if(!raw.submats)  raw.submats  = base.submats;
+    if(!raw.gtinMap)  raw.gtinMap  = base.gtinMap;
+    if(!raw.recipes)  raw.recipes  = {};
+    pruneOldData(raw);
+    return raw;
+  }
+  catch(e){ return nL(); }
+}
+function saveL(){ if(L) localStorage.setItem(SK, JSON.stringify(L)); }
+function nL(){
+  return {
+    barcodes:[], thawing:[], preprocess:[], cooking:[], shredding:[], packing:[], sauce:[],
+    packing_pending:[], cooking_pending:[],
+    products:[
+      {name:'코스트코 장조림 170g',   kgea:0.054, capa:1500, sauce:'FC 장조림 소스'},
+      {name:'시그니처 장조림 130g',   kgea:0.025, capa:800,  sauce:'FC 장조림 소스'},
+      {name:'미니쇠고기장조림 70g 낱개', kgea:0.024, capa:700,  sauce:'FC 장조림 소스'},
+      {name:'미니쇠고기장조림 70g 5입',  kgea:0.024, capa:700,  sauce:'FC 장조림 소스'},
+      {name:'시그니처 장조림 120g',   kgea:0.030, capa:700,  sauce:'FC 장조림 소스'},
+      {name:'시그니처 장조림 130g 마트용', kgea:0.025, capa:800, sauce:'FC 장조림 소스'},
+      {name:'FC 장조림 3KG',          kgea:1.3,   capa:500,  sauce:'FC 장조림 소스'},
+      {name:'트레이더스 장조림 460g', kgea:0.147, capa:2100, sauce:'FC 장조림 소스'},
+    ],
+    sauces:[{name:'FC 장조림 소스', memo:'기본 배합'},{name:'FP 장조림 소스', memo:'기본 배합'}],
+    submats:['메추리알','버터'],
+    gtinMap:{
+      '99351990207011':'설도','99331079038156':'설도',
+      '99401040912614':'홍두깨','99331079060461':'우둔',
+      '99337638062761':'설도'
+    },
+    recipes:{}  // {제품명: {inner:[{name,qty,unit}], outer:[{name,qty,unit,pkgType}]}}
+  };
+}
+
+// ============================================================
+// 유틸
+// ============================================================
+function tod(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+const DAYS=['일','월','화','수','목','금','토'];
+function dayOfWeek(dateStr){ const d=new Date(dateStr+'T00:00:00'); return DAYS[d.getDay()]; }
+function dateWithDay(dateStr){ return dateStr+' ('+dayOfWeek(dateStr)+')'; }
+function setText(id,v){ const el=document.getElementById(id); if(el) el.textContent=v; }
+function getYesterday_(){
+  const d = new Date(); d.setDate(d.getDate()-1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function gid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+function r2(v){ return Math.round(parseFloat(v)*100)/100; }
+function dedupeRec(arr, keyFn){ const seen=new Set(); return arr.filter(r=>{ const k=keyFn(r); if(seen.has(k)) return false; seen.add(k); return true; }); }
+function addDays(dateStr,n){var p=String(dateStr||'').split('-').map(Number);var dt=new Date(p[0],p[1]-1,p[2]+n);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');}
+function dur(s,e){
+  if(!s||!e) return 0;
+  const tm=t=>{const p=t.split(':');return+p[0]*60+(+p[1]||0);};
+  let d=tm(e)-tm(s); if(d<0)d+=1440; return r2(d/60);
+}
+
+// 여러 레코드의 중복 제거한 실제 가동 시간 (병렬 작업 고려)
+function calcActualHours(recs){
+  const tm=t=>{const p=(t+'').split(':');return+p[0]*60+(+p[1]||0);};
+  const intervals=[];
+  recs.forEach(r=>{
+    if(!r.start||!r.end) return;
+    let s=tm(r.start), e=tm(r.end);
+    if(e<s) e+=1440;
+    intervals.push([s,e]);
+  });
+  if(!intervals.length) return 0;
+  intervals.sort((a,b)=>a[0]-b[0]);
+  const merged=[intervals[0].slice()];
+  for(let i=1;i<intervals.length;i++){
+    const last=merged[merged.length-1];
+    if(intervals[i][0]<=last[1]) last[1]=Math.max(last[1],intervals[i][1]);
+    else merged.push(intervals[i].slice());
+  }
+  return r2(merged.reduce((s,[a,b])=>s+(b-a),0)/60);
+}
+function sumMH(recs){ return r2(recs.reduce((s,r)=>s+dur(r.start,r.end)*(parseFloat(r.workers)||0),0)); }
+function nowHM(){
+  const n=new Date();
+  return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+}
+
+// ============================================================
+// Firebase CRUD
+// ============================================================
+
+// GAS 구글시트 실시간 기록 (백그라운드, 실패해도 무시)
+async function gasRecord(action, data) {
+  try {
+    const payload = encodeURIComponent(JSON.stringify(data));
+    await fetch(`${GAS_URL}?action=${action}&payload=${payload}`, {
+      method: 'GET', redirect: 'follow'
+    });
+  } catch(e) {
+    console.warn('GAS 기록 실패 (무시):', e);
+  }
+}
+
+// 읽기 쉬운 문서 ID 생성 (공정prefix_날짜_시간)
+function makeDocId(colName) {
+  const prefix = {barcode:'bc',thawing:'th',preprocess:'pp',cooking:'ck',shredding:'sh',packing:'pk',sauce:'sc'};
+  const now = new Date();
+  const d = now.getFullYear().toString() +
+    String(now.getMonth()+1).padStart(2,'0') +
+    String(now.getDate()).padStart(2,'0');
+  const t = String(now.getHours()).padStart(2,'0') +
+    String(now.getMinutes()).padStart(2,'0') +
+    String(now.getSeconds()).padStart(2,'0');
+  return `${prefix[colName]||colName}_${d}_${t}`;
+}
+
+// 저장
+async function fbSave(colName, data, customDocId) {
+  try {
+    const docId = customDocId || makeDocId(colName);
+    await db.collection(colName).doc(docId).set({
+      ...data,
+      _createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    fbClearCache(colName); // 저장 후 해당 컬렉션 캐시 무효화
+    return docId;
+  } catch(e) {
+    console.error('Firebase 저장 오류:', e);
+    return null;
+  }
+}
+
+// 업데이트
+async function fbUpdate(colName, fbId, data) {
+  try {
+    await db.collection(colName).doc(fbId).update( data);
+    fbClearCache(colName); // 업데이트 후 캐시 무효화
+    return true;
+  } catch(e) {
+    console.error('Firebase 업데이트 오류:', e);
+    return false;
+  }
+}
+
+// 삭제
+async function fbDelete(colName, fbId) {
+  try {
+    await db.collection(colName).doc(fbId).delete();
+    fbClearCache(colName); // 삭제 후 캐시 무효화
+    return true;
+  } catch(e) {
+    console.error('Firebase 삭제 오류:', e);
+    return false;
+  }
+}
+
+// 날짜별 조회
+// ============================================================
+// Firebase 세션 캐시 (같은 날짜/범위 재조회 방지)
+// ============================================================
+var _fbCache = {};
+const _CACHE_TTL = 2 * 60 * 1000; // 2분
+
+function fbClearCache(colName) {
+  if(colName) {
+    Object.keys(_fbCache).forEach(k => { if(k.startsWith(colName+'__')) delete _fbCache[k]; });
+  } else {
+    _fbCache = {};
+  }
+}
+
+function _cacheGet(key) {
+  const e = _fbCache[key];
+  if(!e) return null;
+  if(Date.now() - e.ts > _CACHE_TTL) { delete _fbCache[key]; return null; }
+  return e.data;
+}
+function _cacheSet(key, data) { _fbCache[key] = {data, ts: Date.now()}; }
+
+async function fbGetByDate(colName, date) {
+  const key = colName + '__' + date;
+  const cached = _cacheGet(key); if(cached) return cached;
+  try {
+    const snap = await db.collection(colName).where('date', '==', date).get();
+    const result = snap.docs.map(d => ({fbId: d.id, ...d.data()}));
+    _cacheSet(key, result);
+    return result;
+  } catch(e) {
+    console.error('Firebase 조회 오류:', e);
+    return [];
+  }
+}
+
+// 미종료 방혈 조회 (종료시간 없는 것 전체)
+async function fbGetOpenThawing() {
+  try {
+    const snap = await db.collection('thawing').where('end', '==', '').get();
+    return snap.docs.map(d => ({fbId: d.id, ...d.data()}));
+  } catch(e) {
+    console.error('Firebase 미종료 방혈 조회 오류:', e);
+    return [];
+  }
+}
+
+// 미종료 포장 진행중 조회 (종료시간 없는 것 전체)
+async function fbGetOpenPacking() {
+  try {
+    const snap = await db.collection('packing_pending').where('end', '==', '').get();
+    return snap.docs.map(d => ({fbId: d.id, ...d.data()}));
+  } catch(e) {
+    console.error('Firebase 미종료 포장 조회 오류:', e);
+    return [];
+  }
+}
+
+// 날짜 범위 조회 (분석용)
+async function fbGetRange(colName, startDate, endDate) {
+  const key = colName + '__range__' + startDate + '__' + endDate;
+  const cached = _cacheGet(key); if(cached) return cached;
+  try {
+    const snap = await db.collection(colName)
+      .where('date', '>=', startDate)
+      .where('date', '<=', endDate)
+      .get();
+    const result = snap.docs.map(d => ({fbId: d.id, ...d.data()}));
+    _cacheSet(key, result);
+    return result;
+  } catch(e) {
+    console.error('Firebase 범위 조회 오류:', e);
+    return [];
+  }
+}
+
+// ============================================================
+// 서버(Firebase)에서 오늘 데이터 로드
+// ============================================================
+async function loadFromServer(date) {
+  try {
+    const cols = ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce'];
+    const colMap = {barcodes:'barcode', thawing:'thawing', preprocess:'preprocess',
+      cooking:'cooking', shredding:'shredding', packing:'packing', sauce:'sauce'};
+    
+    await Promise.all(cols.map(async lKey => {
+      const fbCol = colMap[lKey] || lKey;
+      const recs = await fbGetByDate(fbCol, date);
+      if(recs.length > 0) {
+        L[lKey] = [...(L[lKey]||[]).filter(x => String(x.date||'').slice(0,10) !== date), ...recs];
+      }
+    }));
+    saveL();
+    return true;
+  } catch(e) {
+    console.error('서버 로드 오류:', e);
+    return false;
+  }
+}
+
+// 미종료 방혈 로드
+async function loadOpenThawing() {
+  try {
+    const recs = await fbGetOpenThawing();
+    // Firebase를 source of truth로 사용 - localOnly 제거하여 유령데이터 방지
+    const closed = L.thawing.filter(t => t.end && t.end !== '');
+    L.thawing = [...closed, ...recs];
+    const seen = new Set();
+    L.thawing = L.thawing.filter(t => {
+      const k = (t.wagon||'')+'|'+String(t.date||'').slice(0,10);
+      if(seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+    saveL();
+  } catch(e) {
+    console.error('미종료 방혈 로드 오류:', e);
+  }
+}
+
+// 미종료 포장 pending 로드
+async function loadOpenPacking() {
+  try {
+    // 로컬에 fbId 없는 pending → Firebase에 올리기
+    const localOnly = (L.packing_pending||[]).filter(r => !r.fbId && (!r.end || r.end === ''));
+    for(const rec of localOnly) {
+      const fbId = await fbSave('packing_pending', rec);
+      if(fbId) { rec.fbId = fbId; }
+    }
+    if(localOnly.length) saveL();
+
+    // Firebase에서 전체 미종료 로드
+    const recs = await fbGetOpenPacking();
+    const completed = (L.packing_pending||[]).filter(r => r.end && r.end !== '');
+    L.packing_pending = [...completed, ...recs];
+    const seen = new Set();
+    L.packing_pending = L.packing_pending.filter(r => {
+      const k = r.fbId || r.id;
+      if(seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+    saveL();
+  } catch(e) {
+    console.error('미종료 포장 로드 오류:', e);
+  }
+}
+
+// ============================================================
+// 자동 갱신 (30초)
+// ============================================================
+var _editProdIdx = -1;
+var _refreshTimer = null;
+var _isRefreshing = false;
+
+// 사용자가 입력 중이거나 패널이 열려있으면 true
+function isUserEditing() {
+  // 포커스된 입력 요소가 있으면 입력 중
+  const a = document.activeElement;
+  if(a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT')) return true;
+  // 외포장 미완료 패널이 하나라도 열려있으면 입력 중
+  const panels = document.querySelectorAll('[id^="op_panel_"]');
+  if(Array.from(panels).some(p=>p.style.display!=='none')) return true;
+  return false;
+}
+
+function startAutoRefresh() {
+  if(_refreshTimer) clearInterval(_refreshTimer);
+  _refreshTimer = setInterval(fetchTodayFromServer, 30000);
+}
+
+async function fetchTodayFromServer() {
+  if(_isRefreshing) return;
+  if(isUserEditing()) return;   // 입력 중·패널 열림 → 스킵
+  _isRefreshing = true;
+  try {
+    await loadFromServer(tod());
+    await loadOpenPacking();
+    refreshCurrentTab_();
+  } catch(e) {
+    console.warn('자동갱신 오류:', e);
+  } finally {
+    _isRefreshing = false;
+  }
+}
+
+function refreshCurrentTab_() {
+  if(MODE === 'i') {
+    if(ITAB === 'barcode') renderBC();
+    else if(ITAB === 'thawing') { renderThawWaiting(); renderThawList(); }
+    else if(ITAB === 'preprocess') { loadOpenThawingAndRender(); renderPL('preprocess'); }
+    else if(ITAB === 'outerpacking') loadOuterPacking();
+    else renderPL(ITAB);
+  }
+}
