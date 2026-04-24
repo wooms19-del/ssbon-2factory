@@ -199,7 +199,7 @@ function _showDayModal(ds, dayEvts, allEvents, docId){
     +'</div>'
     +'<button class="btn bp bblk" style="width:100%;padding:8px" onclick="schAddEvent(\''+docId+'\',\''+ds+'\')">+ 추가</button>';
 
-  showModal(title, body);
+  _schShowModal(title, body);
 }
 
 function schAddEvent(docId, ds){
@@ -314,4 +314,18 @@ function schSaveSummary(docId){
     closeModal();
     renderSchedule();
   });
+}
+
+function _schShowModal(title, body){
+  var existing=document.getElementById('sch_modal_wrap');
+  if(existing) existing.remove();
+  var wrap=document.createElement('div');
+  wrap.id='sch_modal_wrap';
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  wrap.innerHTML='<div style="background:#fff;border-radius:12px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;padding:20px">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+    '<span style="font-size:15px;font-weight:700">'+title+'</span>'+
+    '<button onclick="document.getElementById(\'sch_modal_wrap\').remove()" style="font-size:18px;color:var(--g4);background:none;border:none;cursor:pointer">✕</button>'+
+    '</div>'+body+'</div>';
+  document.body.appendChild(wrap);
 }
