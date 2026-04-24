@@ -88,6 +88,8 @@ function showTab(mode,tab){
     renderTrTbl();
   } else if(tab==='settings'){
     loadSettings_().then(()=>renderSettings()).catch(()=>renderSettings());
+  } else if(tab==='schedule'){
+    if(typeof initSchedule==='function') initSchedule();
   } else if(tab==='outerpacking'){
     loadOuterPacking();
   } else if(tab==='attendance'){
