@@ -308,7 +308,7 @@ async function loadOpenThawing() {
     L.thawing = [...closed, ...recs];
     const seen = new Set();
     L.thawing = L.thawing.filter(t => {
-      const k = (t.cart||t.wagon||'')+'|'+String(t.date||'').slice(0,10);
+      const k = (t.cart||'')+'|'+String(t.date||'').slice(0,10);
       if(seen.has(k)) return false;
       seen.add(k); return true;
     });
