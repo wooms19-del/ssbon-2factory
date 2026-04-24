@@ -293,7 +293,7 @@ function opCalc(i, innerEa) {
   const t0El = document.getElementById('op_t0_'+i);
   if(t0El) t0El.textContent = (boxes*perBox).toLocaleString();
 
-  const packedEa = boxes * perBox;
+  const packedEa = boxes * perBox + partial;
   outerMats.forEach((m,j) => {
     const theory = parseFloat((packedEa * m.qty).toFixed(2));
     const dEl = document.getElementById('op_d'+(j+1)+'_'+i);
@@ -326,7 +326,7 @@ async function completeOuterPacking(i, date, product, innerEa) {
   const perBox = outerMats.length && outerMats[0].qty > 0 ? Math.round(1/outerMats[0].qty) : 0;
   const materials = [{
     name: product,
-    theory: boxes * perBox,
+    theory: boxes * perBox + partial,
     defect: defp,
     actual: null
   }, ...outerMats.map((m,j) => {
