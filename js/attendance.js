@@ -329,18 +329,30 @@ function attApplyChecked(apply){
       // 시간 계산
       var inT=rec.inTime||'09:00', outT=rec.outTime||'18:00';
       if(appliedStatus==='checkin'||appliedStatus==='early'){
-        inT=timeVal||'09:00'; outT=_attCalcOut(inT);
+        inT=timeVal||'09:00';
+        // 조출 적용 후 이미 반차/반반차 태그 있으면 해당 시간으로 재계산
+        if(tags.indexOf('half-am')>=0) outT=_attAddH(inT,4);
+        else if(tags.indexOf('quarter')>=0) outT=_attAddH(inT,2);
+        else if(tags.indexOf('half-pm')>=0){outT='18:00';} // 오후반차는 조출과 무관
+        else outT=_attCalcOut(inT);
       }else if(appliedStatus==='overtime'){
         outT=timeVal||'19:00';
       }else if(appliedStatus==='half-am'){
-        // 반차오전 추가 시, 조출이 없으면 09시 기준
-        if(tags.indexOf('early')<0)inT='09:00';
-        outT='13:00';
+        // 조출이 있으면 조출시간부터 4시간, 없으면 09:00~13:00
+        if(tags.indexOf('early')>=0){
+          outT=_attAddH(inT,4); // 조출+반차: 조출시간+4h
+        }else{
+          inT='09:00'; outT='13:00'; // 표준 반차오전
+        }
       }else if(appliedStatus==='half-pm'){
         inT=rec.inTime||'13:00'; outT='18:00';
       }else if(appliedStatus==='quarter'){
-        if(tags.indexOf('early')<0)inT='09:00';
-        outT=_attAddH(inT,2);
+        // 조출이 있으면 조출시간부터 2시간, 없으면 09:00~11:00
+        if(tags.indexOf('early')>=0){
+          outT=_attAddH(inT,2); // 조출+반반차: 조출시간+2h
+        }else{
+          inT='09:00'; outT='11:00'; // 표준 반반차
+        }
       }else if(appliedStatus==='annual'||appliedStatus==='absent'){
         inT=''; outT='';
         // 다른 시간 관련 태그 제거
