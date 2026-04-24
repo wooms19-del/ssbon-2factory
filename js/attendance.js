@@ -568,152 +568,148 @@ function attDownloadWeekly(){
   var diff=day===0?-6:1-day;
   var mon=new Date(today); mon.setDate(today.getDate()+diff);
 
-  var dates=[];
-  var dayNames=['일','월','화','수','목','금','토'];
-  for(var i=0;i<7;i++){
-    var d=new Date(mon); d.setDate(mon.getDate()+i);
-    dates.push(d);
-  }
+  var dates=[], dlabels=['월','화','수','목','금','토','일'];
+  for(var i=0;i<7;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);dates.push(d);}
+
+  var DS=8;    // 날짜 시작 열 (1-indexed)
+  var SS=DS+56; // 서명 시작 열 (= 64)
+  var LASTCOL=SS+2; // 마지막 열 (= 66)
+  var LASTROW=4+_attEmps.length;
 
   try{
-    var wb=XLSX.utils.book_new();
-    var year=mon.getFullYear();
-    var m=String(mon.getMonth()+1).padStart(2,'0');
-    var title='2공장 주간 출퇴근 기록부 — '+year+'년 '+
-      (mon.getMonth()+1)+'월 '+mon.getDate()+'일 ~ '+dates[6].getDate()+'일';
+    var wb={SheetNames:['출퇴근기록부'],Sheets:{}};
+    var ws={'!type':'sheet'};
 
-    // ── 데이터 구성 ──────────────────────────────────────
-    var ws_data=[];
-
-    // 행1: 제목 (나중에 병합)
-    ws_data.push([title]);
-
-    // 행2: 빈 줄
-    ws_data.push([]);
-
-    // 행3: 헤더
-    var header=['이름'];
-    dates.forEach(function(d){
-      var dn=dayNames[d.getDay()];
-      var lb=(d.getMonth()+1)+'/'+d.getDate()+'('+dn+')';
-      header.push(lb+' 출근'); header.push(lb+' 퇴근');
-    });
-    header.push('서명');
-    ws_data.push(header);
-
-    // 행4~: 직원별
-    _attEmps.forEach(function(e){
-      var row=[e.name];
-      dates.forEach(function(d){
-        var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        var raw=localStorage.getItem(_attDateKey(ds));
-        var r=raw?JSON.parse(raw)[e.name]:null;
-        if(!r){row.push(''); row.push('');}
-        else{
-          var tags=r.tags||[];
-          if(tags.indexOf('absent')>=0){row.push('결근'); row.push('');}
-          else if(tags.indexOf('annual')>=0){row.push('연차'); row.push('');}
-          else{row.push(r.inTime||''); row.push(r.outTime||'');}
-        }
-      });
-      row.push(''); // 서명란
-      ws_data.push(row);
-    });
-
-    // 행: 빈 줄
-    ws_data.push([]);
-
-    // 행: 담당/검토/승인
-    var totalCols=header.length;
-    var sig=[];
-    for(var i2=0;i2<totalCols;i2++) sig.push('');
-    sig[1]='담당: ________________';
-    sig[Math.floor(totalCols/2)]='검토: ________________';
-    sig[totalCols-3]='승인: ________________';
-    ws_data.push(sig);
-
-    var ws=XLSX.utils.aoa_to_sheet(ws_data);
-    var totalRows=ws_data.length;
-
-    // ── 제목 셀 병합 (A1 ~ 마지막열 1행) ─────────────────
-    ws['!merges']=[
-      {s:{r:0,c:0}, e:{r:0,c:totalCols-1}}
-    ];
-
-    // ── 열 너비 설정 ──────────────────────────────────────
-    var cols=[{wch:10}]; // 이름 열
-    dates.forEach(function(){cols.push({wch:9},{wch:9});});
-    cols.push({wch:14}); // 서명란
-    ws['!cols']=cols;
-
-    // ── 행 높이 설정 ─────────────────────────────────────
-    ws['!rows']=[];
-    for(var ri=0;ri<totalRows;ri++){
-      ws['!rows'].push({hpt: ri===0?24 : ri===1?4 : ri===2?22 : 20});
+    // ─ 유틸 함수 ─
+    function addr(r,c){
+      var col='';var cc=c;
+      while(cc>0){col=String.fromCharCode(64+(cc%26||26))+col;cc=Math.floor((cc-1)/26);}
+      return col+r;
     }
-
-    // ── 테두리 + 스타일 적용 ──────────────────────────────
-    var border={
-      top:{style:'thin',color:{rgb:'AAAAAA'}},
-      bottom:{style:'thin',color:{rgb:'AAAAAA'}},
-      left:{style:'thin',color:{rgb:'AAAAAA'}},
-      right:{style:'thin',color:{rgb:'AAAAAA'}}
-    };
-    var borderBold={
-      top:{style:'medium',color:{rgb:'333333'}},
-      bottom:{style:'medium',color:{rgb:'333333'}},
-      left:{style:'medium',color:{rgb:'333333'}},
-      right:{style:'medium',color:{rgb:'333333'}}
-    };
-
-    for(var ri=0;ri<totalRows;ri++){
-      for(var ci=0;ci<totalCols;ci++){
-        var cellAddr=XLSX.utils.encode_cell({r:ri,c:ci});
-        if(!ws[cellAddr]) ws[cellAddr]={t:'s',v:''};
-        var isHeader=(ri===2);
-        var isTitle=(ri===0);
-        var isData=(ri>=3 && ri<totalRows-2);
-
-        ws[cellAddr].s={
-          font:{
-            name:'맑은 고딕',
-            sz: isTitle?13 : isHeader?10 : 9,
-            bold: isTitle||isHeader
-          },
-          alignment:{
-            horizontal: isTitle?'center' : isHeader?'center' : 'center',
-            vertical:'center',
-            wrapText:false
-          },
-          fill: isTitle?{fgColor:{rgb:'1A56DB'},patternType:'solid'} :
-                isHeader?{fgColor:{rgb:'E8F0FE'},patternType:'solid'} :
-                {patternType:'none'},
-          font: isTitle?{name:'맑은 고딕',sz:13,bold:true,color:{rgb:'FFFFFF'}} :
-                isHeader?{name:'맑은 고딕',sz:9,bold:true} :
-                {name:'맑은 고딕',sz:9},
-          border: (ri>=2&&ri<totalRows-1) ? border : {}
-        };
+    function thin(){return {style:'thin'};}
+    function med(){return {style:'medium'};}
+    function mkBorder(l,r,t,b){return {left:l,right:r,top:t,bottom:b};}
+    function outerBorder(r,c,r1,c1,r2,c2,lw,rw,tw,bw){
+      // r,c: 현재 셀 / r1~r2,c1~c2: 병합 범위
+      var l=c==c1?(lw||thin()):(c>c1?null:null);
+      var ri=c==c2?(rw||thin()):(c<c2?null:null);
+      var t=r==r1?(tw||thin()):null;
+      var b=r==r2?(bw||thin()):null;
+      return mkBorder(l,ri,t,b);
+    }
+    function setRange(r1,c1,r2,c2,val,style){
+      // 병합 셀 등록
+      if(r1!=r2||c1!=c2){
+        ws['!merges']=ws['!merges']||[];
+        ws['!merges'].push({s:{r:r1-1,c:c1-1},e:{r:r2-1,c:c2-1}});
+      }
+      var lw=style.bl||thin(), rw=style.br||thin(), tw=style.bt||thin(), bw=style.bb||thin();
+      for(var r=r1;r<=r2;r++){
+        for(var c=c1;c<=c2;c++){
+          var a=addr(r,c);
+          var border={
+            left:  c==c1?lw:null,
+            right: c==c2?rw:null,
+            top:   r==r1?tw:null,
+            bottom:r==r2?bw:null
+          };
+          var cell={
+            v: (r==r1&&c==c1)?val:'',
+            t: typeof val==='number'?'n':'s',
+            s:{
+              font:{name:'맑은 고딕',sz:style.sz||9,bold:!!style.bold,color:style.fc?{rgb:style.fc}:undefined},
+              alignment:{horizontal:style.ha||'center',vertical:'center'},
+              fill:style.fill?{fgColor:{rgb:style.fill},patternType:'solid'}:{patternType:'none'},
+              border:border
+            }
+          };
+          ws[a]=cell;
+        }
       }
     }
 
-    // ── 인쇄 설정 (A4 가로) ──────────────────────────────
-    ws['!pageSetup']={
-      paperSize:9, // A4
-      orientation:'landscape',
-      fitToPage:true,
-      fitToWidth:1,
-      fitToHeight:0,
-      scale:100
-    };
-    ws['!printOptions']={gridLines:false};
-    ws['!margins']={
-      left:0.5,right:0.5,top:0.75,bottom:0.75,
-      header:0.3,footer:0.3
-    };
+    // ─ 행1 제목
+    var yr=dates[0].getFullYear(), mo=dates[0].getMonth()+1;
+    setRange(1,1,1,SS-1, yr+'년 '+mo+'월 출퇴근 기록부',
+      {sz:13,bold:true,bl:med(),br:thin(),bt:med(),bb:thin()});
+    setRange(1,SS,1,LASTCOL,'담당 / 검토 / 승인',
+      {bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
 
-    XLSX.utils.book_append_sheet(wb,ws,'주간출퇴근');
-    var fname='출퇴근_'+year+m+'.xlsx';
-    XLSX.writeFile(wb,fname);
+    // ─ 행2 서명 공간
+    setRange(2,1,2,SS-1,'',{bl:med(),br:thin(),bt:thin(),bb:med()});
+    setRange(2,SS,2,LASTCOL,'',{bl:med(),br:med(),bt:thin(),bb:med()});
+
+    // ─ 행3 날짜
+    setRange(3,1,3,7,'성  명',{bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
+    for(var d=0;d<7;d++){
+      var base=DS+d*8;
+      var dt=dates[d];
+      var lb=(dt.getMonth()+1)+'/'+dt.getDate()+'('+dlabels[d]+')';
+      setRange(3,base,3,base+7,lb,{bold:true,fill:'DBE5F1',
+        bl:d==0?med():thin(),br:d==6?med():thin(),bt:med(),bb:thin()});
+    }
+    setRange(3,SS,3,LASTCOL,'서  명',{bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
+
+    // ─ 행4 출근/퇴근
+    setRange(4,1,4,7,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
+    for(var d=0;d<7;d++){
+      var base=DS+d*8;
+      setRange(4,base,4,base+3,'출  근',{bold:true,fill:'DBE5F1',
+        bl:d==0?med():thin(),br:thin(),bt:thin(),bb:med()});
+      setRange(4,base+4,4,base+7,'퇴  근',{bold:true,fill:'DBE5F1',
+        bl:thin(),br:d==6?med():thin(),bt:thin(),bb:med()});
+    }
+    setRange(4,SS,4,LASTCOL,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
+
+    // ─ 직원 행
+    for(var idx=0;idx<_attEmps.length;idx++){
+      var row=5+idx;
+      var name=_attEmps[idx].name;
+      var isLast=idx==_attEmps.length-1;
+      var bb=isLast?med():thin();
+
+      setRange(row,1,row,1,idx+1,{bl:med(),br:thin(),bt:thin(),bb:bb});
+      setRange(row,2,row,7,name,{bl:thin(),br:med(),bt:thin(),bb:bb});
+
+      for(var d=0;d<7;d++){
+        var base=DS+d*8;
+        var dt=dates[d];
+        var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+        var raw=localStorage.getItem(_attDateKey(ds));
+        var r=raw?JSON.parse(raw)[name]:null;
+        var inT='', outT='';
+        if(r){
+          var tags=r.tags||[];
+          if(tags.indexOf('absent')>=0){inT='결근';}
+          else if(tags.indexOf('annual')>=0){inT='연차';}
+          else{inT=r.inTime||'';outT=r.outTime||'';}
+        }
+        setRange(row,base,row,base+3,inT,{bl:d==0?med():thin(),br:thin(),bt:thin(),bb:bb});
+        setRange(row,base+4,row,base+7,outT,{bl:thin(),br:d==6?med():thin(),bt:thin(),bb:bb});
+      }
+      setRange(row,SS,row,LASTCOL,'',{bl:med(),br:med(),bt:thin(),bb:bb});
+    }
+
+    // ─ 열 너비 / 행 높이
+    var cols=[{wch:4}];
+    for(var i=0;i<6;i++) cols.push({wch:3.5});
+    for(var i=0;i<56;i++) cols.push({wch:3.8});
+    for(var i=0;i<3;i++) cols.push({wch:6});
+    ws['!cols']=cols;
+
+    var rows=[{hpt:28},{hpt:40},{hpt:22},{hpt:18}];
+    for(var i=0;i<_attEmps.length;i++) rows.push({hpt:19});
+    ws['!rows']=rows;
+
+    // ─ 셀 범위 설정
+    ws['!ref']=addr(1,1)+':'+addr(LASTROW,LASTCOL);
+
+    // ─ 인쇄 설정
+    ws['!pageSetup']={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0};
+
+    wb.Sheets['출퇴근기록부']=ws;
+    var fname='출퇴근_'+yr+String(mo).padStart(2,'0')+'.xlsx';
+    XLSX.writeFile(wb,fname,{cellStyles:true});
     toast('엑셀 다운로드 완료 ✓','s');
   }catch(e){
     alert('다운로드 실패: '+e.message);
