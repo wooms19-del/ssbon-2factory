@@ -1324,9 +1324,17 @@ function renderDailyFromLocal_(d){
       var _today=new Date(); _today.setHours(0,0,0,0);
       // 미래 방향 → 오늘 이후면 멈춤
       if(_chDayDir>0&&_dt>_today){ toast('오늘 이후 날짜입니다','d'); _chDayDir=0; return; }
-      // 과거 방향 → 최대 365일 전까지만 탐색
-      var _oldest=new Date(_today); _oldest.setDate(_today.getDate()-365);
-      if(_chDayDir<0&&_dt<_oldest){ toast('더 이상 데이터가 없습니다','d'); _chDayDir=0; return; }
+      // 과거 방향 → L 객체의 실제 최초 데이터 날짜 기준
+      if(_chDayDir<0){
+        var _allDates=[];
+        if(L&&L.packing) L.packing.forEach(function(r){if(r.date)_allDates.push(r.date.slice(0,10));});
+        if(L&&L.thawing) L.thawing.forEach(function(r){if(r.date)_allDates.push(r.date.slice(0,10));});
+        if(_allDates.length){
+          _allDates.sort();
+          var _firstDate=new Date(_allDates[0]+'T00:00:00');
+          if(_dt<_firstDate){ toast('더 이상 데이터가 없습니다','d'); _chDayDir=0; return; }
+        }
+      }
       DDATE=_dt.toISOString().slice(0,10); renderDaily(); return;
     }
     _chDayDir=0;
