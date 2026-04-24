@@ -208,7 +208,7 @@ function renderThawList(){
     <div class="ri">
       <div>
         <div class="rm">${r.wagon||'(대차없음)'} · ${r.totalKg||0}kg · ${r.boxes||0}박스</div>
-        <div class="rs">${r.type||'-'} · 시작 ${r.start||'-'} · 잔여 ${r.remainKg!==undefined?r.remainKg:r.totalKg}kg ${r.end?'✅종료':'🔄방혈중'}</div>
+        <div class="rs">${r.type||'-'} · 시작 ${(()=>{const d=new Date(r.date||tod());d.setDate(d.getDate()-1);return (d.getMonth()+1+'').padStart(2,'0')+'-'+(d.getDate()+'').padStart(2,'0');})()  } ${r.start||'-'} · 잔여 ${r.remainKg!==undefined?r.remainKg:r.totalKg}kg ${r.end?(()=>{const e=r.end||'';const endDisp=e.length>8?e.slice(5,10)+' '+e.slice(11,16):tod().slice(5)+' '+e;return '✅종료 '+endDisp;})():'🔄방혈중'}</div>
       </div>
       <button class="btn bo bsm" onclick="delR('thawing','${r.id}','${r.fbId||''}')">삭제</button>
     </div>`).join('')+'</div>';
