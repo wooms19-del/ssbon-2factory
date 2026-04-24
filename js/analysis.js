@@ -950,7 +950,25 @@ function goDate(dateStr){
   renderDaily();
 }
 
-function chDay(d){ const dt=new Date(DDATE);dt.setDate(dt.getDate()+d);DDATE=dt.toISOString().slice(0,10);renderDaily(); }
+function chDay(d){
+  // 빈 날 스킵: 데이터 있는 날까지 최대 14일 탐색
+  var dt=new Date(DDATE);
+  for(var i=0;i<14;i++){
+    dt.setDate(dt.getDate()+d);
+    var ds=dt.toISOString().slice(0,10);
+    var hasData=false;
+    // localStorage에 해당 날짜 데이터 있는지 확인
+    for(var k in localStorage){
+      if(k.indexOf('ssbon_v4_'+ds)>=0||k.indexOf(ds)>=0){
+        try{var v=JSON.parse(localStorage.getItem(k));if(v&&typeof v==='object'&&Object.keys(v).length>0){hasData=true;break;}}catch(e){}
+      }
+    }
+    if(hasData){DDATE=ds;renderDaily();return;}
+  }
+  // 14일 안에 데이터 없으면 그냥 1일 이동
+  dt=new Date(DDATE);dt.setDate(dt.getDate()+d);
+  DDATE=dt.toISOString().slice(0,10);renderDaily();
+}
 
 // 전처리 wagons → 해동 매칭으로 원육KG 계산 (중복 와건 제거)
 function getThKgByPP_(ppRecs, allThawing, packDate) {
