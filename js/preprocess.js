@@ -134,9 +134,25 @@ function updateThawInfo(){
     return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--g2)">
       <div>
         <span style="font-size:14px;font-weight:700">${t.type||'-'}</span>
-        <span style="font-size:13px;color:var(--g5);margin-left:8px">대차 ${t.wagon||'-'} · ${t.boxes||0}박스 · ${t.totalKg||0}kg · 시작 ${(t.start||'-').slice(0,5)}${done?' · 종료 '+(t.end||'').slice(0,5):''}</span>
+        <span style="font-size:13px;color:var(--g5);margin-left:8px">대차 ${t.wagon||'-'} · ${t.boxes||0}박스 · ${t.totalKg||0}kg · 시작 ${(()=>{const d=new Date(t.date||tod());d.setDate(d.getDate()-1);return (d.getMonth()+1+'').padStart(2,'0')+'-'+(d.getDate()+'').padStart(2,'0');})()  } ${(t.start||'-').slice(0,5)}${done?' · 종료 '+(()=>{const e=t.end||'';return e.length>8?e.slice(5,10)+' '+e.slice(11,16):tod().slice(5)+' '+e;})():''}</span>
         <span style="font-size:12px;margin-left:6px">${done?'✅완료':'🔄방혈중'}</span>
       </div>
     </div>`;
   }).join('');
+}
+function savePpEdit(id, fbId) {
+  const rec = L.preprocess.find(r=>r.id===id);
+  if(!rec){ toast('기록 없음','d'); return; }
+  const cage    = document.getElementById('ppEd_cage_'+id)?.value||'';
+  const start   = document.getElementById('ppEd_start_'+id)?.value||'';
+  const end_    = document.getElementById('ppEd_end_'+id)?.value||'';
+  const kg      = parseFloat(document.getElementById('ppEd_kg_'+id)?.value)||0;
+  const waste   = parseFloat(document.getElementById('ppEd_waste_'+id)?.value)||0;
+  const workers = parseFloat(document.getElementById('ppEd_workers_'+id)?.value)||0;
+  Object.assign(rec, {cage, start, end:end_, kg, waste, workers});
+  saveL();
+  renderPL('preprocess');
+  renderDailyFromLocal_(tod());
+  if(fbId) fbUpdate('preprocess', fbId, {cage, start, end:end_, kg, waste, workers});
+  toast('전처리 기록 수정됨 ✓','s');
 }
