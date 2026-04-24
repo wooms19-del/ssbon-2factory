@@ -664,7 +664,10 @@
   <div class="card">
     <div class="ct">이력 추적</div>
     <div class="fx gap2" style="margin-bottom:1rem">
-      <input class="fc" id="trQ" placeholder="날짜 입력 (예: 2026-04-17)" style="flex:1">
+      <div style="display:flex;align-items:center;gap:6px;flex:1">
+        <input class="fc" id="trQ" placeholder="날짜 입력 (예: 2026-04-17)" style="flex:1">
+        <input type="date" id="trQCal" style="padding:7px 8px;border:1px solid var(--g3);border-radius:8px;font-size:13px;color:var(--g7);background:var(--bg)" onchange="document.getElementById('trQ').value=this.value">
+      </div>
       <button class="btn bp" onclick="doTrace()">조회</button>
     </div>
     <div id="trRes"></div>
