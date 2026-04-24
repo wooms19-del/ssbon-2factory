@@ -558,3 +558,82 @@ function _calcWorkHours(tags){
   if(tags.indexOf('quarter')>=0)vac+=2; // 반반차: 2h 휴가
   return Math.max(0,8-vac);
 }
+
+// ─────────────────────────────────────────────────────────
+// 주간 출퇴근 서명표 엑셀 다운로드
+// ─────────────────────────────────────────────────────────
+function attDownloadWeekly(){
+  // 이번 주 월요일 구하기
+  var today=new Date(_attDate);
+  var day=today.getDay();
+  var diff=day===0?-6:1-day;
+  var mon=new Date(today); mon.setDate(today.getDate()+diff);
+  
+  var dates=[];
+  var dayNames=['일','월','화','수','목','금','토'];
+  for(var i=0;i<7;i++){
+    var d=new Date(mon); d.setDate(mon.getDate()+i);
+    dates.push(d);
+  }
+  
+  // XLSX 사용
+  try{
+    var wb=XLSX.utils.book_new();
+    
+    // 헤더 행 1: 제목
+    var year=mon.getFullYear(), m=String(mon.getMonth()+1).padStart(2,'0');
+    var ws_data=[
+      ['2공장 주간 출퇴근 기록부 — '+year+'년 '+m+'월 '+String(mon.getDate()).padStart(2,'0')+'일 ~ '+String(dates[6].getDate()).padStart(2,'0')+'일'],
+      []
+    ];
+    
+    // 헤더 행 2: 날짜
+    var header2=['이름'];
+    dates.forEach(function(d){
+      var dn=dayNames[d.getDay()];
+      var label=(d.getMonth()+1)+'/'+d.getDate()+'('+dn+')';
+      header2.push(label+' 출근');
+      header2.push(label+' 퇴근');
+    });
+    header2.push('서명');
+    ws_data.push(header2);
+    
+    // 데이터 행: 직원별
+    _attEmps.forEach(function(e){
+      var row=[e.name];
+      dates.forEach(function(d){
+        var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        var raw=localStorage.getItem(_attDateKey(ds));
+        var r=raw?JSON.parse(raw)[e.name]:null;
+        var rec=r||{tags:[],inTime:'09:00',outTime:'18:00'};
+        var tags=rec.tags||[];
+        if(tags.indexOf('absent')>=0||tags.indexOf('annual')>=0){
+          row.push(ATT_SL[tags[0]]||'-'); row.push('-');
+        }else{
+          row.push(rec.inTime||'09:00'); row.push(rec.outTime||'18:00');
+        }
+      });
+      row.push(''); // 서명란
+      ws_data.push(row);
+    });
+    
+    // 담당/검토/승인
+    ws_data.push([]);
+    ws_data.push(['담당: ___________','','','검토: ___________','','','승인: ___________']);
+    
+    var ws=XLSX.utils.aoa_to_sheet(ws_data);
+    
+    // 열 너비 설정
+    var cols=[{wch:10}];
+    dates.forEach(function(){cols.push({wch:9},{wch:9});});
+    cols.push({wch:12});
+    ws['!cols']=cols;
+    
+    XLSX.utils.book_append_sheet(wb,ws,'주간출퇴근');
+    var fname='출퇴근_'+year+m+'.xlsx';
+    XLSX.writeFile(wb,fname);
+    toast('엑셀 다운로드 완료 ✓','s');
+  }catch(e){
+    alert('다운로드 실패: '+e.message);
+  }
+}
