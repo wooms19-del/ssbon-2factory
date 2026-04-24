@@ -112,7 +112,22 @@ async function renderMonthly() {
 
   const ctx1=document.getElementById('mo_bar_chart');
   if(ctx1){ if(_moBarChart){_moBarChart.destroy();_moBarChart=null;}
-    _moBarChart=new Chart(ctx1,{type:'bar',data:{labels,datasets:[
+    // 막대 위 수치 표시 플러그인
+    const _topLbl={id:'topLbl',afterDatasetsDraw(chart){
+      const {ctx}=chart; ctx.save();
+      chart.data.datasets.forEach((_,i)=>{
+        chart.getDatasetMeta(i).data.forEach((bar,j)=>{
+          const v=chart.data.datasets[i].data[j];
+          if(v==null||v<=0) return;
+          const s=v>=10000?(v/10000).toFixed(1)+'만':v>=1000?(v/1000).toFixed(1)+'k':String(v);
+          ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+          ctx.textAlign='center'; ctx.textBaseline='bottom';
+          ctx.fillText(s, bar.x, bar.y-2);
+        });
+      });
+      ctx.restore();
+    }};
+        _moBarChart=new Chart(ctx1,{type:'bar',plugins:[_topLbl],data:{labels,datasets:[
       {label:'생산EA',data:eaVals,backgroundColor:'#3b82f6',borderRadius:5,borderSkipped:false}
     ]},options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false},tooltip:{callbacks:{label:v=>v.raw.toLocaleString()+' EA'}}},
