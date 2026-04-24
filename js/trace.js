@@ -107,11 +107,11 @@ async function doTrace(){
   let thAll = [];
   for(const d of (ppDates.length ? ppDates : [q])){
     // 당일 방혈 우선 매칭 (와건 재사용시 전날 배치 오염 방지)
-    const _sameTh = (await fbGetByDate('thawing', d)).filter(r=>ppWagons.length===0||ppWagons.some(w=>(r.wagon||'').trim()===w));
+    const _sameTh = (await fbGetByDate('thawing', d)).filter(r=>ppWagons.length===0||ppWagons.some(w=>((r.cart||r.wagon||'').trim())===w));
     if(_sameTh.length > 0){
       // 당일 방혈이 있어도 다음날에 더 많은 일치 기록이 있으면 다음날 우선 (날짜 오입력 보정)
       const _sameKg = r2(_sameTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
-      const _nextTh = ppWagons.length>0 ? (await fbGetByDate('thawing', addDays(d,1))).filter(r=>ppWagons.some(w=>(r.wagon||'').trim()===w)) : [];
+      const _nextTh = ppWagons.length>0 ? (await fbGetByDate('thawing', addDays(d,1))).filter(r=>ppWagons.some(w=>((r.cart||r.wagon||'').trim())===w)) : [];
       const _nextKg = r2(_nextTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
       if(_nextTh.length && _nextKg > _sameKg*2){
         thAll.push(..._nextTh); // 다음날 기록이 2배 이상이면 다음날 사용 (재입력 오류 보정)
@@ -120,11 +120,11 @@ async function doTrace(){
       }
     } else {
       // 당일 없으면 전날 방혈
-      const _prevTh = (await fbGetByDate('thawing', addDays(d,-1))).filter(r=>ppWagons.length===0||ppWagons.some(w=>(r.wagon||'').trim()===w));
+      const _prevTh = (await fbGetByDate('thawing', addDays(d,-1))).filter(r=>ppWagons.length===0||ppWagons.some(w=>((r.cart||r.wagon||'').trim())===w));
       thAll.push(...(_prevTh.length > 0 ? _prevTh : await fbGetByDate('thawing', d)));
     }
   }
-  const thAllD = dedupeRec(thAll, r=>r.wagon+'|'+r.type+'|'+String(r.date||'').slice(0,10)+'|'+r.totalKg); thAll.length=0; thAll.push(...thAllD);
+  const thAllD = dedupeRec(thAll, r=>(r.cart||r.wagon||'')+'|'+r.type+'|'+String(r.date||'').slice(0,10)+'|'+r.totalKg); thAll.length=0; thAll.push(...thAllD);
   let th = thAll;
 
   // ⑥ 바코드: 해동 전날 스캔 우선, 전날 없으면 당일 (배치 혼입 방지)
@@ -246,7 +246,7 @@ function showTraceDetail(key){
     </table></div>`;
   }
   else if(key === 'th'){
-    const th = d.th.filter((r,i,a)=>a.findIndex(x=>x.wagon===r.wagon&&x.type===r.type&&x.date===r.date&&x.totalKg===r.totalKg)===i);
+    const th = d.th.filter((r,i,a)=>a.findIndex(x=>(x.cart||x.wagon)===(r.cart||r.wagon)&&x.type===r.type&&x.date===r.date&&x.totalKg===r.totalKg)===i);
     if(!th.length){ body.innerHTML='<div class="emp">데이터 없음</div>'; return; }
     const fmtDT = (date, time) => {
       const d = String(date||'').slice(2,10).replace(/-/g,'.'); // 26.04.07
@@ -273,7 +273,7 @@ function showTraceDetail(key){
       <th style="text-align:center">박스</th><th style="text-align:center">총중량(kg)</th></tr></thead>
       <tbody>${th.map(r=>`<tr>
         <td style="text-align:center">${String(r.date||'').slice(0,10)}</td>
-        <td style="text-align:center;font-weight:600">${r.wagon||'-'}</td>
+        <td style="text-align:center;font-weight:600">${r.cart||r.wagon||'-'}</td>
         <td style="text-align:center">${r.type||'-'}</td>
         <td style="text-align:center">${fmtDT(addDays(String(r.date||'').slice(0,10),-1), r.start)}</td>
         <td style="text-align:center">${d.pp&&d.pp.length ? fmtDT(d.pp[0].date, d.pp[0].start) : fmtDT(addDays(String(r.date||'').slice(0,10),-1), r.end)}</td>
@@ -359,7 +359,7 @@ function showTraceDetail(key){
           <td style="text-align:center">${String(r.date||'').slice(0,10)}</td>
           <td style="text-align:center">${r.machine||'-'}</td>
           <td>${r.product||'-'}</td>
-          <td style="text-align:center">${r.wagon||'-'}</td>
+          <td style="text-align:center">${r.cart||r.wagon||'-'}</td>
           <td style="text-align:center">${r.start||'-'}</td>
           <td style="text-align:center">${r.end||'-'}</td>
           <td style="text-align:center" style="font-weight:600;color:var(--p)">${(parseFloat(r.ea)||0).toLocaleString()}</td>
