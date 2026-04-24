@@ -8,8 +8,6 @@ document.addEventListener('DOMContentLoaded', function() {
   window.exportMonthlyReport = exportMonthlyReport;
 
 
-  window.schAddEvent = schAddEvent;
-  window.schDelEvent = schDelEvent;
   window.setMode = setMode;
   window.focusBC = focusBC;
   window.delBC = delBC;
