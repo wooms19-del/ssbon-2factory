@@ -142,7 +142,7 @@ function renderOpPending(list) {
           <input class="fc" type="number" id="op_partial_${i}" placeholder="0"
             style="width:88px;text-align:right;padding:5px 8px"
             oninput="opCalc(${i},${item.ea})">
-          <span style="font-size:12px;color:var(--g4)">EA (50개 미만 박스)</span>
+          <span style="font-size:12px;color:var(--g4)">EA${perBox>0?" ("+perBox+"개 미만 박스)":""}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <span style="font-size:12px;color:var(--g5);min-width:72px">샘플</span>
