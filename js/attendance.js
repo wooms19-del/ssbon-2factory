@@ -314,6 +314,36 @@ function attBulkTimeInput(v){
 
 // apply=true: 태그 추가, apply=false: 태그 제거
 function attApplyChecked(apply){
+  // 불가능한 조합 검사
+  if(apply){
+    var conflicts={
+      'early':   ['half-am'],       // 조출 + 반차(오전) 불가
+      'half-am': ['early','half-pm','annual','absent'],  // 반차(오전) + 조출/반차(오후)/연차/결근 불가
+      'half-pm': ['half-am','annual','absent'],
+      'quarter': ['annual','absent'],
+      'annual':  ['half-am','half-pm','quarter','absent','early','overtime'],
+      'absent':  ['half-am','half-pm','quarter','annual','early','overtime'],
+    };
+    var conflictNames=[];
+    _attEmps.forEach(function(e,i){
+      var cb=document.getElementById('attChk_'+i);if(!cb||!cb.checked)return;
+      var rec=_getRec(e.name);
+      var blocked=conflicts[_attSelStatus]||[];
+      var hasConflict=blocked.some(function(t){return rec.tags.indexOf(t)>=0;});
+      if(hasConflict)conflictNames.push(e.name);
+    });
+    if(conflictNames.length>0){
+      var msg='불가능한 조합입니다:\n\n';
+      if(_attSelStatus==='early'&&conflictNames.length)msg+='조출 + 반차(오전)은 함께 쓸 수 없습니다.\n(일찍 왔는데 오전에 쉰다는 건 말이 안 됩니다)';
+      else if(_attSelStatus==='annual')msg+='연차는 다른 반차/조출과 함께 쓸 수 없습니다.\n(연차면 하루 전체 휴가입니다)';
+      else if(_attSelStatus==='absent')msg+='결근은 다른 상태와 함께 쓸 수 없습니다.';
+      else if(_attSelStatus==='half-am')msg+='반차(오전)은 조출/반차(오후)/연차와 함께 쓸 수 없습니다.';
+      else msg+='해당 조합은 사용할 수 없습니다.';
+      msg+='\n\n해당 직원: '+conflictNames.join(', ');
+      alert(msg);
+      return;
+    }
+  }
   var needIn=!!ATT_NEEDS_IN[_attSelStatus];
   var needOut=!!ATT_NEEDS_OUT[_attSelStatus];
   var timeVal='';
