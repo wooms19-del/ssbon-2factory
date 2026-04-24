@@ -9,9 +9,9 @@ const DEFAULT_EMPS = ['김구식','김수영','임혜경','한채현','김정희
   '유혜선','레티장','김진화','박재홍','드엉반담','르탄프엉','응우옌반동','응우옌민호앙',
   '응우옌반키','르판하이퐁','판투안안'];
 
-const ATT_SL    = {normal:'정상',checkin:'출근',early:'조출',overtime:'연장','half-am':'반차(오전)','half-pm':'반차(오후)',quarter:'반반차',annual:'연차',absent:'결근'};
-const ATT_ICON  = {normal:'✅',checkin:'🕘',early:'🌅',overtime:'⏰','half-am':'🌓','half-pm':'🌓',quarter:'🌗',annual:'📅',absent:'❌'};
-const ATT_COLOR = {normal:'#2e7d32',checkin:'#1a56db',early:'#1565c0',overtime:'#e65100','half-am':'#6a1b9a','half-pm':'#6a1b9a',quarter:'#4a148c',annual:'#ad1457',absent:'#b71c1c'};
+const ATT_SL    = {normal:'정상',checkin:'출근',checkout:'퇴근',early:'조출',overtime:'연장','half-am':'반차(오전)','half-pm':'반차(오후)',quarter:'반반차',annual:'연차',absent:'결근'};
+const ATT_ICON  = {normal:'✅',checkin:'🕘',checkout:'🏃',early:'🌅',overtime:'⏰','half-am':'🌓','half-pm':'🌓',quarter:'🌗',annual:'📅',absent:'❌'};
+const ATT_COLOR = {normal:'#2e7d32',checkin:'#1a56db',checkout:'#0277bd',early:'#1565c0',overtime:'#e65100','half-am':'#6a1b9a','half-pm':'#6a1b9a',quarter:'#4a148c',annual:'#ad1457',absent:'#b71c1c'};
 // 시간 입력 필요 여부
 const ATT_NEEDS_IN  = {checkin:true,early:true};
 const ATT_NEEDS_OUT = {overtime:true};
@@ -175,6 +175,7 @@ function _renderAttInput(){
   // 상태 버튼 목록 (출근 버튼 추가)
   var STATUS_BTNS=[
     {s:'checkin',icon:'🕘',label:'출근',color:'#1a56db'},
+    {s:'checkout',icon:'🏃',label:'퇴근',color:'#0277bd'},
     {s:'early',icon:'🌅',label:'조출',color:'#1565c0'},
     {s:'half-am',icon:'🌓',label:'반차(오전)',color:'#6a1b9a'},
     {s:'half-pm',icon:'🌓',label:'반차(오후)',color:'#6a1b9a'},
@@ -200,7 +201,7 @@ function _renderAttInput(){
   if(_attSelStatus){
     var sc=ATT_COLOR[_attSelStatus],si=ATT_ICON[_attSelStatus],sl=ATT_SL[_attSelStatus];
     var needIn=!!ATT_NEEDS_IN[_attSelStatus];
-    var needOut=!!ATT_NEEDS_OUT[_attSelStatus];
+    var needOut=!!ATT_NEEDS_OUT[_attSelStatus]||(!!ATT_NEEDS_OUT_TIME&&!!ATT_NEEDS_OUT_TIME[_attSelStatus]);
 
     var checkHtml=_attEmps.map(function(e,i){
       var isChecked=_hasTag(e.name,_attSelStatus);
@@ -217,7 +218,8 @@ function _renderAttInput(){
     }).join('');
 
     var hint='';
-    if(_attSelStatus==='checkin')hint='출근시간 입력 → 퇴근 자동 계산 (기본 9시간)';
+    if(_attSelStatus==='checkout')hint='퇴근시간 입력 → 연장시간 자동 계산';
+    else if(_attSelStatus==='checkin')hint='출근시간 입력 → 퇴근 자동 계산 (기본 9시간)';
     else if(_attSelStatus==='early')hint='조출 출근시간 입력 → 퇴근 자동 계산';
     else if(_attSelStatus==='overtime')hint='실제 퇴근시간 입력 → 연장시간 자동 계산';
     else if(_attSelStatus==='half-am')hint='오전 반차: 출근 09:00 → 퇴근 13:00 자동';
@@ -227,7 +229,13 @@ function _renderAttInput(){
     else if(_attSelStatus==='absent')hint='결근: 시간 불필요';
 
     var timeInput='';
-    if(needIn){
+    if(_attSelStatus==='checkout'){
+      timeInput='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--g1);border-radius:8px;margin-bottom:8px;flex-wrap:wrap">'
+        +'<span style="font-size:13px;color:var(--g5)">퇴근시간:</span>'
+        +'<input id="attBulkTime" class="fc" type="text" inputmode="numeric" maxlength="5" placeholder="1800" style="width:76px;font-size:17px;font-weight:700;text-align:center;padding:6px" oninput="attBulkTimeInput(this.value)">'
+        +'<span id="attBulkCalcLabel" style="font-size:13px;color:var(--p)"></span>'
+        +'</div>';
+    }else if(needIn){
       timeInput='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--g1);border-radius:8px;margin-bottom:8px;flex-wrap:wrap">'
         +'<span style="font-size:13px;color:var(--g5)">'+(_attSelStatus==='early'?'조출 출근시간':'출근시간')+':</span>'
         +'<input id="attBulkTime" class="fc" type="text" inputmode="numeric" maxlength="5"'
@@ -371,8 +379,9 @@ function attApplyChecked(apply){
   var timeVal='';
   if(needIn||needOut){var tEl=document.getElementById('attBulkTime');timeVal=tEl?_attFmt(tEl.value):'';}
   // 시간 필수인데 미입력 경고
-  if(apply&&(needIn||needOut)&&!timeVal){
-    var tLabel=needIn?(_attSelStatus==='early'?'조출 출근시간':'출근시간'):'퇴근시간';
+  var needAnyTime=needIn||needOut||_attSelStatus==='checkout';
+  if(apply&&needAnyTime&&!timeVal){
+    var tLabel=_attSelStatus==='checkout'?'퇴근시간':needIn?(_attSelStatus==='early'?'조출 출근시간':'출근시간'):'퇴근시간';
     alert(tLabel+'을 먼저 입력하세요!\n예) 0700 → 07:00 으로 자동 변환됩니다.');
     var tEl2=document.getElementById('attBulkTime');
     if(tEl2)tEl2.focus();
@@ -388,7 +397,9 @@ function attApplyChecked(apply){
       if(tags.indexOf(appliedStatus)<0)tags.push(appliedStatus);
       // 시간 계산
       var inT=rec.inTime||'09:00', outT=rec.outTime||'18:00';
-      if(appliedStatus==='checkin'||appliedStatus==='early'){
+      if(appliedStatus==='checkout'){
+        outT=timeVal||'18:00'; // 퇴근시간 직접 지정
+      }else if(appliedStatus==='checkin'||appliedStatus==='early'){
         inT=timeVal||'09:00';
         // 기존 반차 태그 있으면 근무시간 조합 계산
         var wh=_calcWorkHours(tags.concat([]));
