@@ -42,9 +42,10 @@
       <div class="hd-date" id="hDate"></div>
     </div>
   </div>
-  <div class="mt">
-    <button class="mb on" onclick="setMode('i')">입력</button>
-    <button class="mb" onclick="setMode('d')">분석</button>
+  <div class="mt" style="display:flex;align-items:center;gap:6px">
+    <button class="mb" id="attHdBtn" onclick="setModeAtt()" style="background:rgba(255,255,255,0.18);margin-right:8px">출퇴근</button>
+    <button class="mb on" id="modeI" onclick="setMode('i')">입력</button>
+    <button class="mb" id="modeD" onclick="setMode('d')">분석</button>
   </div>
 </div>
 <!-- 입력 탭 -->
@@ -58,7 +59,7 @@
     <div class="ti" onclick="showTab('i','packing')">포장</div>
     <div class="ti" onclick="showTab('i','sauce')">소스</div>
     <div class="ti" onclick="showTab('i','outerpacking')">외포장</div>
-    <div class="ti" onclick="showTab('i','attendance')">출퇴근</div>
+
   </div>
 </div>
 
@@ -370,8 +371,9 @@
       <button class="btn bo bsm" onclick="attApplyAll()">전체 정상 09:00~18:00</button>
     </div>
     <div id="attInputContent"></div>
-    <div style="padding:10px 14px">
-      <button class="btn bp bblk" onclick="attSave()">저장</button>
+    <div style="padding:10px 14px;display:flex;gap:8px">
+      <button class="btn bp bblk" style="flex:2" onclick="attSave()">저장</button>
+      <button class="btn bo bblk" style="flex:1" onclick="attDownloadWeekly()">📥 주간표 다운로드</button>
     </div>
   </div>
 
@@ -905,7 +907,7 @@
 <script src="js/outerpacking.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/app.js"></script>
-<script src="js/attendance.js?v=10"></script>
+<script src="js/attendance.js?v=11"></script>
 <script src="js/timepicker.js"></script>
 <script src="js/globals.js"></script>
 </body>
