@@ -484,39 +484,141 @@ function attListSetOut(idx,val){
   _renderAttInput();
 }
 
-// ─── 월별 조회 ───
+
+// ─── 주별 시간표 뷰 변수 ───
+var _attWeekStart = null;
+
+function _attGetWeekMon(baseDate){
+  var d=new Date(baseDate+'T00:00:00');
+  var day=d.getDay(); var diff=day===0?-6:1-day;
+  d.setDate(d.getDate()+diff); return d;
+}
+function _attFmtDate2(dt){
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+function attWeekPrev(){ _attWeekStart.setDate(_attWeekStart.getDate()-7); _renderAttMonthly(); }
+function attWeekNext(){ _attWeekStart.setDate(_attWeekStart.getDate()+7); _renderAttMonthly(); }
+function attWeekToday(){ _attWeekStart=_attGetWeekMon(tod()); _renderAttMonthly(); }
+
 function _renderAttMonthly(){
-  var el=document.getElementById('attMonthlyBody');if(!el)return;
-  var ym=_attDate.slice(0,7),year=parseInt(ym.slice(0,4)),month=parseInt(ym.slice(5,7));
-  var days=new Date(year,month,0).getDate();
-  var hdr='<tr style="background:var(--g1)"><th style="padding:5px 8px;text-align:left;font-size:12px;border:0.5px solid var(--g2);white-space:nowrap;position:sticky;left:0;background:var(--g1)">이름</th>';
-  for(var d=1;d<=days;d++){
-    var dt=new Date(year,month-1,d),ds=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0'),isTd=ds===tod();
-    var c=isTd?'#1a56db':dt.getDay()===0?'#e53935':dt.getDay()===6?'#1565c0':'';
-    hdr+='<th style="padding:5px 2px;font-size:10px;border:0.5px solid var(--g2);min-width:20px;text-align:center'+(c?';color:'+c:'')+'">'+(d)+'</th>';
+  var tbl=document.getElementById('attWeekTable'); if(!tbl) return;
+  if(!_attWeekStart) _attWeekStart=_attGetWeekMon(_attDate||tod());
+  var dates=[];
+  var dow=['일','월','화','수','목','금','토'];
+  for(var i=0;i<7;i++){
+    var d=new Date(_attWeekStart); d.setDate(_attWeekStart.getDate()+i); dates.push(d);
   }
-  hdr+='<th style="padding:5px 4px;font-size:10px;border:0.5px solid var(--g2)">결</th><th style="padding:5px 4px;font-size:10px;border:0.5px solid var(--g2)">연</th></tr>';
-  document.getElementById('attMonthlyHeader').innerHTML=hdr;
-  var sI={'early':'조','overtime':'연','half-am':'반','half-pm':'반','quarter':'반반','annual':'연','absent':'결','checkin':'출'};
-  var sC={'early':'#1565c0','overtime':'#e65100','half-am':'#6a1b9a','half-pm':'#6a1b9a','quarter':'#4a148c','annual':'#ad1457','absent':'#e53935','checkin':'#1a56db'};
-  el.innerHTML=_attEmps.map(function(e){
-    var ab=0,an=0,row='<tr><td style="padding:5px 8px;font-size:12px;border:0.5px solid var(--g2);white-space:nowrap;position:sticky;left:0;background:var(--bg)">'+e.name+'</td>';
-    for(var d=1;d<=days;d++){
-      var ds=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  var lbl=document.getElementById('attWeekLabel');
+  if(lbl){
+    var s=dates[0],e=dates[6];
+    lbl.textContent=(s.getMonth()+1)+'/'+s.getDate()+'('+dow[s.getDay()]+') ~ '+(e.getMonth()+1)+'/'+e.getDate()+'('+dow[e.getDay()]+')';
+  }
+  var todayStr=tod();
+  var html='<thead><tr style="background:var(--g1)">'
+    +'<th style="padding:8px 10px;font-size:12px;font-weight:700;text-align:left;border:0.5px solid var(--g2);position:sticky;left:0;background:var(--g1);min-width:70px">이름</th>';
+  dates.forEach(function(dt){
+    var ds=_attFmtDate2(dt);
+    var isToday=ds===todayStr;
+    var isSun=dt.getDay()===0,isSat=dt.getDay()===6;
+    var c=isToday?'#1a56db':isSun?'#e53935':isSat?'#1565c0':'var(--g7)';
+    html+='<th colspan="2" style="padding:6px 4px;font-size:11px;font-weight:600;text-align:center;border:0.5px solid var(--g2);color:'+c+';background:'+(isToday?'#e3f2fd':'var(--g1)')+'">'+
+      (dt.getMonth()+1)+'/'+dt.getDate()+'('+dow[dt.getDay()]+')</th>';
+  });
+  html+='</tr><tr style="background:var(--g1)">';
+  html+='<th style="border:0.5px solid var(--g2);position:sticky;left:0;background:var(--g1)"></th>';
+  dates.forEach(function(){
+    html+='<th style="padding:3px 4px;font-size:10px;color:var(--g5);font-weight:500;text-align:center;border:0.5px solid var(--g2)">출근</th>';
+    html+='<th style="padding:3px 4px;font-size:10px;color:var(--g5);font-weight:500;text-align:center;border:0.5px solid var(--g2)">퇴근</th>';
+  });
+  html+='</tr></thead><tbody>';
+  _attEmps.forEach(function(emp){
+    html+='<tr><td style="padding:6px 10px;font-size:12px;font-weight:500;border:0.5px solid var(--g2);white-space:nowrap;position:sticky;left:0;background:var(--bg)">'+emp.name+'</td>';
+    dates.forEach(function(dt){
+      var ds=_attFmtDate2(dt);
       var raw=localStorage.getItem(_attDateKey(ds));
-      var r=raw?JSON.parse(raw)[e.name]:null;
-      var tags=r?(r.tags||(r.status&&r.status!=='normal'?[r.status]:[])):[];
-      if(tags.indexOf('absent')>=0)ab++;
-      if(tags.indexOf('annual')>=0)an++;
-      var icon='',color='';
-      if(tags.length){icon=sI[tags[0]]||'';color=sC[tags[0]]||'';}
-      var isTd=ds===tod();
-      row+='<td style="padding:2px;font-size:9px;text-align:center;border:0.5px solid var(--g2)'+(isTd?';background:#e3f2fd':'')+(color?';color:'+color:'')+'" onclick="attMonthClick(\''+ds+'\')">'+(icon)+'</td>';
-    }
-    row+='<td style="padding:3px 5px;font-size:11px;text-align:center;border:0.5px solid var(--g2);color:#e53935">'+(ab||'')+'</td>'
-      +'<td style="padding:3px 5px;font-size:11px;text-align:center;border:0.5px solid var(--g2);color:#ad1457">'+(an||'')+'</td></tr>';
-    return row;
-  }).join('');
+      var r=raw?JSON.parse(raw)[emp.name]:null;
+      var tags=r?(r.tags||[]):[];
+      var inT=r?(r.inTime||'09:00'):'';
+      var outT=r?(r.outTime||'18:00'):'';
+      var isAbsent=tags.indexOf('absent')>=0;
+      var isAnnual=tags.indexOf('annual')>=0;
+      var isToday=ds===todayStr;
+      var isWknd=dt.getDay()===0||dt.getDay()===6;
+      var bg=isToday?'#f0f7ff':isWknd?'var(--g1)':'var(--bg)';
+      var escapedDs=ds.replace(/'/g,"\\'");
+      var escapedName=emp.name.replace(/'/g,"\\'");
+      if(isAbsent||isAnnual){
+        var label=isAbsent?'결근':'연차';
+        var color=isAbsent?'#e53935':'#ad1457';
+        html+='<td colspan="2" style="padding:4px;text-align:center;font-size:11px;font-weight:600;color:'+color+';background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+label+'</td>';
+      } else if(!r||isWknd){
+        html+='<td style="padding:4px;text-align:center;font-size:11px;color:var(--g3);background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+(isWknd&&!r?'-':'')+'</td>';
+        html+='<td style="padding:4px;text-align:center;font-size:11px;color:var(--g3);background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+(isWknd&&!r?'-':'')+'</td>';
+      } else {
+        var tagLabel=tags.length?tags.map(function(t){return ATT_SL[t]||t;}).join('+'):'';
+        var badge=tagLabel?'<div style="font-size:9px;color:#1a56db">'+tagLabel+'</div>':'';
+        html+='<td style="padding:3px 2px;text-align:center;font-size:11px;background:'+bg+';border:0.5px solid var(--g2);cursor:pointer;min-width:48px" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+badge+'<b>'+inT+'</b></td>';
+        html+='<td style="padding:3px 2px;text-align:center;font-size:11px;background:'+bg+';border:0.5px solid var(--g2);cursor:pointer;min-width:48px" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')"><b>'+outT+'</b></td>';
+      }
+    });
+    html+='</tr>';
+  });
+  html+='</tbody>';
+  tbl.innerHTML=html;
+}
+
+function attWeekCellEdit(ds, empName){
+  var raw=localStorage.getItem(_attDateKey(ds));
+  var dayRec=raw?JSON.parse(raw):{};
+  var r=dayRec[empName]||{tags:[],inTime:'09:00',outTime:'18:00'};
+  var tags=r.tags||[];
+  var parts=ds.split('-');
+  var title=parseInt(parts[1])+'월 '+parseInt(parts[2])+'일 \u00b7 '+empName;
+  var tagInfo=tags.length?'<div style="font-size:12px;color:var(--g5);padding:6px 10px;background:var(--g1);border-radius:6px">현재: <b>'+tags.map(function(t){return ATT_SL[t]||t;}).join(', ')+'</b></div>':'';
+  var body='<div style="display:flex;flex-direction:column;gap:10px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">출근시간</div>'
+    +'<input class="fc" id="awe_in" value="'+(r.inTime||'09:00')+'" style="width:100%;padding:8px;font-size:16px;text-align:center;box-sizing:border-box"></div>'
+    +'<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">퇴근시간</div>'
+    +'<input class="fc" id="awe_out" value="'+(r.outTime||'18:00')+'" style="width:100%;padding:8px;font-size:16px;text-align:center;box-sizing:border-box"></div>'
+    +'</div>'+tagInfo+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px">'
+    +'<button class="btn" style="flex:1;padding:8px;font-size:13px;color:var(--d)" onclick="attWeekCellDelete(\''+ds+'\',\''+empName+'\')">초기화</button>'
+    +'<button class="btn bp bblk" style="flex:2;padding:8px;font-size:13px" onclick="attWeekCellSave(\''+ds+'\',\''+empName+'\')">저장</button>'
+    +'</div>';
+  showModal(title, body);
+}
+function attWeekCellSave(ds, empName){
+  var inT=_attFmt((document.getElementById('awe_in')||{}).value||'09:00');
+  var outT=_attFmt((document.getElementById('awe_out')||{}).value||'18:00');
+  var raw=localStorage.getItem(_attDateKey(ds));
+  var dayRec=raw?JSON.parse(raw):{};
+  var existing=dayRec[empName]||{tags:[]};
+  dayRec[empName]=Object.assign({},existing,{inTime:inT,outTime:outT});
+  localStorage.setItem(_attDateKey(ds),JSON.stringify(dayRec));
+  try{
+    var ref=firebase.firestore().collection('attendance').doc(ds);
+    ref.get().then(function(doc){
+      var data=doc.exists?doc.data():{date:ds,records:{}};
+      if(!data.records) data.records={};
+      data.records[empName]=dayRec[empName];
+      data.updatedAt=new Date().toISOString();
+      return ref.set(data);
+    });
+  }catch(e){}
+  toast(empName+' 저장 \u2713','s');
+  closeModal();
+  _renderAttMonthly();
+}
+function attWeekCellDelete(ds, empName){
+  var raw=localStorage.getItem(_attDateKey(ds));
+  var dayRec=raw?JSON.parse(raw):{};
+  delete dayRec[empName];
+  if(Object.keys(dayRec).length) localStorage.setItem(_attDateKey(ds),JSON.stringify(dayRec));
+  else localStorage.removeItem(_attDateKey(ds));
+  toast(empName+' \ucd08\uae30\ud654 \u2713','s');
+  closeModal();
+  _renderAttMonthly();
 }
 function attMonthClick(date){
   _attSubTab='input';
