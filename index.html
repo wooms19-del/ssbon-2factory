@@ -45,7 +45,7 @@
     </div>
   </div>
   <div class="mt" style="display:flex;align-items:center;gap:6px">
-    <button class="mb" id="attHdBtn" onclick="setModeAtt()" style="margin-right:10px">출퇴근</button>
+    <button class="mb" id="schHdBtn" onclick="setModeSchedule()" style="margin-right:4px">📅 일정표</button><button class="mb" id="attHdBtn" onclick="setModeAtt()" style="margin-right:10px">출퇴근</button>
     <button class="mb on" id="modeI" onclick="setMode('i')">입력</button>
     <button class="mb" id="modeD" onclick="setMode('d')">분석</button>
   </div>
@@ -53,7 +53,6 @@
 <!-- 입력 탭 -->
 <div class="tnav" id="inav">
   <div class="tlist">
-    <div class="ti" onclick="showTab('i','schedule')">📅 일정표</div>
     <div class="ti on" onclick="showTab('i','barcode')">해동기</div>
     <div class="ti" onclick="showTab('i','thawing')">방혈</div>
     <div class="ti" onclick="showTab('i','preprocess')">전처리</div>
