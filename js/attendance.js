@@ -550,13 +550,13 @@ function _attAddH(t,h){if(!t||t.indexOf(':')<0)return '';var p=t.split(':'),hr=p
 
 // 태그 조합으로 실근무시간 계산
 function _calcWorkHours(tags){
-  // 기본 8시간에서 휴가시간 차감
+  // 기본 9시간(점심1h 포함 체류)에서 휴가시간 차감
   var vac=0;
   if(tags.indexOf('annual')>=0||tags.indexOf('absent')>=0)return 0;
-  if(tags.indexOf('half-am')>=0)vac+=4; // 반차(오전): 4h 휴가
-  if(tags.indexOf('half-pm')>=0)vac+=4; // 반차(오후): 4h 휴가
-  if(tags.indexOf('quarter')>=0)vac+=2; // 반반차: 2h 휴가
-  return Math.max(0,8-vac);
+  if(tags.indexOf('half-am')>=0)vac+=4;
+  if(tags.indexOf('half-pm')>=0)vac+=4;
+  if(tags.indexOf('quarter')>=0)vac+=2;
+  return Math.max(0,9-vac);
 }
 
 // ─────────────────────────────────────────────────────────
