@@ -387,11 +387,11 @@ function attApplyChecked(apply){
           inT='09:00'; outT='13:00'; // 표준 오후반차: 오전만 근무
         }
       }else if(appliedStatus==='quarter'){
-        // 조출이 있으면 조출시간부터 2시간, 없으면 09:00~11:00
+        // 반반차 = 2시간 휴가 → 6시간 근무
         if(tags.indexOf('early')>=0){
-          outT=_attAddH(inT,2); // 조출+반반차: 조출시간+2h
+          outT=_attAddH(inT,6); // 조출+반반차: 조출시간+6h (2시간 이른 퇴근)
         }else{
-          inT='09:00'; outT='11:00'; // 표준 반반차
+          inT='09:00'; outT='16:00'; // 표준 반반차: 09:00~16:00 (2시간 일찍 퇴근)
         }
       }else if(appliedStatus==='annual'||appliedStatus==='absent'){
         inT=''; outT='';
