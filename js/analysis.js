@@ -1190,7 +1190,7 @@ function renderDailyFromLocal_(d){
       const shOrigKg = r2(rmKg * _shShare);
       const shRecs_t = shGroup[t]._recs||[]; const shH = calcActualHours(shRecs_t)||r2(shGroup[t].h)||calcActualHours(sh);
       // 투입 KG: 자숙 산출을 파쇄 타입 비중으로 비례 배분 (복수 파쇄 타입 이중계산 방지)
-      const shInKg = r2(((ckGroup[t]?.kg) ?? ckKg) * _shShare);
+      const shInKg = r2((ckGroup[t]?.kg) ?? ckKg);
       const shWaste = r2((shRecs_t).reduce((s,r)=>s+(parseFloat(r.waste)||0),0));
       const shWorkers = Math.round(shRecs_t.reduce((s,r)=>s+(parseFloat(r.workers)||0),0) / Math.max(shRecs_t.length,1));
       procRows.push({name:'파쇄', type:t, origKg:shOrigKg, in:shInKg, out:r2(shGroup[t].kg), waste:shWaste, mh:r2(shGroup[t].mh), h:shH, workers:shWorkers});
