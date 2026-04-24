@@ -1013,7 +1013,7 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
     if(_nextMatched.length && _nxtKg>_curKg*2) matched=_nextMatched;
   }
   const seen=new Set();
-  const deduped=matched.filter(r=>{const k=(r.wagon||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
+  const deduped=matched.filter(r=>{const k=(r.cart||r.wagon||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
   return r2(deduped.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
 }
 
@@ -1113,7 +1113,7 @@ function renderDailyFromLocal_(d){
     if(_nextRaw.length && _nxtKg > _curKg*2) _rawTh=_nextRaw;
   }
   const _seenTh=new Set();
-  const matchedTh=_rawTh.filter(r=>{const k=(r.wagon||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(_seenTh.has(k))return false;_seenTh.add(k);return true;});
+  const matchedTh=_rawTh.filter(r=>{const k=(r.cart||r.wagon||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(_seenTh.has(k))return false;_seenTh.add(k);return true;});
   const rmKg=r2(matchedTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
   // 원육 타입별 KG: matchedTh 기준으로 재계산 (바코드·중복 해동 오염 방지)
   Object.keys(thByType).forEach(k=>delete thByType[k]);
