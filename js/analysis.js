@@ -697,7 +697,7 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
   const delta=(c,p,up)=>{
     if(!c||!p) return '<span style="color:#94a3b8">—</span>';
     const d=c-p, good=up?(d>=0):(d<=0);
-    const color=good?'#047857':'#b91c1c', icon=d>=0?'▲':'▼';
+    const color=good?'#1a56db':'#e53935', icon=d>=0?'▲':'▼';
     return `<span style="color:${color};font-weight:600">${icon}${Math.abs(d).toFixed(1)}</span>`;
   };
   el.innerHTML=`<div class="ct">전월 비교</div>
