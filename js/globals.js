@@ -7,6 +7,11 @@ document.addEventListener('DOMContentLoaded', function() {
   window.renderMonthly = renderMonthly;
   window.exportMonthlyReport = exportMonthlyReport;
 
+
+  window.setModeSchedule = setModeSchedule;
+  window.schSaveBulk = schSaveBulk;
+  window.schDayClick = schDayClick;
+  window._schCloseModal = _schCloseModal;
   window.initSchedule = initSchedule;
   window.schPrevMonth = schPrevMonth;
   window.schNextMonth = schNextMonth;
