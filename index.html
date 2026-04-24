@@ -53,6 +53,7 @@
 <!-- 입력 탭 -->
 <div class="tnav" id="inav">
   <div class="tlist">
+    <div class="ti" onclick="showTab('i','schedule')">📅 일정표</div>
     <div class="ti on" onclick="showTab('i','barcode')">해동기</div>
     <div class="ti" onclick="showTab('i','thawing')">방혈</div>
     <div class="ti" onclick="showTab('i','preprocess')">전처리</div>
@@ -80,7 +81,8 @@
 <div class="inner">
 
 <!-- ===== 해동기 (바코드 스캔) ===== -->
-<div class="pg on" id="p-barcode">
+<div class="pg" id="p-schedule" style="padding:0"></div>
+  <div class="pg on" id="p-barcode">
   <div class="card">
     <div class="ct">해동기 투입 <span class="bdg" id="bcCnt">0건</span></div>
     <div class="bca" id="bcArea" onclick="focusBC()">
@@ -909,6 +911,7 @@
 <script src="js/outerpacking.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/app.js?v=3"></script>
+<script src="js/schedule.js"></script>
 <script src="js/attendance.js?v=18"></script>
 <script src="js/timepicker.js"></script>
 <script src="js/globals.js"></script>
