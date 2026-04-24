@@ -113,10 +113,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // 앱 초기화
   // ============================================================
   if(document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 });
-
-// 앱 초기화
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
