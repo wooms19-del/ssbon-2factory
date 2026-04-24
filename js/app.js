@@ -152,3 +152,19 @@ function init(){
     renderThawList();
   });
 }
+function setModeAtt(){
+  // 입력/분석 버튼 off
+  document.querySelectorAll('.mb').forEach(function(b){b.classList.remove('on');});
+  document.getElementById('attHdBtn').classList.add('on');
+  // 모든 nav 숨김
+  ['inav','dnav'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el)el.className='tnav hid';
+  });
+  // 모든 pg 숨김 후 출퇴근만 표시
+  document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});
+  var ap=document.getElementById('p-attendance');
+  if(ap)ap.classList.add('on');
+  document.getElementById('mscroll').scrollTop=0;
+  initAttendance();
+}
