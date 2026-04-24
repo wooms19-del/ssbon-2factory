@@ -331,21 +331,23 @@ function attApplyChecked(apply){
       if(appliedStatus==='checkin'||appliedStatus==='early'){
         inT=timeVal||'09:00';
         // 조출 적용 후 이미 반차/반반차 태그 있으면 해당 시간으로 재계산
-        if(tags.indexOf('half-am')>=0) outT=_attAddH(inT,4);
-        else if(tags.indexOf('quarter')>=0) outT=_attAddH(inT,2);
-        else if(tags.indexOf('half-pm')>=0){outT='18:00';} // 오후반차는 조출과 무관
+        if(tags.indexOf('half-pm')>=0) outT=_attAddH(inT,4); // 조출+오후반차: 조출시간+4h
+        else if(tags.indexOf('quarter')>=0) outT=_attAddH(inT,2); // 조출+반반차: 조출시간+2h
+        else if(tags.indexOf('half-am')>=0){inT='13:00';outT='18:00';} // 반차오전은 고정
         else outT=_attCalcOut(inT);
       }else if(appliedStatus==='overtime'){
         outT=timeVal||'19:00';
       }else if(appliedStatus==='half-am'){
-        // 조출이 있으면 조출시간부터 4시간, 없으면 09:00~13:00
-        if(tags.indexOf('early')>=0){
-          outT=_attAddH(inT,4); // 조출+반차: 조출시간+4h
-        }else{
-          inT='09:00'; outT='13:00'; // 표준 반차오전
-        }
+        // 반차(오전) = 오전에 쉬고 오후 출근 → 13:00~18:00
+        // 조출+반차(오전): 조출로 일찍 시작했다가 오전 반차 → 13:00~18:00 (조출시간은 별도)
+        inT='13:00'; outT='18:00';
       }else if(appliedStatus==='half-pm'){
-        inT=rec.inTime||'13:00'; outT='18:00';
+        // 반차(오후) = 오후에 쉬고 오전만 근무 → 09:00~13:00
+        if(tags.indexOf('early')>=0){
+          outT=_attAddH(inT,4); // 조출+오후반차: 조출시간+4h
+        }else{
+          inT='09:00'; outT='13:00'; // 표준 오후반차: 오전만 근무
+        }
       }else if(appliedStatus==='quarter'){
         // 조출이 있으면 조출시간부터 2시간, 없으면 09:00~11:00
         if(tags.indexOf('early')>=0){
