@@ -1182,12 +1182,11 @@ function renderDailyFromLocal_(d){
       procRows.push({name:'자숙', type:t, origKg:ckOrigKg, in:ckInKg, out:r2(ckGroup[t].kg), waste:0, mh:r2(ckGroup[t].mh), h:calcActualHours(ckGroup[t]._recs||[])||r2(ckGroup[t].h), workers:ckWorkers});
     }
   });
-  const _totalShKgAll = r2(Object.values(shGroup).reduce((s,v)=>s+v.kg, 0));
   allTypes.forEach(t => {
     if(shGroup[t]) {
-      const _shShare = _totalShKgAll > 0 ? shGroup[t].kg / _totalShKgAll : 1;
-      // 원육수율 분모: 파쇄 타입별 비례 배분 (설도+미분류 등 복수타입시 이중계산 방지)
-      const shOrigKg = r2(rmKg * _shShare);
+      // 타입별 독립 계산 (우둔/홍두께 각각 1:1 매칭)
+      const _shShare = 1;
+      const shOrigKg = r2((rmByType[t]||thByType[t]||0));
       const shRecs_t = shGroup[t]._recs||[]; const shH = calcActualHours(shRecs_t)||r2(shGroup[t].h)||calcActualHours(sh);
       // 투입 KG: 자숙 산출을 파쇄 타입 비중으로 비례 배분 (복수 파쇄 타입 이중계산 방지)
       const shInKg = r2((ckGroup[t]?.kg) ?? ckKg);
