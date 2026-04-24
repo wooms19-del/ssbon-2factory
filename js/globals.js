@@ -6,6 +6,17 @@ document.addEventListener('DOMContentLoaded', function() {
   window.chMonth = chMonth;
   window.renderMonthly = renderMonthly;
   window.exportMonthlyReport = exportMonthlyReport;
+
+  window.initSchedule = initSchedule;
+  window.schPrevMonth = schPrevMonth;
+  window.schNextMonth = schNextMonth;
+  window.schGoToday = schGoToday;
+  window.schDayClick = schDayClick;
+  window.schAddEvent = schAddEvent;
+  window.schDelEvent = schDelEvent;
+  window.schEditSummary = schEditSummary;
+  window.schAddSummaryRow = schAddSummaryRow;
+  window.schSaveSummary = schSaveSummary;
   window.setMode = setMode;
   window.focusBC = focusBC;
   window.delBC = delBC;
