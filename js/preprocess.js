@@ -116,7 +116,13 @@ function updateThawInfo(){
   const _td=tod(), _yd=getYesterday_();
   const thawings=L.thawing.filter(t=>{
     const d=String(t.date||'').slice(0,10);
-    return d===_td||d===_yd;
+    if(d===_td) return true; // 오늘 시작 → 항상 표시
+    if(d===_yd){
+      // 어제 시작 → end에 날짜가 포함(다음날까지 이어진 경우)만 표시
+      const e=String(t.end||'');
+      return e.includes(_td)||e.length>8;
+    }
+    return false;
   });
   if(!thawings.length){
     document.getElementById('thawInfo').innerHTML='<div class="emp">방혈 데이터 없음</div>';
