@@ -654,7 +654,7 @@ function attDownloadWeekly(){
 
     // ─ 행3 날짜
     setRange(3,1,3,7,'성  명',{bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
-    for(var d=0;d<7;d++){
+    for(var d=0;d<numDays;d++){
       var base=DS+d*8;
       var dt=dates[d];
       var lb=(dt.getMonth()+1)+'/'+dt.getDate()+'('+dlabels[d]+')';
