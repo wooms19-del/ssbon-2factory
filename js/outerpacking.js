@@ -263,7 +263,7 @@ function opCalc(i, innerEa) {
   const srem = document.getElementById('op_srem_'+i);
   const rateEl = document.getElementById('op_rate_'+i);
 
-  if(sbox) sbox.textContent = boxes.toLocaleString();
+  if(sbox) sbox.textContent = (boxes + (partial>0?1:0)).toLocaleString();
   if(sdefp){ sdefp.textContent = defp.toLocaleString()+' EA'; sdefp.style.color = defp>0?'var(--d)':''; }
 
   // 외포장 완료 EA = (박스 × 입수) + 잔량박스EA (입수 모르면 내포장 - 불량 - 샘플)
@@ -340,7 +340,7 @@ async function completeOuterPacking(i, date, product, innerEa) {
 
   const outerEa = parseInt((document.getElementById('op_outer_'+i)||{}).value)||0;
   const rec = {
-    date, product, innerEa, outerEa, outerBoxes: boxes,
+    date, product, innerEa, outerEa, outerBoxes: boxes + (partial > 0 ? 1 : 0),
     partialBoxEa: partial,
     productDefect: defp, sample, remainEa: rem,
     defectRate: rate, materials, note,
