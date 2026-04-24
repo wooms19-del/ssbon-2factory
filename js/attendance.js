@@ -48,8 +48,30 @@ function attSave(){
   localStorage.setItem(_attDateKey(_attDate),JSON.stringify(_attRecs));
   try{
     var full={};
-    _attEmps.forEach(function(e){full[e.name]=_attRecs[e.name]||{tags:[],inTime:'09:00',outTime:'18:00'};});
-    firebase.firestore().collection('attendance').doc(_attDate).set({date:_attDate,records:full,updatedAt:new Date().toISOString()});
+    var totalWorkers=0,totalAbsent=0,totalAnnual=0,totalEarly=0,totalOvertime=0;
+    _attEmps.forEach(function(e){
+      var r=_attRecs[e.name]||{tags:[],inTime:'09:00',outTime:'18:00'};
+      full[e.name]=r;
+      var tags=r.tags||[];
+      if(tags.indexOf('absent')>=0)totalAbsent++;
+      else if(tags.indexOf('annual')>=0)totalAnnual++;
+      else totalWorkers++;
+      if(tags.indexOf('early')>=0)totalEarly++;
+      if(tags.indexOf('overtime')>=0)totalOvertime++;
+    });
+    firebase.firestore().collection('attendance').doc(_attDate).set({
+      date:_attDate,
+      records:full,
+      summary:{
+        totalWorkers:totalWorkers,   // 출근자 수 (결근/연차 제외)
+        totalAbsent:totalAbsent,     // 결근자 수
+        totalAnnual:totalAnnual,     // 연차자 수
+        totalEarly:totalEarly,       // 조출자 수
+        totalOvertime:totalOvertime, // 연장자 수
+        totalHeadcount:_attEmps.length // 전체 인원
+      },
+      updatedAt:new Date().toISOString()
+    });
   }catch(e){}
   toast('출퇴근 저장됨 ✓','s');
   _renderAttSummary();
