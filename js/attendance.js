@@ -586,7 +586,7 @@ function attWeekCellEdit(ds, empName){
     +'<button class="btn" style="flex:1;padding:8px;font-size:13px;color:var(--d)" onclick="attWeekCellDelete(\''+ds+'\',\''+empName+'\')">초기화</button>'
     +'<button class="btn bp bblk" style="flex:2;padding:8px;font-size:13px" onclick="attWeekCellSave(\''+ds+'\',\''+empName+'\')">저장</button>'
     +'</div>';
-  showModal(title, body);
+  _attShowModal(title, body);
 }
 function attWeekCellSave(ds, empName){
   var inT=_attFmt((document.getElementById('awe_in')||{}).value||'09:00');
@@ -607,7 +607,7 @@ function attWeekCellSave(ds, empName){
     });
   }catch(e){}
   toast(empName+' 저장 \u2713','s');
-  closeModal();
+  _attCloseModal();
   _renderAttMonthly();
 }
 function attWeekCellDelete(ds, empName){
@@ -617,7 +617,7 @@ function attWeekCellDelete(ds, empName){
   if(Object.keys(dayRec).length) localStorage.setItem(_attDateKey(ds),JSON.stringify(dayRec));
   else localStorage.removeItem(_attDateKey(ds));
   toast(empName+' \ucd08\uae30\ud654 \u2713','s');
-  closeModal();
+  _attCloseModal();
   _renderAttMonthly();
 }
 function attMonthClick(date){
@@ -831,3 +831,18 @@ function attDownloadWeekly(){
     alert('다운로드 실패: '+e.message);
   }
 }
+
+function _attShowModal(title, body){
+  var ex=document.getElementById('att_modal_wrap'); if(ex) ex.remove();
+  var wrap=document.createElement('div');
+  wrap.id='att_modal_wrap';
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  wrap.innerHTML='<div style="background:#fff;border-radius:12px;width:100%;max-width:400px;padding:20px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<span style="font-size:15px;font-weight:700">'+title+'</span>'
+    +'<button onclick="document.getElementById('att_modal_wrap').remove()" style="font-size:18px;color:#9ca3af;background:none;border:none;cursor:pointer">✕</button>'
+    +'</div>'+body+'</div>';
+  document.body.appendChild(wrap);
+}
+function _attCloseModal(){var w=document.getElementById('att_modal_wrap');if(w)w.remove();}
+window._attCloseModal = _attCloseModal;
