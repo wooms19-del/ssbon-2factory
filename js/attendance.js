@@ -837,10 +837,11 @@ function _attShowModal(title, body){
   var wrap=document.createElement('div');
   wrap.id='att_modal_wrap';
   wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  var closeBtn='<button onclick="_attCloseModal()" style="font-size:18px;color:#9ca3af;background:none;border:none;cursor:pointer">✕</button>';
   wrap.innerHTML='<div style="background:#fff;border-radius:12px;width:100%;max-width:400px;padding:20px">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     +'<span style="font-size:15px;font-weight:700">'+title+'</span>'
-    +'<button onclick="document.getElementById('att_modal_wrap').remove()" style="font-size:18px;color:#9ca3af;background:none;border:none;cursor:pointer">✕</button>'
+    +closeBtn
     +'</div>'+body+'</div>';
   document.body.appendChild(wrap);
 }
