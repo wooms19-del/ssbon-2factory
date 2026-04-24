@@ -1254,16 +1254,38 @@ function renderDailyFromLocal_(d){
     pkMap[key]._recs = pkMap[key]._recs||[]; pkMap[key]._recs.push(r);
     pkMap[key].h += dur(r.start,r.end);
   });
-  // 포장 투입: 타입별 파쇄 산출 직접 사용 (같은 타입의 파쇄 산출 = 포장 투입)
-  Object.values(pkMap).forEach(v => {
-    // 해당 원육 타입의 파쇄 산출 사용
-    const typeShKg = v.type && shGroup[v.type] ? r2(shGroup[v.type].kg) : shKg;
-    const typeRmKg = v.type && rmByType[v.type] ? r2(rmByType[v.type]) : rmKg;
-    // 같은 타입에 제품이 여러 개면 비중으로 배분
-    const sameTypeTotal = r2(Object.values(pkMap).filter(vv=>vv.type===v.type).reduce((s,vv)=>s+vv.kg,0));
-    const _pkShare = sameTypeTotal > 0 ? v.kg / sameTypeTotal : 1;
-    const pkInKg = r2(typeShKg * _pkShare);
-    const pkOrig = r2(typeRmKg * _pkShare);
+  // 포장 투입: 타입별 파쇄 산출을 EA 비중으로 배분 (이중계산 방지)
+  // 각 shredding 타입별로 해당 타입 사용하는 포장 레코드들의 총 EA 합산 후 비례 배분
+  const pkInKgMap = {}; // key별 투입KG 누적
+  const pkOrigMap = {}; // key별 원육KG 누적
+  const pkMapEntries = Object.entries(pkMap);
+  Object.keys(shGroup).forEach(shType => {
+    // 이 shType을 포함하는 포장 레코드들
+    const relEntries = pkMapEntries.filter(([k,vv]) => {
+      const types = (vv.type||'').split(',').map(t=>t.trim());
+      return types.indexOf(shType) >= 0;
+    });
+    const totalRelEa = relEntries.reduce((s,[,vv])=>s+(vv.ea||0),0);
+    relEntries.forEach(([k,vv]) => {
+      const share = totalRelEa > 0 ? (vv.ea||0) / totalRelEa : 1/relEntries.length;
+      pkInKgMap[k] = r2((pkInKgMap[k]||0) + shGroup[shType].kg * share);
+    });
+  });
+  // rmByType도 동일 방식으로
+  Object.keys(rmByType).forEach(rmType => {
+    const relEntries = pkMapEntries.filter(([k,vv]) => {
+      const types = (vv.type||'').split(',').map(t=>t.trim());
+      return types.indexOf(rmType) >= 0;
+    });
+    const totalRelEa = relEntries.reduce((s,[,vv])=>s+(vv.ea||0),0);
+    relEntries.forEach(([k,vv]) => {
+      const share = totalRelEa > 0 ? (vv.ea||0) / totalRelEa : 1/relEntries.length;
+      pkOrigMap[k] = r2((pkOrigMap[k]||0) + rmByType[rmType] * share);
+    });
+  });
+  Object.entries(pkMap).forEach(([key, v]) => {
+    const pkInKg = pkInKgMap[key] || r2(shKg / Object.keys(pkMap).length);
+    const pkOrig = pkOrigMap[key] || r2(rmKg / Object.keys(pkMap).length);
     const label = v.type ? v.type+' · '+v.product : v.product;
     const pkWorkers = Math.round((v._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0) / Math.max((v._recs||[]).length,1));
     procRows.push({name:'포장', type:label, origKg:pkOrig||rmKg, in:pkInKg, out:r2(v.kg), waste:0, ea:v.ea||0, mh:r2(v.mh), h:calcActualHours(v._recs||[])||r2(v.h), workers:pkWorkers});
