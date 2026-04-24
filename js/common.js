@@ -360,6 +360,9 @@ function isUserEditing() {
   // 외포장 미완료 패널이 하나라도 열려있으면 입력 중
   const panels = document.querySelectorAll('[id^="op_panel_"]');
   if(Array.from(panels).some(p=>p.style.display!=='none')) return true;
+  // 수정 폼이 열려있으면 입력 중 (자동갱신으로 닫히지 않도록)
+  const editForms = document.querySelectorAll('[id^="ppEdit_"],[id^="pkEdit_"]');
+  if(Array.from(editForms).some(p=>p.style.display!=='none')) return true;
   return false;
 }
 
