@@ -605,12 +605,14 @@ function attDownloadWeekly(){
         var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
         var raw=localStorage.getItem(_attDateKey(ds));
         var r=raw?JSON.parse(raw)[e.name]:null;
-        var rec=r||{tags:[],inTime:'09:00',outTime:'18:00'};
-        var tags=rec.tags||[];
-        if(tags.indexOf('absent')>=0||tags.indexOf('annual')>=0){
-          row.push(ATT_SL[tags[0]]||'-'); row.push('-');
+        if(!r){
+          // 기록 없는 날 = 빈칸
+          row.push(''); row.push('');
         }else{
-          row.push(rec.inTime||'09:00'); row.push(rec.outTime||'18:00');
+          var tags=r.tags||[];
+          if(tags.indexOf('absent')>=0){row.push('결근'); row.push('');}
+          else if(tags.indexOf('annual')>=0){row.push('연차'); row.push('');}
+          else{row.push(r.inTime||'09:00'); row.push(r.outTime||'18:00');}
         }
       });
       row.push(''); // 서명란
