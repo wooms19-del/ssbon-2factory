@@ -952,12 +952,29 @@ function goDate(dateStr){
 
 var _chDayDir=0;
 function chDay(d){
-  const dt=new Date(DDATE); dt.setDate(dt.getDate()+d);
-  const today=new Date(); today.setHours(0,0,0,0);
-  if(dt>today){ toast('오늘 이후 날짜입니다','d'); return; }
-  DDATE=dt.toISOString().slice(0,10);
-  _chDayDir=d;
-  renderDaily();
+  var dt=new Date(DDATE);
+  var today=new Date(); today.setHours(0,0,0,0);
+  // 최초 데이터 날짜 계산
+  var allDates=[];
+  if(L&&L.packing) L.packing.forEach(function(r){if(r.date)allDates.push(r.date.slice(0,10));});
+  if(L&&L.thawing) L.thawing.forEach(function(r){if(r.date)allDates.push(r.date.slice(0,10));});
+  allDates.sort();
+  var firstDate=allDates.length?new Date(allDates[0]+'T00:00:00'):null;
+
+  for(var i=0;i<60;i++){
+    dt.setDate(dt.getDate()+d);
+    // 미래 차단
+    if(dt>today){ toast('오늘 이후 날짜입니다','d'); return; }
+    // 과거 한계 차단
+    if(d<0&&firstDate&&dt<firstDate){ toast('더 이상 데이터가 없습니다','d'); return; }
+    // 해당 날짜에 데이터 있는지 L에서 체크
+    var ds=dt.toISOString().slice(0,10);
+    var has=false;
+    if(L&&L.packing) has=has||L.packing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
+    if(!has&&L&&L.thawing) has=has||L.thawing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
+    if(has){ DDATE=ds; renderDaily(); return; }
+  }
+  toast('해당 방향에 데이터가 없습니다','d');
 }
 
 // 전처리 wagons → 해동 매칭으로 원육KG 계산 (중복 와건 제거)
@@ -1317,29 +1334,6 @@ function renderDailyFromLocal_(d){
   }
 
 
-  // 데이터 없는 날 자동 이동
-  if(!procRows.length && !(typeof pkReport!=='undefined'&&pkReport.length)){
-    if(_chDayDir!==0){
-      var _dt=new Date(DDATE); _dt.setDate(_dt.getDate()+(_chDayDir>0?1:-1));
-      var _today=new Date(); _today.setHours(0,0,0,0);
-      // 미래 방향 → 오늘 이후면 멈춤
-      if(_chDayDir>0&&_dt>_today){ toast('오늘 이후 날짜입니다','d'); _chDayDir=0; return; }
-      // 과거 방향 → L 객체의 실제 최초 데이터 날짜 기준
-      if(_chDayDir<0){
-        var _allDates=[];
-        if(L&&L.packing) L.packing.forEach(function(r){if(r.date)_allDates.push(r.date.slice(0,10));});
-        if(L&&L.thawing) L.thawing.forEach(function(r){if(r.date)_allDates.push(r.date.slice(0,10));});
-        if(_allDates.length){
-          _allDates.sort();
-          var _firstDate=new Date(_allDates[0]+'T00:00:00');
-          if(_dt<_firstDate){ toast('더 이상 데이터가 없습니다','d'); _chDayDir=0; return; }
-        }
-      }
-      DDATE=_dt.toISOString().slice(0,10); renderDaily(); return;
-    }
-    _chDayDir=0;
-    return;
-  }
   _chDayDir=0;
   const tbody=document.getElementById('pTbl');
   let _prevName = '';
