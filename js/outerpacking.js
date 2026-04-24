@@ -138,6 +138,13 @@ function renderOpPending(list) {
           <span style="font-size:12px;color:var(--g5)">박스${perBox>0?' ('+perBox+'EA/박스)':''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px;color:var(--g5);min-width:72px">잔량 박스</span>
+          <input class="fc" type="number" id="op_partial_${i}" placeholder="0"
+            style="width:88px;text-align:right;padding:5px 8px"
+            oninput="opCalc(${i},${item.ea})">
+          <span style="font-size:12px;color:var(--g4)">EA (50개 미만 박스)</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <span style="font-size:12px;color:var(--g5);min-width:72px">샘플</span>
           <input class="fc" type="number" id="op_sample_${i}" placeholder="0"
             style="width:88px;text-align:right;padding:5px 8px"
@@ -237,17 +244,18 @@ function opToggleTest(i, innerEa) {
 }
 
 function opCalc(i, innerEa) {
-  const boxes  = parseInt(document.getElementById('op_boxes_'+i).value)||0;
-  const defp   = parseInt(document.getElementById('op_d0_'+i).value)||0;
-  const sample = parseInt(document.getElementById('op_sample_'+i).value)||0;
+  const boxes   = parseInt(document.getElementById('op_boxes_'+i).value)||0;
+  const partial = parseInt(document.getElementById('op_partial_'+i) ? document.getElementById('op_partial_'+i).value : 0)||0;
+  const defp    = parseInt(document.getElementById('op_d0_'+i).value)||0;
+  const sample  = parseInt(document.getElementById('op_sample_'+i).value)||0;
 
   // 제품명 → 레시피에서 입수(perBox) 계산
   const snEl = document.querySelector('#op_row_'+i+' .sn');
   const prodName = snEl ? snEl.textContent.trim() : '';
   const perBox = getPerBox(prodName) || 0;
 
-  // 잔여 = 내포장 - (박스×입수) - 제품불량 - 샘플
-  const rem = innerEa - boxes * perBox - defp - sample;
+  // 잔여 = 내포장 - (박스×입수) - 잔량박스EA - 제품불량 - 샘플
+  const rem = innerEa - boxes * perBox - partial - defp - sample;
 
   // 상단 요약
   const sbox = document.getElementById('op_sbox_'+i);
@@ -258,8 +266,10 @@ function opCalc(i, innerEa) {
   if(sbox) sbox.textContent = boxes.toLocaleString();
   if(sdefp){ sdefp.textContent = defp.toLocaleString()+' EA'; sdefp.style.color = defp>0?'var(--d)':''; }
 
-  // 외포장 완료 EA = 박스 × 입수 (입수 모르면 내포장 - 불량 - 샘플)
-  const outerCalc = (boxes > 0 && perBox > 0) ? boxes * perBox : Math.max(0, innerEa - defp - sample);
+  // 외포장 완료 EA = (박스 × 입수) + 잔량박스EA (입수 모르면 내포장 - 불량 - 샘플)
+  const outerCalc = (boxes > 0 && perBox > 0)
+    ? boxes * perBox + partial
+    : Math.max(0, innerEa - defp - sample);
   const sOuter = document.getElementById('op_souter_'+i);
   const outerInput = document.getElementById('op_outer_'+i);
   if(sOuter){ sOuter.textContent = outerCalc.toLocaleString(); }
@@ -321,7 +331,7 @@ async function completeOuterPacking(i, date, product, innerEa) {
   }, ...outerMats.map((m,j) => {
     const def = parseInt((document.getElementById('op_d'+(j+1)+'_'+i)||{}).value)||0;
     const actualInput = document.getElementById('op_a'+(j+1)+'_'+i);
-    const packedEa = boxes * perBox;
+    const packedEa = boxes * perBox + partial;
     const theory = parseFloat((packedEa * m.qty).toFixed(2));
     const actual = actualInput ? parseFloat(actualInput.value)||0 : theory+def;
     return { name: m.name, theory, defect: def, actual, pkgType: m.pkgType||'기타' };
@@ -330,6 +340,7 @@ async function completeOuterPacking(i, date, product, innerEa) {
   const outerEa = parseInt((document.getElementById('op_outer_'+i)||{}).value)||0;
   const rec = {
     date, product, innerEa, outerEa, outerBoxes: boxes,
+    partialBoxEa: partial,
     productDefect: defp, sample, remainEa: rem,
     defectRate: rate, materials, note,
     testRun: isTest ? true : false,
