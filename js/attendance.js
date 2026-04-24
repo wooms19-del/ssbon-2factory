@@ -368,31 +368,29 @@ function attApplyChecked(apply){
       var inT=rec.inTime||'09:00', outT=rec.outTime||'18:00';
       if(appliedStatus==='checkin'||appliedStatus==='early'){
         inT=timeVal||'09:00';
-        // 조출 적용 후 이미 반차/반반차 태그 있으면 해당 시간으로 재계산
-        if(tags.indexOf('half-pm')>=0) outT=_attAddH(inT,4); // 조출+오후반차: 조출시간+4h
-        else if(tags.indexOf('quarter')>=0) outT=_attAddH(inT,2); // 조출+반반차: 조출시간+2h
-        else if(tags.indexOf('half-am')>=0){inT='13:00';outT='18:00';} // 반차오전은 고정
+        // 기존 반차 태그 있으면 근무시간 조합 계산
+        var wh=_calcWorkHours(tags.concat([]));
+        if(tags.indexOf('half-am')>=0){inT='13:00';outT=_attAddH(inT,wh);}
+        else if(wh>0) outT=_attAddH(inT,wh);
         else outT=_attCalcOut(inT);
       }else if(appliedStatus==='overtime'){
         outT=timeVal||'19:00';
       }else if(appliedStatus==='half-am'){
-        // 반차(오전) = 오전에 쉬고 오후 출근 → 13:00~18:00
-        // 조출+반차(오전): 조출로 일찍 시작했다가 오전 반차 → 13:00~18:00 (조출시간은 별도)
-        inT='13:00'; outT='18:00';
+        // 반차(오전) = 오전에 쉬고 오후 출근 → 13:00부터 근무
+        inT='13:00';
+        var wh2=_calcWorkHours(tags.concat(['half-am']));
+        outT=_attAddH(inT,wh2);
       }else if(appliedStatus==='half-pm'){
-        // 반차(오후) = 오후에 쉬고 오전만 근무 → 09:00~13:00
-        if(tags.indexOf('early')>=0){
-          outT=_attAddH(inT,4); // 조출+오후반차: 조출시간+4h
-        }else{
-          inT='09:00'; outT='13:00'; // 표준 오후반차: 오전만 근무
-        }
+        // 반차(오후) = 오전만 근무 → inTime부터 근무
+        if(tags.indexOf('early')<0) inT='09:00';
+        var wh3=_calcWorkHours(tags.concat(['half-pm']));
+        outT=_attAddH(inT,wh3);
       }else if(appliedStatus==='quarter'){
-        // 반반차 = 2시간 휴가 → 6시간 근무
-        if(tags.indexOf('early')>=0){
-          outT=_attAddH(inT,6); // 조출+반반차: 조출시간+6h (2시간 이른 퇴근)
-        }else{
-          inT='09:00'; outT='16:00'; // 표준 반반차: 09:00~16:00 (2시간 일찍 퇴근)
-        }
+        // 반반차 = 2시간 추가 휴가
+        if(tags.indexOf('half-am')>=0){inT='13:00';}
+        else if(tags.indexOf('early')<0) inT='09:00';
+        var wh4=_calcWorkHours(tags.concat(['quarter']));
+        outT=_attAddH(inT,wh4);
       }else if(appliedStatus==='annual'||appliedStatus==='absent'){
         inT=''; outT='';
         // 다른 시간 관련 태그 제거
@@ -501,3 +499,14 @@ function attDeleteStaff(i){if(!confirm(_attEmps[i].name+' 삭제?'))return;_attE
 function _attFmt(v){v=(v||'').replace(/[^0-9]/g,'');if(v.length>4)v=v.slice(0,4);if(v.length===3)v='0'+v;if(v.length===4)return v.slice(0,2)+':'+v.slice(2);return v;}
 function _attCalcOut(t){if(!t||t.indexOf(':')<0)return '18:00';var p=t.split(':'),h=parseInt(p[0]),m=parseInt(p[1]),tot=h*60+m+9*60;return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0');}
 function _attAddH(t,h){if(!t||t.indexOf(':')<0)return '';var p=t.split(':'),hr=parseInt(p[0]),mn=parseInt(p[1]),tot=hr*60+mn+h*60;return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0');}
+
+// 태그 조합으로 실근무시간 계산
+function _calcWorkHours(tags){
+  // 기본 8시간에서 휴가시간 차감
+  var vac=0;
+  if(tags.indexOf('annual')>=0||tags.indexOf('absent')>=0)return 0;
+  if(tags.indexOf('half-am')>=0)vac+=4; // 반차(오전): 4h 휴가
+  if(tags.indexOf('half-pm')>=0)vac+=4; // 반차(오후): 4h 휴가
+  if(tags.indexOf('quarter')>=0)vac+=2; // 반반차: 2h 휴가
+  return Math.max(0,8-vac);
+}
