@@ -309,9 +309,10 @@ function opCalc(i, innerEa) {
 }
 
 async function completeOuterPacking(i, date, product, innerEa) {
-  const boxes = parseInt(document.getElementById('op_boxes_'+i).value)||0;
-  const isTest = (document.getElementById('op_test_'+i)||{}).checked;
-  if(!boxes && !isTest){ toast('박스 수를 입력하거나 제품 테스트용을 체크하세요','d'); return; }
+  const boxes   = parseInt(document.getElementById('op_boxes_'+i).value)||0;
+  const partial = parseInt(document.getElementById('op_partial_'+i) ? document.getElementById('op_partial_'+i).value : 0)||0;
+  const isTest  = (document.getElementById('op_test_'+i)||{}).checked;
+  if(!boxes && !partial && !isTest){ toast('박스 수를 입력하거나 제품 테스트용을 체크하세요','d'); return; }
 
   const defp   = parseInt(document.getElementById('op_d0_'+i).value)||0;
   const sample = parseInt(document.getElementById('op_sample_'+i).value)||0;
