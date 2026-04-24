@@ -22,7 +22,7 @@ async function saveP(type){
   // 전처리: 선택 대차 목록 저장 + 잔여중량 차감
   if(type==='preprocess'){
     // 지금시작 시 저장한 대차 목록 우선, 없으면 현재 체크박스에서 읽기
-    const curWagons = getSelectedWagons ? getSelectedWagons().map(t=>t.cart||t.wagon||'').filter(Boolean) : [];
+    const curWagons = getSelectedWagons ? getSelectedWagons().map(t=>t.cart||'').filter(Boolean) : [];
     d.wagons = (_ppSelectedWagons.length ? _ppSelectedWagons : curWagons).join(',');
     // 대차 번호 없으면 1~10 랜덤 자동 배정 + 방혈 기록에도 동일 번호 부여
     if(!d.wagons) {
@@ -32,17 +32,17 @@ async function saveP(type){
         const td = String(t.date||'').slice(0,10);
         return td === ppDate || td === prevDate;
       });
-      const usedNums = new Set(relatedThaw.map(t=>parseInt(t.cart||t.wagon||0)).filter(n=>n>0));
+      const usedNums = new Set(relatedThaw.map(t=>parseInt(t.cart||0)).filter(n=>n>0));
       const available = [1,2,3,4,5,6,7,8,9,10].filter(n=>!usedNums.has(n));
       const rnd = String(available.length ? available[Math.floor(Math.random()*available.length)] : (Math.floor(Math.random()*10)+1));
       d.wagons = rnd;
       toast('대차 번호 미선택 → '+rnd+'번 자동 배정','w');
       const ppType = (d.type||'').split(',')[0].trim();
       relatedThaw
-        .filter(t => !(t.cart||t.wagon) || (t.cart||t.wagon)==='' || (t.cart||t.wagon)==='0')
+        .filter(t => !t.cart || t.cart==='' || t.cart==='0')
         .filter(t => !ppType || !t.type || (t.type||'').includes(ppType))
         .forEach(async rec => {
-          rec.wagon = rnd; rec.cart = rnd;
+          rec.cart = rnd;
           if(d.start && (!rec.end || rec.end === '')) rec.end = d.start; // 전처리 시작 = 방혈 종료
           saveL();
           let fbId = rec.fbId;
@@ -51,11 +51,11 @@ async function saveP(type){
             const match = rows.find(r=>r.id===rec.id);
             if(match) { fbId=match.fbId; rec.fbId=fbId; saveL(); }
           }
-          if(fbId) { const upd2={wagon:rnd, cart:rnd}; if(d.start&&(!rec.end||rec.end==='')) upd2.end=d.start; fbUpdate('thawing', fbId, upd2); }
+          if(fbId) { const upd2={cart:rnd}; if(d.start&&(!rec.end||rec.end==='')) upd2.end=d.start; fbUpdate('thawing', fbId, upd2); }
         });
     }
     const wagons = _ppSelectedWagons.length
-      ? _ppSelectedWagons.map(w => L.thawing.find(t=>(t.cart||t.wagon)===w)).filter(Boolean)
+      ? _ppSelectedWagons.map(w => L.thawing.find(t=>t.cart===w)).filter(Boolean)
       : (getSelectedWagons ? getSelectedWagons() : []);
     // 저장 시에도 잔여중량 차감 (지금시작 안 눌렀을 때)
     wagons.forEach(async rec=>{
@@ -72,7 +72,7 @@ async function saveP(type){
       let fbId = rec.fbId;
       if(!fbId) {
         const rows = await fbGetByDate('thawing', String(rec.date||'').slice(0,10));
-        const match = rows.find(r=>(r.cart||r.wagon)===(rec.cart||rec.wagon));
+        const match = rows.find(r=>r.cart===rec.cart);
         if(match) { fbId=match.fbId; rec.fbId=fbId; saveL(); }
       }
       if(!rec.end||rec.end==='') rec.end=d.start||nowHM();
@@ -201,7 +201,7 @@ function delR(type,id,fbId){
     const wagonsStr = rec.wagons||'';
     wagonsStr.split(',').map(w=>w.trim()).filter(Boolean).forEach(async wagonNum => {
       // 로컬에서 해당 대차 찾기
-      const th = L.thawing.find(t=>(t.cart||t.wagon)===wagonNum);
+      const th = L.thawing.find(t=>t.cart===wagonNum);
       if(th) {
         th.remainKg = r2((parseFloat(th.remainKg)||0) + ppKg);
         th.end = ''; // 방혈 종료 취소
@@ -210,7 +210,7 @@ function delR(type,id,fbId){
         let fbThId = th.fbId;
         if(!fbThId) {
           const rows = await fbGetByDate('thawing', String(th.date||'').slice(0,10));
-          const match = rows.find(r=>(r.cart||r.wagon)===wagonNum);
+          const match = rows.find(r=>r.cart===wagonNum);
           if(match) { fbThId=match.fbId; th.fbId=fbThId; saveL(); }
         }
         if(fbThId) fbUpdate('thawing', fbThId, {remainKg:th.remainKg, end:''});
