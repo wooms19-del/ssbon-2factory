@@ -293,9 +293,14 @@ function opCalc(i, innerEa) {
   const t0El = document.getElementById('op_t0_'+i);
   if(t0El) t0El.textContent = (boxes*perBox).toLocaleString();
 
+  const totalBoxes = boxes + (partial > 0 ? 1 : 0);
   const packedEa = boxes * perBox + partial;
   outerMats.forEach((m,j) => {
-    const theory = parseFloat((packedEa * m.qty).toFixed(2));
+    // 박스 단위 포장재(qty≈1/perBox)는 총 박스 수로, EA 단위는 packedEa 기준
+    const isBoxUnit = m.qty > 0 && Math.abs(m.qty - 1/perBox) < 0.01;
+    const theory = isBoxUnit
+      ? totalBoxes
+      : parseFloat((packedEa * m.qty).toFixed(2));
     const dEl = document.getElementById('op_d'+(j+1)+'_'+i);
     const def  = dEl ? parseInt(dEl.value)||0 : 0;
     const tEl = document.getElementById('op_t'+(j+1)+'_'+i);
@@ -332,8 +337,12 @@ async function completeOuterPacking(i, date, product, innerEa) {
   }, ...outerMats.map((m,j) => {
     const def = parseInt((document.getElementById('op_d'+(j+1)+'_'+i)||{}).value)||0;
     const actualInput = document.getElementById('op_a'+(j+1)+'_'+i);
+    const totalBoxes2 = boxes + (partial > 0 ? 1 : 0);
     const packedEa = boxes * perBox + partial;
-    const theory = parseFloat((packedEa * m.qty).toFixed(2));
+    const isBoxUnit2 = m.qty > 0 && perBox > 0 && Math.abs(m.qty - 1/perBox) < 0.01;
+    const theory = isBoxUnit2
+      ? totalBoxes2
+      : parseFloat((packedEa * m.qty).toFixed(2));
     const actual = actualInput ? parseFloat(actualInput.value)||0 : theory+def;
     return { name: m.name, theory, defect: def, actual, pkgType: m.pkgType||'기타' };
   })];
