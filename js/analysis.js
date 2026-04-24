@@ -137,7 +137,22 @@ async function renderMonthly() {
   }
   const ctx2=document.getElementById('mo_def_chart');
   if(ctx2){ if(_moDefChart){_moDefChart.destroy();_moDefChart=null;}
-    _moDefChart=new Chart(ctx2,{type:'line',data:{labels,datasets:[
+    _moDefChart=new Chart(ctx2,{type:'line',plugins:[{id:'lineLbl',afterDatasetsDraw(chart){
+      const {ctx}=chart; ctx.save();
+      chart.data.datasets.forEach((ds,i)=>{
+        if(ds.pointRadius===0) return; // 기준선 등 숨긴 점은 스킵
+        chart.getDatasetMeta(i).data.forEach((pt,j)=>{
+          const v=ds.data[j];
+          if(v==null) return;
+          const s=typeof v==='number'?v.toFixed(1)+'%':String(v);
+          ctx.fillStyle=ds.borderColor||'#475569';
+          ctx.font='bold 9px sans-serif';
+          ctx.textAlign='center'; ctx.textBaseline='bottom';
+          ctx.fillText(s, pt.x, pt.y-5);
+        });
+      });
+      ctx.restore();
+    }}],data:{labels,datasets:[
       {label:'불량률',data:defVals,borderColor:'#e24b4a',backgroundColor:'rgba(226,75,74,0.08)',fill:true,tension:0.3,pointRadius:4,borderWidth:2,spanGaps:false},
       {label:'기준 2%',data:Array(dates.length).fill(2),borderColor:'#f59e0b',borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false}
     ]},options:{responsive:true,maintainAspectRatio:false,
