@@ -951,7 +951,14 @@ function goDate(dateStr){
 }
 
 var _chDayDir=0;
-function chDay(d){ const dt=new Date(DDATE);dt.setDate(dt.getDate()+d);DDATE=dt.toISOString().slice(0,10);_chDayDir=d;renderDaily(); }
+function chDay(d){
+  const dt=new Date(DDATE); dt.setDate(dt.getDate()+d);
+  const today=new Date(); today.setHours(0,0,0,0);
+  if(dt>today){ toast('오늘 이후 날짜입니다','d'); return; }
+  DDATE=dt.toISOString().slice(0,10);
+  _chDayDir=d;
+  renderDaily();
+}
 
 // 전처리 wagons → 해동 매칭으로 원육KG 계산 (중복 와건 제거)
 function getThKgByPP_(ppRecs, allThawing, packDate) {
@@ -1314,6 +1321,8 @@ function renderDailyFromLocal_(d){
   if(!procRows.length && !(typeof pkReport!=='undefined'&&pkReport.length)){
     if(_chDayDir!==0){
       var _dt=new Date(DDATE); _dt.setDate(_dt.getDate()+(_chDayDir>0?1:-1));
+      var _today=new Date(); _today.setHours(0,0,0,0);
+      if(_dt>_today){ toast('오늘 이후 날짜입니다','d'); _chDayDir=0; return; }
       DDATE=_dt.toISOString().slice(0,10); renderDaily(); return;
     }
     _chDayDir=0;
