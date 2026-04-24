@@ -568,8 +568,21 @@ function attDownloadWeekly(){
   var diff=day===0?-6:1-day;
   var mon=new Date(today); mon.setDate(today.getDate()+diff);
 
-  var dates=[], dlabels=['월','화','수','목','금','토','일'];
-  for(var i=0;i<7;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);dates.push(d);}
+  var allDates=[], dlabels=['월','화','수','목','금','토','일'];
+  for(var i=0;i<7;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);allDates.push(d);}
+
+  // 기록 있는 날만 필터
+  var dates=allDates.filter(function(dt){
+    var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+    var raw=localStorage.getItem(_attDateKey(ds));
+    if(!raw) return false;
+    var dayRec=JSON.parse(raw);
+    return _attEmps.some(function(e){
+      var r=dayRec[e.name];
+      return r&&(r.tags&&r.tags.length>0||r.inTime||r.outTime);
+    });
+  });
+  if(dates.length===0){alert('이번 주 출퇴근 기록이 없습니다.');return;}
 
   var DS=8;    // 날짜 시작 열 (1-indexed)
   var SS=DS+56; // 서명 시작 열 (= 64)
