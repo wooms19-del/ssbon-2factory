@@ -652,7 +652,22 @@ function _moRenderYieldChart(dailyYields) {
   const labels=dailyYields.map(d=>d.date.slice(5)+'('+['일','월','화','수','목','금','토'][new Date(d.date).getDay()]+')');
   const ylds=dailyYields.map(d=>parseFloat(d.yld.toFixed(1)));
   const ptColors=ylds.map(v=>v>=55?'#047857':v>=52?'#3b82f6':v>=50?'#f59e0b':'#ef4444');
-  _moYieldChart=new Chart(canvas,{
+  _moYieldChart=new Chart(canvas,{plugins:[{id:'lineLbl',afterDatasetsDraw(chart){
+      const {ctx}=chart; ctx.save();
+      chart.data.datasets.forEach((ds,i)=>{
+        if(ds.pointRadius===0||ds.pointRadius===undefined&&ds.borderDash) return;
+        chart.getDatasetMeta(i).data.forEach((pt,j)=>{
+          const v=ds.data[j];
+          if(v==null) return;
+          const s=typeof v==='number'?v.toFixed(1)+'%':String(v);
+          ctx.fillStyle=ds.borderColor||'#475569';
+          ctx.font='bold 9px sans-serif';
+          ctx.textAlign='center'; ctx.textBaseline='bottom';
+          ctx.fillText(s, pt.x, pt.y-5);
+        });
+      });
+      ctx.restore();
+    }}],
     type:'line',
     data:{labels,datasets:[
       {label:'일별 수율',data:ylds,borderColor:'#64748b',backgroundColor:'rgba(100,116,139,0.08)',fill:true,tension:0.3,pointRadius:5,pointBackgroundColor:ptColors,pointBorderColor:ptColors,borderWidth:2,spanGaps:false},
