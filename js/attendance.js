@@ -560,77 +560,157 @@ function _calcWorkHours(tags){
 }
 
 // ─────────────────────────────────────────────────────────
-// 주간 출퇴근 서명표 엑셀 다운로드
+// 주간 출퇴근 서명표 엑셀 다운로드 (A4 가로 맞춤)
 // ─────────────────────────────────────────────────────────
 function attDownloadWeekly(){
-  // 이번 주 월요일 구하기
   var today=new Date(_attDate);
   var day=today.getDay();
   var diff=day===0?-6:1-day;
   var mon=new Date(today); mon.setDate(today.getDate()+diff);
-  
+
   var dates=[];
   var dayNames=['일','월','화','수','목','금','토'];
   for(var i=0;i<7;i++){
     var d=new Date(mon); d.setDate(mon.getDate()+i);
     dates.push(d);
   }
-  
-  // XLSX 사용
+
   try{
     var wb=XLSX.utils.book_new();
-    
-    // 헤더 행 1: 제목
-    var year=mon.getFullYear(), m=String(mon.getMonth()+1).padStart(2,'0');
-    var ws_data=[
-      ['2공장 주간 출퇴근 기록부 — '+year+'년 '+m+'월 '+String(mon.getDate()).padStart(2,'0')+'일 ~ '+String(dates[6].getDate()).padStart(2,'0')+'일'],
-      []
-    ];
-    
-    // 헤더 행 2: 날짜
-    var header2=['이름'];
+    var year=mon.getFullYear();
+    var m=String(mon.getMonth()+1).padStart(2,'0');
+    var title='2공장 주간 출퇴근 기록부 — '+year+'년 '+
+      (mon.getMonth()+1)+'월 '+mon.getDate()+'일 ~ '+dates[6].getDate()+'일';
+
+    // ── 데이터 구성 ──────────────────────────────────────
+    var ws_data=[];
+
+    // 행1: 제목 (나중에 병합)
+    ws_data.push([title]);
+
+    // 행2: 빈 줄
+    ws_data.push([]);
+
+    // 행3: 헤더
+    var header=['이름'];
     dates.forEach(function(d){
       var dn=dayNames[d.getDay()];
-      var label=(d.getMonth()+1)+'/'+d.getDate()+'('+dn+')';
-      header2.push(label+' 출근');
-      header2.push(label+' 퇴근');
+      var lb=(d.getMonth()+1)+'/'+d.getDate()+'('+dn+')';
+      header.push(lb+' 출근'); header.push(lb+' 퇴근');
     });
-    header2.push('서명');
-    ws_data.push(header2);
-    
-    // 데이터 행: 직원별
+    header.push('서명');
+    ws_data.push(header);
+
+    // 행4~: 직원별
     _attEmps.forEach(function(e){
       var row=[e.name];
       dates.forEach(function(d){
         var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
         var raw=localStorage.getItem(_attDateKey(ds));
         var r=raw?JSON.parse(raw)[e.name]:null;
-        if(!r){
-          // 기록 없는 날 = 빈칸
-          row.push(''); row.push('');
-        }else{
+        if(!r){row.push(''); row.push('');}
+        else{
           var tags=r.tags||[];
           if(tags.indexOf('absent')>=0){row.push('결근'); row.push('');}
           else if(tags.indexOf('annual')>=0){row.push('연차'); row.push('');}
-          else{row.push(r.inTime||'09:00'); row.push(r.outTime||'18:00');}
+          else{row.push(r.inTime||''); row.push(r.outTime||'');}
         }
       });
       row.push(''); // 서명란
       ws_data.push(row);
     });
-    
-    // 담당/검토/승인
+
+    // 행: 빈 줄
     ws_data.push([]);
-    ws_data.push(['담당: ___________','','','검토: ___________','','','승인: ___________']);
-    
+
+    // 행: 담당/검토/승인
+    var totalCols=header.length;
+    var sig=[];
+    for(var i2=0;i2<totalCols;i2++) sig.push('');
+    sig[1]='담당: ________________';
+    sig[Math.floor(totalCols/2)]='검토: ________________';
+    sig[totalCols-3]='승인: ________________';
+    ws_data.push(sig);
+
     var ws=XLSX.utils.aoa_to_sheet(ws_data);
-    
-    // 열 너비 설정
-    var cols=[{wch:10}];
+    var totalRows=ws_data.length;
+
+    // ── 제목 셀 병합 (A1 ~ 마지막열 1행) ─────────────────
+    ws['!merges']=[
+      {s:{r:0,c:0}, e:{r:0,c:totalCols-1}}
+    ];
+
+    // ── 열 너비 설정 ──────────────────────────────────────
+    var cols=[{wch:10}]; // 이름 열
     dates.forEach(function(){cols.push({wch:9},{wch:9});});
-    cols.push({wch:12});
+    cols.push({wch:14}); // 서명란
     ws['!cols']=cols;
-    
+
+    // ── 행 높이 설정 ─────────────────────────────────────
+    ws['!rows']=[];
+    for(var ri=0;ri<totalRows;ri++){
+      ws['!rows'].push({hpt: ri===0?24 : ri===1?4 : ri===2?22 : 20});
+    }
+
+    // ── 테두리 + 스타일 적용 ──────────────────────────────
+    var border={
+      top:{style:'thin',color:{rgb:'AAAAAA'}},
+      bottom:{style:'thin',color:{rgb:'AAAAAA'}},
+      left:{style:'thin',color:{rgb:'AAAAAA'}},
+      right:{style:'thin',color:{rgb:'AAAAAA'}}
+    };
+    var borderBold={
+      top:{style:'medium',color:{rgb:'333333'}},
+      bottom:{style:'medium',color:{rgb:'333333'}},
+      left:{style:'medium',color:{rgb:'333333'}},
+      right:{style:'medium',color:{rgb:'333333'}}
+    };
+
+    for(var ri=0;ri<totalRows;ri++){
+      for(var ci=0;ci<totalCols;ci++){
+        var cellAddr=XLSX.utils.encode_cell({r:ri,c:ci});
+        if(!ws[cellAddr]) ws[cellAddr]={t:'s',v:''};
+        var isHeader=(ri===2);
+        var isTitle=(ri===0);
+        var isData=(ri>=3 && ri<totalRows-2);
+
+        ws[cellAddr].s={
+          font:{
+            name:'맑은 고딕',
+            sz: isTitle?13 : isHeader?10 : 9,
+            bold: isTitle||isHeader
+          },
+          alignment:{
+            horizontal: isTitle?'center' : isHeader?'center' : 'center',
+            vertical:'center',
+            wrapText:false
+          },
+          fill: isTitle?{fgColor:{rgb:'1A56DB'},patternType:'solid'} :
+                isHeader?{fgColor:{rgb:'E8F0FE'},patternType:'solid'} :
+                {patternType:'none'},
+          font: isTitle?{name:'맑은 고딕',sz:13,bold:true,color:{rgb:'FFFFFF'}} :
+                isHeader?{name:'맑은 고딕',sz:9,bold:true} :
+                {name:'맑은 고딕',sz:9},
+          border: (ri>=2&&ri<totalRows-1) ? border : {}
+        };
+      }
+    }
+
+    // ── 인쇄 설정 (A4 가로) ──────────────────────────────
+    ws['!pageSetup']={
+      paperSize:9, // A4
+      orientation:'landscape',
+      fitToPage:true,
+      fitToWidth:1,
+      fitToHeight:0,
+      scale:100
+    };
+    ws['!printOptions']={gridLines:false};
+    ws['!margins']={
+      left:0.5,right:0.5,top:0.75,bottom:0.75,
+      header:0.3,footer:0.3
+    };
+
     XLSX.utils.book_append_sheet(wb,ws,'주간출퇴근');
     var fname='출퇴근_'+year+m+'.xlsx';
     XLSX.writeFile(wb,fname);
