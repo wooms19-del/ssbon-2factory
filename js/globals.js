@@ -9,8 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
   window.setModeSchedule = setModeSchedule;
-  window.schSaveBulk = schSaveBulk;
-  window.schDayClick = schDayClick;
+    window.schDayClick = schDayClick;
   window._schCloseModal = _schCloseModal;
   window.initSchedule = initSchedule;
   window.schPrevMonth = schPrevMonth;
