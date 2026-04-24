@@ -115,10 +115,25 @@ async function renderMonthly() {
     _moBarChart=new Chart(ctx1,{type:'bar',data:{labels,datasets:[
       {label:'생산EA',data:eaVals,backgroundColor:'#3b82f6',borderRadius:5,borderSkipped:false}
     ]},options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:v=>v.raw.toLocaleString()+' EA'}}},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:v=>v.raw.toLocaleString()+' EA'}},
+        afterDatasetsDraw:{id:'topLabels',afterDatasetsDraw(chart){
+          const {ctx,data}=chart;
+          ctx.save();
+          chart.data.datasets.forEach((ds,i)=>{
+            chart.getDatasetMeta(i).data.forEach((bar,j)=>{
+              const v=ds.data[j];if(!v||v<=0)return;
+              ctx.fillStyle='#555';ctx.font='bold 9px sans-serif';
+              ctx.textAlign='center';ctx.textBaseline='bottom';
+              const lbl=v>=1000?(v/1000).toFixed(1)+'k':String(v);
+              ctx.fillText(lbl,bar.x,bar.y-2);
+            });
+          });
+          ctx.restore();
+        }}},
       scales:{x:{ticks:{color:'#888',font:{size:10},maxRotation:45},grid:{display:false}},
               y:{ticks:{color:'#888',font:{size:10},callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v},
-                 grid:{color:'rgba(128,128,128,0.1)'},min:0}}}});
+                 grid:{color:'rgba(128,128,128,0.1)'},min:0}}});
   }
   const ctx2=document.getElementById('mo_def_chart');
   if(ctx2){ if(_moDefChart){_moDefChart.destroy();_moDefChart=null;}
