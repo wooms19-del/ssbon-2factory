@@ -27,7 +27,7 @@ function updPpWagon(){
     return `<div style="background:var(--g1);border-radius:8px;padding:10px 12px;margin-bottom:8px">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
         <input type="checkbox" class="pp-wagon-ck" data-id="${t.id}" data-remain="${remain}" onchange="onPpWagonChange()" style="width:18px;height:18px;accent-color:var(--p)">
-        <span style="font-size:14px;font-weight:600">${t.cart||t.wagon||'(대차)'}</span>
+        <span style="font-size:14px;font-weight:600">${t.cart||'(대차)'}</span>
         <span style="font-size:13px;color:var(--g5);margin-left:auto">${t.type||'-'} · 잔여 <b style="color:var(--p)">${remain}kg</b></span>
       </label>
       <div class="pp-wagon-input" id="pp_wi_${t.id}" style="display:none">
@@ -69,7 +69,7 @@ function onPpWagonChange(){
     const inp=document.querySelector('.pp-wagon-kg[data-id="'+t.id+'"]');
     totalDeduct+=parseFloat(inp&&inp.value)||0;
   });
-  const wagons=selected.map(t=>t.cart||t.wagon||'(대차)').join(', ');
+  const wagons=selected.map(t=>t.cart||'(대차)').join(', ');
   const types=[...new Set(selected.map(t=>t.type||'-'))].join(', ');
   info.innerHTML=`<div class="al al-i">🧊 대차 ${wagons} · ${types}${totalDeduct>0?' · 투입 <b>'+totalDeduct.toFixed(2)+'kg</b>':''}</div>`;
   info.classList.remove('hid');
@@ -84,7 +84,7 @@ function onPpStartBtn(){
   document.getElementById('pp_startBtn').style.background='var(--s)';
 
   // 선택된 대차 미리 저장 (나중에 saveP에서 사용)
-  _ppSelectedWagons = getSelectedWagons().map(t=>t.cart||t.wagon||'').filter(Boolean);
+  _ppSelectedWagons = getSelectedWagons().map(t=>t.cart||'').filter(Boolean);
 
   // 즉시 잔여중량 차감
   const selectedWagons=getSelectedWagons();
@@ -93,7 +93,7 @@ function onPpStartBtn(){
     if(!rec||(rec.end&&rec.end!=='')) return;
     const kgInp=document.querySelector('.pp-wagon-kg[data-id="'+rec.id+'"]');
     const deductKg=parseFloat(kgInp&&kgInp.value)||0;
-    if(!deductKg){toast('해동대차 '+(rec.cart||rec.wagon||'')+' 투입 중량을 입력하세요','d');return;}
+    if(!deductKg){toast('해동대차 '+(rec.cart||'')+' 투입 중량을 입력하세요','d');return;}
     deducted=true;
     const cur=rec.remainKg!==undefined?rec.remainKg:rec.totalKg;
     const remain=r2(cur-deductKg);
@@ -106,7 +106,7 @@ function onPpStartBtn(){
       if(remain<=0) updateData.end=t;
       fbUpdate('thawing', rec.fbId, updateData);
     }
-    if(remain<=0) gasRecord('updateThawEnd', {wagon:rec.cart||rec.wagon, end:t});
+    if(remain<=0) gasRecord('updateThawEnd', {wagon:rec.cart, end:t});
   });
   if(deducted) updPpWagon();
   updateThawInfo();
@@ -134,7 +134,7 @@ function updateThawInfo(){
     return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--g2)">
       <div>
         <span style="font-size:14px;font-weight:700">${t.type||'-'}</span>
-        <span style="font-size:13px;color:var(--g5);margin-left:8px">대차 ${t.cart||t.wagon||'-'} · ${t.boxes||0}박스 · ${t.totalKg||0}kg · 시작 ${(()=>{const d=new Date(t.date||tod());d.setDate(d.getDate()-1);return (d.getMonth()+1+'').padStart(2,'0')+'-'+(d.getDate()+'').padStart(2,'0');})()  } ${(t.start||'-').slice(0,5)}${done?' · 종료 '+(()=>{const e=t.end||'';return e.length>8?e.slice(5,10)+' '+e.slice(11,16):tod().slice(5)+' '+e;})():''}</span>
+        <span style="font-size:13px;color:var(--g5);margin-left:8px">대차 ${t.cart||'-'} · ${t.boxes||0}박스 · ${t.totalKg||0}kg · 시작 ${(()=>{const d=new Date(t.date||tod());d.setDate(d.getDate()-1);return (d.getMonth()+1+'').padStart(2,'0')+'-'+(d.getDate()+'').padStart(2,'0');})()  } ${(t.start||'-').slice(0,5)}${done?' · 종료 '+(()=>{const e=t.end||'';return e.length>8?e.slice(5,10)+' '+e.slice(11,16):tod().slice(5)+' '+e;})():''}</span>
         <span style="font-size:12px;margin-left:6px">${done?'✅완료':'🔄방혈중'}</span>
       </div>
     </div>`;
