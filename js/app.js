@@ -41,7 +41,7 @@ function setMode(m){
 function showTab(mode,tab){
   if(mode==='i') ITAB=tab; else DTAB=tab;
   const nav=mode==='i'?'inav':'dnav';
-  const tabs=mode==='i'?['barcode','thawing','preprocess','cooking','shredding','packing','sauce','outerpacking']:['daily','monthly','trace','recipe','settings'];
+  const tabs=mode==='i'?['barcode','thawing','preprocess','cooking','shredding','packing','sauce','outerpacking','attendance']:['daily','monthly','trace','recipe','settings'];
   document.querySelectorAll(`#${nav} .ti`).forEach((el,i)=>el.classList.toggle('on',tabs[i]===tab));
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   const pg=document.getElementById('p-'+tab); if(pg) pg.classList.add('on');
@@ -90,6 +90,8 @@ function showTab(mode,tab){
     loadSettings_().then(()=>renderSettings()).catch(()=>renderSettings());
   } else if(tab==='outerpacking'){
     loadOuterPacking();
+  } else if(tab==='attendance'){
+    initAttendance();
   } else if(tab==='recipe'){
     updDD();
     renderRcList();
