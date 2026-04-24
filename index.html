@@ -14,7 +14,12 @@
     html, body { overscroll-behavior-y: contain; overscroll-behavior-x: none; }
     /* iOS 풀스크린 */
     body { -webkit-overflow-scrolling: touch; }
-  </style>
+  .att-sub-tab.on {
+    color: var(--p) !important;
+    border-bottom: 2px solid var(--p) !important;
+    font-weight: 600;
+  }
+</style>
   <link rel="apple-touch-icon" href="icon.png">
   <link rel="icon" type="image/png" href="icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -53,6 +58,7 @@
     <div class="ti" onclick="showTab('i','packing')">포장</div>
     <div class="ti" onclick="showTab('i','sauce')">소스</div>
     <div class="ti" onclick="showTab('i','outerpacking')">외포장</div>
+    <div class="ti" onclick="showTab('i','attendance')">출퇴근</div>
   </div>
 </div>
 
@@ -336,6 +342,88 @@
 </div>
 
 <!-- ===== 외포장 ===== -->
+
+<!-- ===== 출퇴근 관리 ===== -->
+<div class="pg" id="p-attendance">
+
+  <!-- 오늘 요약 대시보드 -->
+  <div id="attSummary" style="margin:8px 0 4px"></div>
+
+  <!-- 날짜 네비게이션 -->
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--g1);border-radius:8px;margin-bottom:8px">
+    <button class="btn bo bsm" onclick="attChangeDay(-1)">◀</button>
+    <span id="attDateLabel" style="flex:1;text-align:center;font-size:14px;font-weight:700"></span>
+    <button class="btn bo bsm" onclick="attChangeDay(1)">▶</button>
+    <button class="btn bo bsm" onclick="attGoToday()" style="font-size:11px">오늘</button>
+  </div>
+
+  <!-- 서브탭 -->
+  <div style="display:flex;gap:0;border-bottom:2px solid var(--g2);margin-bottom:8px">
+    <button class="att-sub-tab on" data-tab="input" onclick="attShowSubTab('input',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">출퇴근 입력</button>
+    <button class="att-sub-tab" data-tab="monthly" onclick="attShowSubTab('monthly',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">월별 조회</button>
+    <button class="att-sub-tab" data-tab="staff" onclick="attShowSubTab('staff',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">직원 관리</button>
+  </div>
+
+  <!-- 출퇴근 입력 탭 -->
+  <div id="attInputWrap">
+    <div style="display:flex;gap:6px;padding:0 14px 8px;flex-wrap:wrap">
+      <button class="btn bo bsm" onclick="attApplyAll()">전체 정상 09:00~18:00</button>
+    </div>
+    <div id="attInputList"></div>
+    <div style="padding:10px 14px">
+      <button class="btn bp bblk" onclick="attSave()">저장</button>
+    </div>
+  </div>
+
+  <!-- 월별 조회 탭 -->
+  <div id="attMonthlyWrap" style="display:none;overflow-x:auto;padding:0 2px">
+    <table style="border-collapse:collapse;font-size:11px;min-width:100%">
+      <thead id="attMonthlyHeader"></thead>
+      <tbody id="attMonthlyBody"></tbody>
+    </table>
+  </div>
+
+  <!-- 직원 관리 탭 -->
+  <div id="attStaffWrap" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 14px 10px">
+      <span style="font-size:13px;font-weight:600">직원 목록 (<span id="attStaffCount">0</span>명)</span>
+      <button class="btn bo bsm" onclick="attAddStaff()">+ 직원 추가</button>
+    </div>
+    <div id="attStaffList" style="padding:0 14px"></div>
+  </div>
+
+  <!-- 근태 설정 모달 -->
+  <div id="attCardModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9000;align-items:center;justify-content:center">
+    <div style="background:var(--bg);border-radius:16px;padding:20px;width:300px;max-width:90vw;border:1px solid var(--g2)">
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px" id="attCardName"></div>
+      <label style="font-size:12px;color:var(--g5);display:block;margin-bottom:4px">근태 상태</label>
+      <select id="attCardStatus" onchange="attCardStatusChange()" style="width:100%;margin-bottom:12px;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:14px;background:var(--g1)">
+        <option value="normal">✅ 정상</option>
+        <option value="early">🌅 조출</option>
+        <option value="overtime">⏰ 연장</option>
+        <option value="half-am">🌓 반차(오전)</option>
+        <option value="half-pm">🌓 반차(오후)</option>
+        <option value="quarter">🌗 반반차</option>
+        <option value="annual">📅 연차</option>
+        <option value="absent">❌ 결근</option>
+      </select>
+      <div id="attCardInRow">
+        <label style="font-size:12px;color:var(--g5);display:block;margin-bottom:4px">출근시간</label>
+        <input id="attCardIn" class="fc" type="text" inputmode="numeric" maxlength="5" placeholder="예: 0900"
+          oninput="_attCardUpdateCalc()" style="margin-bottom:8px">
+        <div id="attCardCalcRow" style="font-size:12px;color:var(--p);background:var(--g1);border-radius:6px;padding:6px 10px;margin-bottom:12px">
+          <span id="attCardCalcOut">-</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bo" style="flex:1" onclick="attCloseCard()">취소</button>
+        <button class="btn bp" style="flex:1" onclick="attCardConfirm()">확인</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <div class="pg" id="p-outerpacking">
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -817,6 +905,7 @@
 <script src="js/outerpacking.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/app.js"></script>
+<script src="js/attendance.js"></script>
 <script src="js/timepicker.js"></script>
 <script src="js/globals.js"></script>
 </body>
