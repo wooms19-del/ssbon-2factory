@@ -202,7 +202,7 @@ async function renderMonthly() {
   // ④ thMonth에서 테스트 해동 와건 제거 (해동 날짜·익일 모두 체크)
   const thMonthClean = (thMonth||[]).filter(r => {
     const thD = String(r.date||'').slice(0,10);
-    const w   = (r.cart||r.wagon||'').trim();
+    const w   = (r.cart||'').trim();
     if(!w) return true;
     if(testThWByDate[thD] && testThWByDate[thD].has(w)) return false;
     const nextD = (()=>{const dt=new Date(thD);dt.setDate(dt.getDate()+1);return dt.toISOString().slice(0,10);})();
@@ -984,12 +984,12 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
   const wagons=[...new Set(ppRecs.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
   let matched=[];
   if(wagons.length){
-    const sameTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate&&wagons.includes(_normW(r.cart||r.wagon)));
+    const sameTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate&&wagons.includes(_normWr.cart));
     if(sameTh.length){
       matched=sameTh;
     } else {
       const todayAny=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
-      const prevTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&wagons.includes(_normW(r.cart||r.wagon)));
+      const prevTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&wagons.includes(_normWr.cart));
       if(todayAny.length){
         matched=todayAny;
       } else if(prevTh.length){
@@ -1007,13 +1007,13 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
   // 재입력이 다음날로 저장된 경우 보정 (날짜 오입력 대비)
   if(wagons.length){
     const _nextD=addDays(packDate,1);
-    const _nextMatched=allThawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&wagons.includes(_normW(r.cart||r.wagon)));
+    const _nextMatched=allThawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&wagons.includes(_normWr.cart));
     const _curKg=r2(matched.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     const _nxtKg=r2(_nextMatched.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     if(_nextMatched.length && _nxtKg>_curKg*2) matched=_nextMatched;
   }
   const seen=new Set();
-  const deduped=matched.filter(r=>{const k=(r.cart||r.wagon||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
+  const deduped=matched.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
   return r2(deduped.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
 }
 
@@ -1065,7 +1065,7 @@ function renderDailyFromLocal_(d){
   const bc=L.barcodes.filter(r=>String(r.date||'').slice(0,10)===prevD);
   // 방혈 데이터: 테스트 와건 제외
   const thByType={};
-  L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||r.wagon||'').trim())).forEach(r=>{
+  L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||'').trim())).forEach(r=>{
     (r.type||'').split(',').map(t=>t.trim()).filter(Boolean).forEach(t=>{
       if(!thByType[t]) thByType[t]=0;
       thByType[t]+=parseFloat(r.totalKg)||0;
@@ -1076,7 +1076,7 @@ function renderDailyFromLocal_(d){
   // wagon 번호 정규화: "7호"/"7번대차"/"7" → 모두 "7"로 통일
   const _normW=w=>String(w||'').replace(/[^0-9]/g,'')||String(w||'').trim();
   const _ppWagons=[...new Set(pp.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
-  const _thMatchFn=(r,date)=>String(r.date||'').slice(0,10)===date&&!_testPpW.has((r.cart||r.wagon||'').trim())&&_ppWagons.includes(_normW(r.cart||r.wagon));
+  const _thMatchFn=(r,date)=>String(r.date||'').slice(0,10)===date&&!_testPpW.has((r.cart||'').trim())&&_ppWagons.includes(_normWr.cart);
   let _rawTh=[];
   if(_ppWagons.length){
     const _st=L.thawing.filter(r=>_thMatchFn(r,d));
@@ -1084,7 +1084,7 @@ function renderDailyFromLocal_(d){
       _rawTh=_st;
     } else {
       // 오늘 wagon 매칭 실패 → 오늘 방혈 존재 여부 확인
-      const _todayAny=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||r.wagon||'').trim()));
+      const _todayAny=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||'').trim()));
       const _yt=L.thawing.filter(r=>_thMatchFn(r,prevD));
       if(_todayAny.length){
         // 오늘 방혈은 있으나 wagon 포맷 불일치 → 오늘 전체 방혈 사용 (어제 wagon 오염 방지)
@@ -1096,24 +1096,24 @@ function renderDailyFromLocal_(d){
     }
     // 모두 실패 시 최후 폴백 → 당일 전체, 없으면 전날 전체
     if(!_rawTh.length){
-      _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||r.wagon||'').trim()));
-      if(!_rawTh.length) _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&!_testPpW.has((r.cart||r.wagon||'').trim()));
+      _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||'').trim()));
+      if(!_rawTh.length) _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&!_testPpW.has((r.cart||'').trim()));
     }
   } else {
-    _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||r.wagon||'').trim()));
-    if(!_rawTh.length) _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&!_testPpW.has((r.cart||r.wagon||'').trim()));
+    _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||'').trim()));
+    if(!_rawTh.length) _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&!_testPpW.has((r.cart||'').trim()));
   }
   // 재입력이 다음날로 저장된 경우 보정 (날짜 미변경 입력 오류 대비)
   // 현재 찾은 방혈 totalKg보다 다음날 같은 wagon이 2배 이상이면 다음날 기록 우선 사용
   if(_ppWagons.length){
     const _nextD=addDays(d,1);
-    const _nextRaw=L.thawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&!_testPpW.has((r.cart||r.wagon||'').trim())&&_ppWagons.includes(_normW(r.cart||r.wagon)));
+    const _nextRaw=L.thawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&!_testPpW.has((r.cart||'').trim())&&_ppWagons.includes(_normWr.cart));
     const _curKg=r2(_rawTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     const _nxtKg=r2(_nextRaw.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     if(_nextRaw.length && _nxtKg > _curKg*2) _rawTh=_nextRaw;
   }
   const _seenTh=new Set();
-  const matchedTh=_rawTh.filter(r=>{const k=(r.cart||r.wagon||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(_seenTh.has(k))return false;_seenTh.add(k);return true;});
+  const matchedTh=_rawTh.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(_seenTh.has(k))return false;_seenTh.add(k);return true;});
   const rmKg=r2(matchedTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
   // 원육 타입별 KG: matchedTh 기준으로 재계산 (바코드·중복 해동 오염 방지)
   Object.keys(thByType).forEach(k=>delete thByType[k]);
