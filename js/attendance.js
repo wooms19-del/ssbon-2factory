@@ -584,9 +584,10 @@ function attDownloadWeekly(){
   });
   if(dates.length===0){alert('이번 주 출퇴근 기록이 없습니다.');return;}
 
-  var DS=8;    // 날짜 시작 열 (1-indexed)
-  var SS=DS+56; // 서명 시작 열 (= 64)
-  var LASTCOL=SS+2; // 마지막 열 (= 66)
+  var DS=8;
+  var numDays=dates.length;
+  var SS=DS+numDays*8;
+  var LASTCOL=SS+2;
   var LASTROW=4+_attEmps.length;
 
   try{
@@ -665,7 +666,7 @@ function attDownloadWeekly(){
 
     // ─ 행4 출근/퇴근
     setRange(4,1,4,7,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
-    for(var d=0;d<7;d++){
+    for(var d=0;d<numDays;d++){
       var base=DS+d*8;
       setRange(4,base,4,base+3,'출  근',{bold:true,fill:'DBE5F1',
         bl:d==0?med():thin(),br:thin(),bt:thin(),bb:med()});
@@ -684,7 +685,7 @@ function attDownloadWeekly(){
       setRange(row,1,row,1,idx+1,{bl:med(),br:thin(),bt:thin(),bb:bb});
       setRange(row,2,row,7,name,{bl:thin(),br:med(),bt:thin(),bb:bb});
 
-      for(var d=0;d<7;d++){
+      for(var d=0;d<numDays;d++){
         var base=DS+d*8;
         var dt=dates[d];
         var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
@@ -706,7 +707,7 @@ function attDownloadWeekly(){
     // ─ 열 너비 / 행 높이
     var cols=[{wch:4}];
     for(var i=0;i<6;i++) cols.push({wch:3.5});
-    for(var i=0;i<56;i++) cols.push({wch:3.8});
+    for(var i=0;i<numDays*8;i++) cols.push({wch:3.8});
     for(var i=0;i<3;i++) cols.push({wch:6});
     ws['!cols']=cols;
 
