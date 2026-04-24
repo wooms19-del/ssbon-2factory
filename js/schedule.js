@@ -313,3 +313,17 @@ function _schShowModal(title,body){
 function _schCloseModal(){
   var w=document.getElementById('sch_modal_wrap'); if(w)w.remove();
 }
+
+// window 바인딩 (schedule.js 자체)
+window.setModeSchedule  = setModeSchedule;
+window.initSchedule     = initSchedule;
+window.renderSchedule   = renderSchedule;
+window.schPrevMonth     = schPrevMonth;
+window.schNextMonth     = schNextMonth;
+window.schGoToday       = schGoToday;
+window.schSaveBulk      = schSaveBulk;
+window.schDayClick      = schDayClick;
+window.schEditSummary   = schEditSummary;
+window.schAddSummaryRow = schAddSummaryRow;
+window.schSaveSummary   = schSaveSummary;
+window._schCloseModal   = _schCloseModal;
