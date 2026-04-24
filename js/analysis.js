@@ -1309,7 +1309,7 @@ function renderDailyFromLocal_(d){
   }
 
   // 데이터 없는 날
-  if(!procRows.length && !pkReport.length){
+  if(!procRows.length && !(typeof pkReport!=='undefined' && pkReport.length)){
     const wrap=document.getElementById('pTbl');
     if(wrap){
       const card=wrap.closest('.card')||wrap.parentElement;
