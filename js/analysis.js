@@ -1322,7 +1322,11 @@ function renderDailyFromLocal_(d){
     if(_chDayDir!==0){
       var _dt=new Date(DDATE); _dt.setDate(_dt.getDate()+(_chDayDir>0?1:-1));
       var _today=new Date(); _today.setHours(0,0,0,0);
-      if(_dt>_today){ toast('오늘 이후 날짜입니다','d'); _chDayDir=0; return; }
+      // 미래 방향 → 오늘 이후면 멈춤
+      if(_chDayDir>0&&_dt>_today){ toast('오늘 이후 날짜입니다','d'); _chDayDir=0; return; }
+      // 과거 방향 → 최대 365일 전까지만 탐색
+      var _oldest=new Date(_today); _oldest.setDate(_today.getDate()-365);
+      if(_chDayDir<0&&_dt<_oldest){ toast('더 이상 데이터가 없습니다','d'); _chDayDir=0; return; }
       DDATE=_dt.toISOString().slice(0,10); renderDaily(); return;
     }
     _chDayDir=0;
