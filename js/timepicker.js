@@ -71,18 +71,8 @@
     if(e.target === this) tpCancel();
   });
 
-  // 모든 HH:MM 입력창에 피커 연결 (이벤트 위임)
-  document.addEventListener('focus', function(e){
-    if(e.target.placeholder === 'HH:MM'){
-      e.target.blur();
-      openTimePicker(e.target);
-    }
-  }, true);
-  document.addEventListener('click', function(e){
-    if(e.target.placeholder === 'HH:MM'){
-      openTimePicker(e.target);
-    }
-  }, true);
+  // 드럼 피커 제거 - HH:MM 입력창 직접 입력 방식으로 변경
+  // (숫자 4자리 입력 → 자동 HH:MM 포맷은 common.js blur/input 이벤트에서 처리)
 })();
 
 // ============================================================
