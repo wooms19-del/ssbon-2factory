@@ -437,8 +437,24 @@ function attApplyChecked(apply){
 function attRemoveTag(name,tag){
   var rec=_getRec(name);
   var tags=rec.tags.filter(function(t){return t!==tag;});
-  if(!tags.length)delete _attRecs[name];
-  else _attRecs[name]=Object.assign({},rec,{tags:tags});
+  if(!tags.length){
+    delete _attRecs[name]; // 태그 없으면 정상(09:00~18:00)으로 복귀
+  }else{
+    // 남은 태그 기반으로 시간 재계산
+    var inT=rec.inTime||'09:00';
+    var outT=rec.outTime||'18:00';
+    var wh=_calcWorkHours(tags);
+    if(tags.indexOf('half-am')>=0){
+      inT='13:00'; outT=_attAddH(inT,wh);
+    }else if(tags.indexOf('early')>=0||tags.indexOf('checkin')>=0){
+      outT=_attAddH(inT,wh>0?wh:9); // 조출 유지, outTime 재계산
+    }else if(wh>0){
+      inT='09:00'; outT=_attAddH(inT,wh);
+    }else{
+      inT='09:00'; outT='18:00';
+    }
+    _attRecs[name]={tags:tags,inTime:inT,outTime:outT};
+  }
   _renderAttInput();
 }
 
