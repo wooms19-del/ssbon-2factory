@@ -8,19 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
   window.exportMonthlyReport = exportMonthlyReport;
 
 
-  window.setModeSchedule = setModeSchedule;
-    window.schDayClick = schDayClick;
-  window._schCloseModal = _schCloseModal;
-  window.initSchedule = initSchedule;
-  window.schPrevMonth = schPrevMonth;
-  window.schNextMonth = schNextMonth;
-  window.schGoToday = schGoToday;
-  window.schDayClick = schDayClick;
   window.schAddEvent = schAddEvent;
   window.schDelEvent = schDelEvent;
-  window.schEditSummary = schEditSummary;
-  window.schAddSummaryRow = schAddSummaryRow;
-  window.schSaveSummary = schSaveSummary;
   window.setMode = setMode;
   window.focusBC = focusBC;
   window.delBC = delBC;
