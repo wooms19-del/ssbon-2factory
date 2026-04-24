@@ -200,8 +200,8 @@ function _renderAttInput(){
   var checkPanel='';
   if(_attSelStatus){
     var sc=ATT_COLOR[_attSelStatus],si=ATT_ICON[_attSelStatus],sl=ATT_SL[_attSelStatus];
-    var needIn=!!ATT_NEEDS_IN[_attSelStatus];
-    var needOut=!!ATT_NEEDS_OUT[_attSelStatus]||(!!ATT_NEEDS_OUT_TIME&&!!ATT_NEEDS_OUT_TIME[_attSelStatus]);
+    var needIn=(_attSelStatus==='checkin'||_attSelStatus==='early');
+    var needOut=(_attSelStatus==='checkout'||_attSelStatus==='overtime');
 
     var checkHtml=_attEmps.map(function(e,i){
       var isChecked=_hasTag(e.name,_attSelStatus);
@@ -374,13 +374,12 @@ function attApplyChecked(apply){
       return;
     }
   }
-  var needIn=!!ATT_NEEDS_IN[_attSelStatus];
-  var needOut=!!ATT_NEEDS_OUT[_attSelStatus];
+  var needIn=(_attSelStatus==='checkin'||_attSelStatus==='early');
+  var needOut=(_attSelStatus==='checkout'||_attSelStatus==='overtime');
   var timeVal='';
   if(needIn||needOut){var tEl=document.getElementById('attBulkTime');timeVal=tEl?_attFmt(tEl.value):'';}
   // 시간 필수인데 미입력 경고
-  var needAnyTime=needIn||needOut||_attSelStatus==='checkout';
-  if(apply&&needAnyTime&&!timeVal){
+  if(apply&&(needIn||needOut)&&!timeVal){
     var tLabel=_attSelStatus==='checkout'?'퇴근시간':needIn?(_attSelStatus==='early'?'조출 출근시간':'출근시간'):'퇴근시간';
     alert(tLabel+'을 먼저 입력하세요!\n예) 0700 → 07:00 으로 자동 변환됩니다.');
     var tEl2=document.getElementById('attBulkTime');
