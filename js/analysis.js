@@ -1308,6 +1308,18 @@ function renderDailyFromLocal_(d){
     return y>=98&&y<=102?'var(--s)':y>=95?'var(--w)':'var(--d)';
   }
 
+  // 데이터 없는 날
+  if(!procRows.length && !pkReport.length){
+    const wrap=document.getElementById('pTbl');
+    if(wrap){
+      const card=wrap.closest('.card')||wrap.parentElement;
+      if(card) card.innerHTML='<div style="padding:60px 20px;text-align:center">'
+        +'<div style="font-size:36px;margin-bottom:10px">📭</div>'
+        +'<div style="font-size:14px;font-weight:600;color:var(--g5)">'+dateWithDay(DDATE)+'</div>'
+        +'<div style="font-size:12px;color:var(--g4);margin-top:4px">생산 데이터가 없는 날입니다</div></div>';
+    }
+    return;
+  }
   const tbody=document.getElementById('pTbl');
   let _prevName = '';
   if(tbody) tbody.innerHTML = procRows.map(p => {
