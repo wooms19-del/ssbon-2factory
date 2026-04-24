@@ -119,7 +119,7 @@ async function renderMonthly() {
         chart.getDatasetMeta(i).data.forEach((bar,j)=>{
           const v=chart.data.datasets[i].data[j];
           if(v==null||v<=0) return;
-          const s=v>=10000?(v/10000).toFixed(1)+'만':v>=1000?(v/1000).toFixed(1)+'k':String(v);
+          const s=v>=1000?'약'+(v>=10000?(v/10000).toFixed(1)+'만':(v/1000).toFixed(1)+'k'):String(v);
           ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
           ctx.textAlign='center'; ctx.textBaseline='bottom';
           ctx.fillText(s, bar.x, bar.y-2);
