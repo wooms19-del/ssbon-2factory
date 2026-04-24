@@ -299,13 +299,13 @@ function _renderAttInput(){
       // 둘째 줄: 시간 입력 (noTime이 아닌 경우)
       +(!noTime
         ?'<div style="display:flex;align-items:center;gap:6px;padding-left:26px;flex-wrap:wrap">'
-          +'<input class="fc" type="text" inputmode="numeric" maxlength="5" placeholder="출근"'
-          +' value="'+(rec.inTime||'')+'"'
+          +'<input class="fc" type="text" inputmode="numeric" maxlength="5" placeholder="09:00"'
+          +' value="'+(rec.inTime||'09:00')+'"'
           +' style="width:56px;font-size:12px;text-align:center;padding:4px"'
           +' onchange="attListSetIn('+i+',this.value)">'
           +'<span style="font-size:11px;color:var(--g4)">→</span>'
-          +'<input class="fc" type="text" inputmode="numeric" maxlength="5" placeholder="퇴근"'
-          +' value="'+(rec.outTime||'')+'"'
+          +'<input class="fc" type="text" inputmode="numeric" maxlength="5" placeholder="18:00"'
+          +' value="'+(rec.outTime||'18:00')+'"'
           +' style="width:56px;font-size:12px;text-align:center;padding:4px"'
           +' onchange="attListSetOut('+i+',this.value)">'
           +(ext>0?'<span style="font-size:11px;color:#e65100;font-weight:700">+'+ext+'분 연장</span>':'')
