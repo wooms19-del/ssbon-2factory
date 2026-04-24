@@ -93,7 +93,7 @@ function onPpStartBtn(){
     if(!rec||(rec.end&&rec.end!=='')) return;
     const kgInp=document.querySelector('.pp-wagon-kg[data-id="'+rec.id+'"]');
     const deductKg=parseFloat(kgInp&&kgInp.value)||0;
-    if(!deductKg){toast('대차 '+(rec.wagon||'')+' 투입 중량을 입력하세요','d');return;}
+    if(!deductKg){toast('해동대차 '+(rec.cart||rec.wagon||'')+' 투입 중량을 입력하세요','d');return;}
     deducted=true;
     const cur=rec.remainKg!==undefined?rec.remainKg:rec.totalKg;
     const remain=r2(cur-deductKg);
@@ -106,7 +106,7 @@ function onPpStartBtn(){
       if(remain<=0) updateData.end=t;
       fbUpdate('thawing', rec.fbId, updateData);
     }
-    if(remain<=0) gasRecord('updateThawEnd', {wagon:rec.wagon, end:t});
+    if(remain<=0) gasRecord('updateThawEnd', {wagon:rec.cart||rec.wagon, end:t});
   });
   if(deducted) updPpWagon();
   updateThawInfo();
