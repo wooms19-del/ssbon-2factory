@@ -348,6 +348,14 @@ function attApplyChecked(apply){
   var needOut=!!ATT_NEEDS_OUT[_attSelStatus];
   var timeVal='';
   if(needIn||needOut){var tEl=document.getElementById('attBulkTime');timeVal=tEl?_attFmt(tEl.value):'';}
+  // 시간 필수인데 미입력 경고
+  if(apply&&(needIn||needOut)&&!timeVal){
+    var tLabel=needIn?(_attSelStatus==='early'?'조출 출근시간':'출근시간'):'퇴근시간';
+    alert(tLabel+'을 먼저 입력하세요!\n예) 0700 → 07:00 으로 자동 변환됩니다.');
+    var tEl2=document.getElementById('attBulkTime');
+    if(tEl2)tEl2.focus();
+    return;
+  }
   var cnt=0,appliedStatus=_attSelStatus;
   _attEmps.forEach(function(e,i){
     var cb=document.getElementById('attChk_'+i);if(!cb||!cb.checked)return;
