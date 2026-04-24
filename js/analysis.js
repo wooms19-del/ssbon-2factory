@@ -1254,12 +1254,16 @@ function renderDailyFromLocal_(d){
     pkMap[key]._recs = pkMap[key]._recs||[]; pkMap[key]._recs.push(r);
     pkMap[key].h += dur(r.start,r.end);
   });
-  // 포장 투입/원육 분모: 전체 pkKg 비중으로 shKg·rmKg 배분 (육종별 분할 오류 방지)
-  const _totalPkKgAll = r2(Object.values(pkMap).reduce((s,vv)=>s+vv.kg, 0));
+  // 포장 투입: 타입별 파쇄 산출 직접 사용 (같은 타입의 파쇄 산출 = 포장 투입)
   Object.values(pkMap).forEach(v => {
-    const _pkShare = _totalPkKgAll > 0 ? v.kg / _totalPkKgAll : 1;
-    const pkInKg = r2(shKg * _pkShare);
-    const pkOrig = r2(rmKg * _pkShare);
+    // 해당 원육 타입의 파쇄 산출 사용
+    const typeShKg = v.type && shGroup[v.type] ? r2(shGroup[v.type].kg) : shKg;
+    const typeRmKg = v.type && rmByType[v.type] ? r2(rmByType[v.type]) : rmKg;
+    // 같은 타입에 제품이 여러 개면 비중으로 배분
+    const sameTypeTotal = r2(Object.values(pkMap).filter(vv=>vv.type===v.type).reduce((s,vv)=>s+vv.kg,0));
+    const _pkShare = sameTypeTotal > 0 ? v.kg / sameTypeTotal : 1;
+    const pkInKg = r2(typeShKg * _pkShare);
+    const pkOrig = r2(typeRmKg * _pkShare);
     const label = v.type ? v.type+' · '+v.product : v.product;
     const pkWorkers = Math.round((v._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0) / Math.max((v._recs||[]).length,1));
     procRows.push({name:'포장', type:label, origKg:pkOrig||rmKg, in:pkInKg, out:r2(v.kg), waste:0, ea:v.ea||0, mh:r2(v.mh), h:calcActualHours(v._recs||[])||r2(v.h), workers:pkWorkers});
