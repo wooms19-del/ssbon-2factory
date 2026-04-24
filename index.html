@@ -380,12 +380,20 @@
     </div>
   </div>
 
-  <!-- 월별 조회 탭 -->
-  <div id="attMonthlyWrap" style="display:none;overflow-x:auto;padding:0 2px">
-    <table style="border-collapse:collapse;font-size:11px;min-width:100%">
-      <thead id="attMonthlyHeader"></thead>
-      <tbody id="attMonthlyBody"></tbody>
-    </table>
+  <!-- 월별 조회 탭 (주별 시간표) -->
+  <div id="attMonthlyWrap" style="display:none">
+    <!-- 주 네비게이션 -->
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;border-bottom:var(--br)">
+      <button class="btn" style="padding:4px 10px;font-size:12px" onclick="attWeekPrev()">◀</button>
+      <span id="attWeekLabel" style="font-size:14px;font-weight:600;flex:1;text-align:center"></span>
+      <button class="btn" style="padding:4px 10px;font-size:12px" onclick="attWeekNext()">▶</button>
+      <button class="btn" style="padding:4px 10px;font-size:12px" onclick="attWeekToday()">오늘</button>
+      <button class="btn bo" style="padding:4px 12px;font-size:12px" onclick="attDownloadWeekly()">📥 엑셀</button>
+    </div>
+    <!-- 주간 테이블 -->
+    <div style="overflow-x:auto;padding:0">
+      <table id="attWeekTable" style="width:100%;border-collapse:collapse;font-size:12px"></table>
+    </div>
   </div>
 
   <!-- 직원 관리 탭 -->
