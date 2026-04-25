@@ -984,12 +984,12 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
   const wagons=[...new Set(ppRecs.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
   let matched=[];
   if(wagons.length){
-    const sameTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate&&wagons.includes(_normWr.cart));
+    const sameTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate&&wagons.includes(_normW(r.cart)));
     if(sameTh.length){
       matched=sameTh;
     } else {
       const todayAny=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
-      const prevTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&wagons.includes(_normWr.cart));
+      const prevTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&wagons.includes(_normW(r.cart)));
       if(todayAny.length){
         matched=todayAny;
       } else if(prevTh.length){
@@ -1007,7 +1007,7 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
   // 재입력이 다음날로 저장된 경우 보정 (날짜 오입력 대비)
   if(wagons.length){
     const _nextD=addDays(packDate,1);
-    const _nextMatched=allThawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&wagons.includes(_normWr.cart));
+    const _nextMatched=allThawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&wagons.includes(_normW(r.cart)));
     const _curKg=r2(matched.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     const _nxtKg=r2(_nextMatched.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     if(_nextMatched.length && _nxtKg>_curKg*2) matched=_nextMatched;
@@ -1076,7 +1076,7 @@ function renderDailyFromLocal_(d){
   // wagon 번호 정규화: "7호"/"7번대차"/"7" → 모두 "7"로 통일
   const _normW=w=>String(w||'').replace(/[^0-9]/g,'')||String(w||'').trim();
   const _ppWagons=[...new Set(pp.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
-  const _thMatchFn=(r,date)=>String(r.date||'').slice(0,10)===date&&!_testPpW.has((r.cart||'').trim())&&_ppWagons.includes(_normWr.cart);
+  const _thMatchFn=(r,date)=>String(r.date||'').slice(0,10)===date&&!_testPpW.has((r.cart||'').trim())&&_ppWagons.includes(_normW(r.cart));
   let _rawTh=[];
   if(_ppWagons.length){
     const _st=L.thawing.filter(r=>_thMatchFn(r,d));
@@ -1107,7 +1107,7 @@ function renderDailyFromLocal_(d){
   // 현재 찾은 방혈 totalKg보다 다음날 같은 wagon이 2배 이상이면 다음날 기록 우선 사용
   if(_ppWagons.length){
     const _nextD=addDays(d,1);
-    const _nextRaw=L.thawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&!_testPpW.has((r.cart||'').trim())&&_ppWagons.includes(_normWr.cart));
+    const _nextRaw=L.thawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&!_testPpW.has((r.cart||'').trim())&&_ppWagons.includes(_normW(r.cart)));
     const _curKg=r2(_rawTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     const _nxtKg=r2(_nextRaw.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     if(_nextRaw.length && _nxtKg > _curKg*2) _rawTh=_nextRaw;
