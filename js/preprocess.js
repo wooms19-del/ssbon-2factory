@@ -116,11 +116,16 @@ function updateThawInfo(){
   const _td=tod(), _yd=getYesterday_();
   const thawings=L.thawing.filter(t=>{
     const d=String(t.date||'').slice(0,10);
-    if(d===_td) return true; // 오늘 시작 → 항상 표시
-    if(d===_yd){
-      // 어제 시작 → end에 날짜가 포함(다음날까지 이어진 경우)만 표시
-      const e=String(t.end||'');
-      return e.includes(_td)||e.length>8;
+    const e=String(t.end||'');
+    // 1) 오늘 시작 + 미종료(방혈 진행 중) → 표시
+    if(d===_td && !e) return true;
+    // 2) end가 오늘 날짜로 종료된 것 → 오늘 전처리 대상이므로 표시
+    //    (end는 'HH:MM' 또는 'YYYY-MM-DD HH:MM' 두 가지 포맷)
+    if(e){
+      // 'YYYY-MM-DD HH:MM' 포맷이면 앞 10자가 종료일
+      if(e.length>=10 && e.slice(0,10)===_td) return true;
+      // 'HH:MM' 포맷이면 thawing.date가 종료일
+      if(e.length<=5 && d===_td) return true;
     }
     return false;
   });
