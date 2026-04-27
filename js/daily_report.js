@@ -232,9 +232,9 @@ async function exportThawingChecklist() {
   const META_BG = 'D9E1F2';
   const BORDER_THIN = { style:'thin', color:{rgb:'808080'} };
   const BORDER_ALL = { top:BORDER_THIN, bottom:BORDER_THIN, left:BORDER_THIN, right:BORDER_THIN };
-  const FONT_DEFAULT = { name:'맑은 고딕', sz:10 };
-  const FONT_BOLD = { name:'맑은 고딕', sz:10, bold:true };
-  const FONT_TITLE = { name:'맑은 고딕', sz:14, bold:true };
+  const FONT_DEFAULT = { name:'맑은 고딕', sz:11 };
+  const FONT_BOLD = { name:'맑은 고딕', sz:11, bold:true };
+  const FONT_TITLE = { name:'맑은 고딕', sz:18, bold:true };
   const ALIGN_CENTER = { horizontal:'center', vertical:'center', wrapText:true };
 
   function colLetter(col) {
@@ -438,8 +438,19 @@ async function exportThawingChecklist() {
 
     // 시트 생성
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [4, 8, 5, 9, 12, 12, 9, 12, 12, 12, 10].map(w=>({wch:w}));
+    ws['!cols'] = [5, 11, 7, 11, 14, 14, 11, 14, 14, 14, 12].map(w=>({wch:w}));
     ws['!merges'] = merges;
+    // 행 높이 설정: 메타박스/제목 영역(0~6) 큼, 헤더(8) 크게, 본문 18행 균등
+    const rowHeights = [];
+    for(let r = 0; r < rowIdx; r++) {
+      // 메타박스 6행 + 빈 행 (0~6)
+      if(r < 7) rowHeights.push({hpt: 28});
+      // 헤더 행
+      else if(r === 7) rowHeights.push({hpt: 32});
+      // 박스 18행 (본문)
+      else rowHeights.push({hpt: 26});
+    }
+    ws['!rows'] = rowHeights;
     
     Object.entries(styles).forEach(([addr, style])=>{
       if(ws[addr]) { ws[addr].s = style; }
@@ -451,14 +462,13 @@ async function exportThawingChecklist() {
       orientation: 'landscape', 
       paperSize: 9,         // A4
       fitToWidth: 1, 
-      fitToHeight: 1,
-      scale: 100
+      fitToHeight: 1
     };
     ws['!margins'] = {
-      left: 0.5, right: 0.5, top: 0.5, bottom: 0.5,
-      header: 0.3, footer: 0.3
+      left: 0.3, right: 0.3, top: 0.3, bottom: 0.3,
+      header: 0.2, footer: 0.2
     };
-    ws['!printOptions'] = { horizontalCentered: true };
+    ws['!printOptions'] = { horizontalCentered: true, verticalCentered: true };
 
     // 시트 이름: "우둔_대차1" 형식, 중복 시 _2, _3 자동
     let sheetName = `${ty}_대차${cart || '미입력'}`.substring(0, 28);
