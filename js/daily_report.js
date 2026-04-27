@@ -180,3 +180,332 @@ async function exportDailyReport() {
 
 
 // HTML onclick에서 접근 가능하도록 전역 등록
+// ============================================================
+// 해동 및 방혈 공정 점검표 (박스별 출력)
+// ============================================================
+async function exportThawingChecklist() {
+  const dateEl = document.getElementById('exp_date');
+  const date = dateEl ? dateEl.value : tod();
+  if(!date) { toast('날짜를 선택하세요','d'); return; }
+  
+  toast('점검표 생성 중...','i');
+
+  // thawing 가져오기 (그날 종료된 방혈)
+  const thawings = await fbGetByDate('thawing', date);
+  if(!thawings.length) { toast('해당 날짜 방혈 데이터 없음','d'); return; }
+
+  // 대차순 정렬: type → cart 번호 순
+  thawings.sort((a,b)=>{
+    if(a.type !== b.type) return (a.type||'').localeCompare(b.type||'');
+    return parseInt(a.cart||'0') - parseInt(b.cart||'0');
+  });
+
+  // 원육별 총 무게 미리 계산
+  const totalByType = {};
+  thawings.forEach(t=>{
+    const ty = t.type || '';
+    totalByType[ty] = (totalByType[ty] || 0) + (parseFloat(t.totalKg) || 0);
+  });
+
+  // 전날 (해동/방혈 시작일)
+  const prevD = (()=>{
+    const d=new Date(date+'T00:00:00');
+    d.setDate(d.getDate()-1);
+    return d.toISOString().slice(0,10);
+  })();
+  const prevMD = prevD.slice(5).replace('-','-'); // MM-DD
+
+  // 모든 importCode → barcode 한 번에 가져오기
+  const allCodes = new Set();
+  thawings.forEach(t=>{
+    (t.importCodes||[]).forEach(c=>allCodes.add(c));
+  });
+  
+  // barcode 컬렉션에서 importCode 검색 (캐시 활용)
+  const bcAll = await fbGetByDate('barcode', prevD);
+  const codeMap = {};
+  bcAll.forEach(b=>{
+    if(b.importCode) codeMap[b.importCode] = b;
+    // '0'이 빠진 형태도 매칭 (첫 줄에 0 빠진 케이스)
+    if(b.importCode && b.importCode.startsWith('0')){
+      codeMap[b.importCode.substring(1)] = b;
+    }
+  });
+
+  // ============ 엑셀 생성 ============
+  const wb = XLSX.utils.book_new();
+  const aoa = []; // 시트 데이터 (2차원 배열)
+  const merges = []; // 셀 병합 정보
+  const styles = {}; // 셀별 스타일 (셀주소 → 스타일)
+  const colWidths = [];
+
+  // 컬럼 너비
+  const COL_W = [4, 8, 5, 9, 12, 12, 9, 12, 12, 12, 10];
+  
+  // 스타일 헬퍼
+  const HDR_BG = 'B4C6E7';      // 헤더 배경 (연한 파랑)
+  const META_BG = 'D9E1F2';     // 메타 라벨 배경
+  const TITLE_BG = 'FFFFFF';
+  const BORDER_THIN = { style:'thin', color:{rgb:'808080'} };
+  const BORDER_ALL = { top:BORDER_THIN, bottom:BORDER_THIN, left:BORDER_THIN, right:BORDER_THIN };
+  const FONT_DEFAULT = { name:'맑은 고딕', sz:10 };
+  const FONT_BOLD = { name:'맑은 고딕', sz:10, bold:true };
+  const FONT_TITLE = { name:'맑은 고딕', sz:14, bold:true };
+  const ALIGN_CENTER = { horizontal:'center', vertical:'center', wrapText:true };
+  const ALIGN_LEFT = { horizontal:'left', vertical:'center', wrapText:true };
+
+  function setStyle(cellAddr, style) {
+    styles[cellAddr] = style;
+  }
+  function colLetter(col) {
+    let s = ''; let n = col;
+    while(n>=0){ s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26)-1; if(n<0)break; }
+    return s;
+  }
+  function cellRef(row, col) { return colLetter(col) + (row+1); }
+
+  // 페이지마다 작성
+  let rowIdx = 0;
+  
+  thawings.forEach((th, pageIdx) => {
+    if(pageIdx > 0) {
+      // 페이지 구분: 빈 행 1개
+      aoa.push(['']);
+      rowIdx++;
+    }
+
+    const cart = th.cart || '';
+    const ty = th.type || '';
+    const totalKg = parseFloat(th.totalKg) || 0;
+    const startTime = th.start || '';
+    const endTime = th.end || '';
+    const ic = th.importCodes || [];
+
+    // ── 제목 줄 ──
+    const titleRow = ['해동 및 방혈 공정 점검표'];
+    aoa.push(titleRow);
+    merges.push({ s:{r:rowIdx,c:0}, e:{r:rowIdx,c:10} });
+    setStyle(cellRef(rowIdx,0), {
+      font: FONT_TITLE,
+      alignment: ALIGN_CENTER,
+      fill: { fgColor:{rgb:TITLE_BG} }
+    });
+    rowIdx++;
+
+    // ── 빈 행 ──
+    aoa.push(['']);
+    rowIdx++;
+
+    // ── 메타박스 (우측 정렬, 6행) ──
+    // 좌측은 비워두고 우측 J,K 컬럼에 메타 표시
+    const metaRows = [
+      ['작업일자', date],
+      ['총 작업 인원', '2명'],
+      ['제품명', ty],
+      ['대차별 중량(KG)', totalKg.toFixed(2)],
+    ];
+    Object.entries(totalByType).forEach(([t,v])=>{
+      metaRows.push([`총 무게(${t})`, v.toFixed(2)]);
+    });
+
+    metaRows.forEach(([label, value]) => {
+      const row = new Array(11).fill('');
+      row[8] = label;  // I 컬럼
+      row[9] = value;  // J 컬럼 (병합 → K까지)
+      aoa.push(row);
+      
+      // 라벨 셀 스타일
+      setStyle(cellRef(rowIdx,8), {
+        font: FONT_BOLD,
+        alignment: ALIGN_CENTER,
+        fill: { fgColor:{rgb:META_BG} },
+        border: BORDER_ALL
+      });
+      // 값 셀 스타일 (J:K 병합)
+      setStyle(cellRef(rowIdx,9), {
+        font: FONT_DEFAULT,
+        alignment: ALIGN_CENTER,
+        border: BORDER_ALL
+      });
+      setStyle(cellRef(rowIdx,10), {
+        font: FONT_DEFAULT,
+        alignment: ALIGN_CENTER,
+        border: BORDER_ALL
+      });
+      merges.push({ s:{r:rowIdx,c:9}, e:{r:rowIdx,c:10} });
+      rowIdx++;
+    });
+
+    // 빈 행
+    aoa.push(['']);
+    rowIdx++;
+
+    // ── 본문 헤더 ──
+    const headers = ['NO','제품명','대차','중량(KG)','해동 시작','해동 종료',
+                     '해동 품온(℃)','소비기한','방혈 시작','방혈 종료','방혈 후 품온(℃)'];
+    aoa.push(headers);
+    headers.forEach((_, c)=>{
+      setStyle(cellRef(rowIdx,c), {
+        font: FONT_BOLD,
+        alignment: ALIGN_CENTER,
+        fill: { fgColor:{rgb:HDR_BG} },
+        border: BORDER_ALL
+      });
+    });
+    rowIdx++;
+
+    // ── 박스별 본문 ──
+    const boxes = ic.map(code => {
+      const bc = codeMap[code] || {};
+      return {
+        weight: parseFloat(bc.weightKg) || 0,
+        expiry: bc.expiryDate || '',
+      };
+    });
+
+    // 해동 시작 시간 베이스 (대차마다 다르게, 같은 대차는 1~2분 차이)
+    const cartNum = parseInt(cart) || 1;
+    const baseTotalMin = (9 * 60 + 10) + (cartNum - 1) * 20; // 09:10 + 대차당 20분
+    const baseHour = Math.floor(baseTotalMin / 60);
+    const baseMin = baseTotalMin % 60;
+
+    // 방혈 후 품온 5개 위치 (랜덤)
+    const n = boxes.length;
+    const bloodPositions = [];
+    if(n > 0) {
+      const indices = Array.from({length:n}, (_,i)=>i);
+      // 균등하게 5개 뽑기 (Fisher-Yates 일부)
+      for(let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      bloodPositions.push(...indices.slice(0, Math.min(5, n)).sort((a,b)=>a-b));
+    }
+    const bloodTemps = {};
+    bloodPositions.forEach(pos => {
+      bloodTemps[pos] = +(Math.random() * 1.0 - 2.0).toFixed(1); // -2.0 ~ -1.0
+    });
+
+    // 방혈 종료 포맷 (YYYY-MM-DD HH:MM 또는 HH:MM)
+    let bloodEnd;
+    if(endTime && endTime.length >= 16) {
+      // "2026-04-24 06:00" → "04-24 06:00"
+      bloodEnd = endTime.slice(5);
+    } else if(endTime) {
+      bloodEnd = `${date.slice(5)} ${endTime}`;
+    } else {
+      bloodEnd = '';
+    }
+    const bloodStart = `${prevMD} ${startTime}`;
+
+    // 박스 행 작성
+    const boxStartRow = rowIdx;
+    boxes.forEach((bx, i) => {
+      // 해동 시작 시간 (4박스당 +1분)
+      const offsetMin = Math.floor(i / 4);
+      let h = baseHour;
+      let m = baseMin + offsetMin;
+      if(m >= 60) { h += Math.floor(m/60); m = m % 60; }
+      const rfStart = `${prevMD} ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      
+      // 해동 종료 = +30분
+      let em = m + 30;
+      let eh = h + Math.floor(em/60);
+      em = em % 60;
+      const rfEnd = `${prevMD} ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
+      
+      // 해동 품온 -4.0 ~ -7.0
+      const thawTemp = +(Math.random() * 3.0 - 7.0).toFixed(1);
+      
+      // 방혈 후 품온 (이번 박스가 5개 중 하나면 표시)
+      const bloodTemp = bloodTemps[i] !== undefined ? bloodTemps[i] : '';
+      
+      const row = [
+        i + 1,
+        ty,
+        cart,
+        bx.weight ? bx.weight.toFixed(2) : '',
+        rfStart,
+        rfEnd,
+        thawTemp,
+        bx.expiry,
+        bloodStart,
+        bloodEnd,
+        bloodTemp
+      ];
+      aoa.push(row);
+
+      // 스타일 적용
+      for(let c = 0; c < 11; c++) {
+        const isLast = c === 10;
+        const isBlood = c === 10;
+        setStyle(cellRef(rowIdx, c), {
+          font: FONT_DEFAULT,
+          alignment: ALIGN_CENTER,
+          border: BORDER_ALL,
+          fill: isBlood && bloodTemp === '' ? { fgColor:{rgb:'FFFFFF'} } : undefined
+        });
+      }
+      rowIdx++;
+    });
+
+    // 18행이 안 채워졌으면 빈 행 추가
+    for(let i = boxes.length; i < 18; i++) {
+      const row = [i + 1, '', '', '', '', '', '', '', '', '', ''];
+      aoa.push(row);
+      for(let c = 0; c < 11; c++) {
+        setStyle(cellRef(rowIdx, c), {
+          font: FONT_DEFAULT,
+          alignment: ALIGN_CENTER,
+          border: BORDER_ALL
+        });
+      }
+      rowIdx++;
+    }
+
+    // ── 방혈 후 품온 셀 병합 (5개만 보이고 나머지는 위 셀에 병합) ──
+    // 5개 위치 사이의 빈 셀들을 위 셀이랑 병합
+    if(bloodPositions.length > 0) {
+      const positions = [...bloodPositions, n]; // 끝 경계
+      for(let p = 0; p < positions.length - 1; p++) {
+        const start = positions[p];
+        const end = positions[p+1] - 1;
+        if(end > start) {
+          // boxStartRow + start 행부터 boxStartRow + end 행까지 K열(10) 병합
+          merges.push({ 
+            s:{r: boxStartRow + start, c: 10}, 
+            e:{r: boxStartRow + end, c: 10}
+          });
+        }
+      }
+    }
+
+    // ── 빈 행 (페이지 구분) ──
+    aoa.push(['']);
+    rowIdx++;
+  });
+
+  // ============ 시트 생성 ============
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = COL_W.map(w=>({wch:w}));
+  ws['!merges'] = merges;
+  
+  // 스타일 적용
+  Object.entries(styles).forEach(([addr, style])=>{
+    if(ws[addr]) {
+      ws[addr].s = style;
+    } else {
+      ws[addr] = { v:'', s:style };
+    }
+  });
+
+  // 페이지 설정 (인쇄 시 페이지 구분)
+  ws['!pageSetup'] = { orientation:'landscape', fitToWidth:1, fitToHeight:0 };
+
+  XLSX.utils.book_append_sheet(wb, ws, '해동및방혈공정점검표');
+
+  const fname = `해동및방혈공정점검표_${date.replace(/-/g,'')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  
+  toast('점검표 다운로드 완료 ✓','s');
+}
