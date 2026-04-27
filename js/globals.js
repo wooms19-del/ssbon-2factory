@@ -84,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
   window.previewUpload = previewUpload;
   window.exportDailyReport = exportDailyReport;
   window.exportThawingChecklist_daily = exportThawingChecklist_daily;
+  window.downloadPackingChart = downloadPackingChart;
   // 자숙 pending
   window.addCkTankRow = addCkTankRow;
   window.removeCkRow = removeCkRow;
