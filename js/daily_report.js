@@ -1,4 +1,28 @@
 // ============================================================
+// 파일 저장 헬퍼 - File System Access API (마지막 폴더 기억)
+// ============================================================
+async function _saveXlsx(wb, fname) {
+  if (window.showSaveFilePicker) {
+    try {
+      const fh = await window.showSaveFilePicker({
+        suggestedName: fname,
+        types: [{ description: 'Excel 파일',
+          accept: {'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']} }]
+      });
+      const buf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+      const writable = await fh.createWritable();
+      await writable.write(new Blob([buf], {type:'application/octet-stream'}));
+      await writable.close();
+      return;
+    } catch(e) {
+      if (e.name === 'AbortError') return; // 사용자 취소
+      // 지원 안 되면 fallback
+    }
+  }
+  XLSX.writeFile(wb, fname);
+}
+
+// ============================================================
 async function exportDailyReport() {
   const dateEl = document.getElementById('exp_date');
   const date = dateEl ? dateEl.value : tod();
@@ -173,7 +197,7 @@ async function exportDailyReport() {
     addSheet('외포장', s8, [20,12,10,12,10,10,8,20]);
   }
 
-    XLSX.writeFile(wb, `순수본2공장_작업일지_${date}.xlsx`);
+    await _saveXlsx(wb, `순수본2공장_작업일지_${date}.xlsx`);
   toast('일지 다운로드 완료 ✓');
 }
 
@@ -479,7 +503,7 @@ async function exportThawingChecklist() {
   });
 
   const fname = `해동및방혈공정점검표_${date.replace(/-/g,'')}.xlsx`;
-  XLSX.writeFile(wb, fname);
+  await _saveXlsx(wb, fname);
   
   toast('점검표 다운로드 완료 ✓','s');
 }
