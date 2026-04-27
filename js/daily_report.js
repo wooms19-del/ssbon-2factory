@@ -324,8 +324,21 @@ async function exportThawingChecklist() {
       };
     });
 
-    const cartNum = parseInt(cart) || 1;
-    const baseTotalMin = (9 * 60 + 10) + (cartNum - 1) * 20;
+    // 해동 시작 시간 베이스 계산
+    // 규칙: 해동 종료 = 방혈 시작 (시간 같음)
+    //       thawing.start = 마지막 박스의 방혈 시작 시각 (대표값)
+    //       박스마다 4박스당 +1분씩 차이
+    //       박스 i의 해동시작 = thawing.start - 30분 - (총박스-1-i)/4
+    //       박스 i의 해동종료 = 박스 i 해동시작 + 30분 = 박스 i 방혈시작
+    const startParts = (startTime || '10:20').split(':');
+    const thawStartMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || '0');
+    const totalBoxesN = ic.length;
+    const lastBoxOffset = Math.floor((totalBoxesN - 1) / 4); // 마지막 박스의 offset
+    // 첫 박스의 해동 종료(=방혈 시작) = thawing.start - lastBoxOffset 분
+    // 첫 박스의 해동 시작 = 위 - 30분
+    const firstBoxBloodStartMin = thawStartMin - lastBoxOffset;
+    const firstBoxRfStartMin = firstBoxBloodStartMin - 30;
+    const baseTotalMin = firstBoxRfStartMin;
     const baseHour = Math.floor(baseTotalMin / 60);
     const baseMin = baseTotalMin % 60;
 
@@ -352,7 +365,7 @@ async function exportThawingChecklist() {
     } else {
       bloodEnd = '';
     }
-    const bloodStart = `${prevMD} ${startTime}`;
+    // 방혈 시작 = 박스별 해동 종료 시간 (박스마다 다름, 아래 박스 루프에서 계산)
 
     const boxStartRow = rowIdx;
     boxes.forEach((bx, i) => {
@@ -369,6 +382,9 @@ async function exportThawingChecklist() {
       
       const thawTemp = +(Math.random() * 3.0 - 7.0).toFixed(1);
       const bloodTemp = bloodTemps[i] !== undefined ? bloodTemps[i] : '';
+      
+      // 방혈 시작 = 해동 종료 (같은 시점)
+      const bloodStart = rfEnd;
       
       const row = [
         i + 1, ty, cart,
