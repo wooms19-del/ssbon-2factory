@@ -267,6 +267,7 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
   // 글로벌 저장 (필터용)
   window._moGD = { dayEntries, rmByDate, opMap, metaMap, thMonth: thMonth||[], ppMonth: ppMonth||[], metaKey };
   _moRenderRows(null);
+  renderPackingChart(dayEntries, opMap, _moYm || tod().slice(0,7));
 
   // ── 수율 KPI 계산 ─────────────────────────────────────────
   {
@@ -1669,4 +1670,156 @@ function setPd(pd, el){
   document.querySelectorAll('#p-trend .pt').forEach(b=>b.classList.remove('on'));
   if(el) el.classList.add('on');
   renderTrend();
+}
+// ============================================================
+// 내포장 수량 차트 (월별현황 탭)
+// ============================================================
+var _moPackingChart = null;
+
+function renderPackingChart(dayEntries, opMap, ym) {
+  const canvas = document.getElementById('mo_packing_chart');
+  if (!canvas) return;
+
+  if (_moPackingChart) { _moPackingChart.destroy(); _moPackingChart = null; }
+
+  const DOW = ['일','월','화','수','목','금','토'];
+  function dLabel(dateStr) {
+    const [y,m,d] = dateStr.split('-').map(Number);
+    return d + '(' + DOW[new Date(y,m-1,d).getDay()] + ')';
+  }
+  function prodShort(full) {
+    const m = (full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);
+    if (!m) return full.slice(0,6);
+    return m[2].toUpperCase()==='KG' ? m[1]+'KG' : m[1]+'g';
+  }
+
+  const COLORS = ['#1D9E75','#378ADD','#EF9F27','#D4537E','#8B5CF6','#64748B'];
+  const prodColorMap = {};
+  let colorIdx = 0;
+  function getColor(prod) {
+    if (!prodColorMap[prod]) prodColorMap[prod] = COLORS[colorIdx++ % COLORS.length];
+    return prodColorMap[prod];
+  }
+
+  // 행 펼치기 (외포장 있으면 우선, 없으면 내포장 ea)
+  const rows = [], groups = [];
+  dayEntries.forEach(([date, dayRows]) => {
+    const items = dayRows.map(r => {
+      const outerEa = opMap[date+'|'+r.product] || 0;
+      const ea = outerEa > 0 ? outerEa : Math.round(r.ea || 0);
+      return { prod: r.product, short: prodShort(r.product), ea };
+    }).filter(x => x.ea > 0).sort((a,b) => b.ea - a.ea);
+    if (!items.length) return;
+    const si = rows.length;
+    items.forEach(it => rows.push(it));
+    groups.push({ day: dLabel(date), barIndexes: items.map((_,i) => si+i) });
+  });
+
+  if (!rows.length) return;
+
+  const labels   = rows.map(r => r.short);
+  const dataVals = rows.map(r => r.ea);
+  const bgColors = rows.map(r => getColor(r.prod) + 'dd');
+
+  // 범례
+  const legendEl = document.getElementById('mo_packing_legend');
+  if (legendEl) {
+    legendEl.innerHTML = Object.entries(prodColorMap).map(([name, color]) =>
+      `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:11px;color:var(--g5)">
+        <span style="width:9px;height:9px;border-radius:2px;background:${color};flex-shrink:0"></span>${name}
+      </span>`
+    ).join('');
+  }
+
+  // 제목 월 업데이트
+  const titleEl = document.getElementById('mo_packing_title');
+  if (titleEl) {
+    const [ty,tm] = ym.split('-');
+    titleEl.textContent = '운영팀 ' + parseInt(tm) + '월 내포장 수량';
+  }
+
+  const topNumPlugin = {
+    id: 'pkTopNum',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      chart.getDatasetMeta(0).data.forEach((bar, i) => {
+        const v = dataVals[i]; if (!v) return;
+        ctx.save();
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText(v.toLocaleString(), bar.x, bar.y - 4);
+        ctx.restore();
+      });
+    }
+  };
+
+  const dateLabelPlugin = {
+    id: 'pkDateLabel',
+    afterDraw(chart) {
+      const { ctx, chartArea } = chart;
+      const meta = chart.getDatasetMeta(0);
+      const bottom = chartArea.bottom;
+      groups.forEach(g => {
+        const bars = g.barIndexes.map(i => meta.data[i]).filter(Boolean);
+        if (!bars.length) return;
+        const x1 = bars[0].x - bars[0].width / 2;
+        const x2 = bars[bars.length-1].x + bars[bars.length-1].width / 2;
+        const cx = (x1 + x2) / 2;
+        ctx.save();
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g5') || '#666';
+        ctx.textAlign = 'center';
+        ctx.fillText(g.day, cx, bottom + 38);
+        if (bars.length > 1) {
+          ctx.strokeStyle = 'rgba(100,116,139,0.3)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x1+2, bottom+26); ctx.lineTo(x1+2, bottom+30);
+          ctx.lineTo(x2-2, bottom+30); ctx.lineTo(x2-2, bottom+26);
+          ctx.stroke();
+        }
+        ctx.restore();
+      });
+    }
+  };
+
+  _moPackingChart = new Chart(canvas, {
+    type: 'bar',
+    plugins: [topNumPlugin, dateLabelPlugin],
+    data: {
+      labels,
+      datasets: [{ data: dataVals, backgroundColor: bgColors, borderWidth: 0, borderRadius: 3 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 20, bottom: 20 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: ctx => {
+              const g = groups.find(g => g.barIndexes.includes(ctx[0].dataIndex));
+              return (g ? g.day : '') + ' · ' + rows[ctx[0].dataIndex].prod;
+            },
+            label: ctx => ' 생산량: ' + ctx.parsed.y.toLocaleString() + ' EA',
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: 'var(--g5)', font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
+        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function downloadPackingChart() {
+  const canvas = document.getElementById('mo_packing_chart');
+  if (!canvas) return;
+  const a = document.createElement('a');
+  const ym = _moYm || tod().slice(0,7);
+  a.download = ym + '_운영팀_내포장수량.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
 }
