@@ -511,7 +511,7 @@ async function exportThawingChecklist() {
 // ============================================================
 // 일별요약 탭에서 호출 - DDATE(현재 선택된 날짜) 사용
 // ============================================================
-async function exportThawingChecklist_daily() {
+async function async exportThawingChecklist_daily() {
   if(typeof DDATE === 'undefined' || !DDATE) {
     toast('날짜 정보 없음','d');
     return;
