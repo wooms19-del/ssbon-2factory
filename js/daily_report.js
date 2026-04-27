@@ -509,3 +509,37 @@ async function exportThawingChecklist() {
   
   toast('점검표 다운로드 완료 ✓','s');
 }
+
+// ============================================================
+// 일별요약 탭에서 호출 - DDATE(현재 선택된 날짜) 사용
+// ============================================================
+async function exportThawingChecklist_daily() {
+  if(typeof DDATE === 'undefined' || !DDATE) {
+    toast('날짜 정보 없음','d');
+    return;
+  }
+  // 임시로 exp_date 만들어서 기존 함수에 넘기기 - 또는 직접 호출
+  // 가장 간단한 방법: exp_date 엘리먼트 임시 생성
+  let tempEl = document.getElementById('exp_date');
+  let created = false;
+  if(!tempEl) {
+    tempEl = document.createElement('input');
+    tempEl.type = 'date';
+    tempEl.id = 'exp_date';
+    tempEl.style.display = 'none';
+    document.body.appendChild(tempEl);
+    created = true;
+  }
+  const oldVal = tempEl.value;
+  tempEl.value = DDATE;
+  
+  try {
+    await exportThawingChecklist();
+  } finally {
+    if(created) {
+      tempEl.remove();
+    } else {
+      tempEl.value = oldVal;
+    }
+  }
+}
