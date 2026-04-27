@@ -45,13 +45,24 @@ async function renderMonthly() {
   const _kpiTestOpK=new Set(op.filter(r=>r.testRun||r.isTest).map(r=>`${String(r.date||'').slice(0,10)}_${r.product||''}`));
   const _kpiIsTest=r=>!!(r.testRun||r.isTest||_kpiTestOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`));
   const pkClean  = pk.filter(r=>!_kpiIsTest(r));
-  const totalEA  = pkClean.reduce((s,r)=>s+(parseFloat(r.ea)||0), 0);
   const totalDef = pkClean.reduce((s,r)=>s+(parseFloat(r.defect)||0), 0);
   const workDays = new Set(pkClean.map(r=>String(r.date||'').slice(0,10)).filter(Boolean)).size;
-  const avgEA    = workDays > 0 ? Math.round(totalEA/workDays) : 0;
   const totalBoxes   = opReal.reduce((s,r)=>s+(parseInt(r.outerBoxes)||0), 0);
   const totalOuterEA = opReal.reduce((s,r)=>s+(parseInt(r.outerEa)||0), 0);
-  const defRate  = totalEA > 0 ? totalDef/totalEA*100 : 0;
+  // 총 생산 EA = 테이블과 동일: 외포장 있으면 외포장EA, 없으면 내포장EA
+  const _kpiOpMap={};
+  opReal.forEach(r=>{ _kpiOpMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=parseInt(r.outerEa)||0; });
+  const _kpiDpMap={};
+  pkClean.forEach(r=>{ const key=`${String(r.date||'').slice(0,10)}_${r.product||''}`;
+    if(!_kpiDpMap[key]) _kpiDpMap[key]=0;
+    _kpiDpMap[key]+=parseFloat(r.ea)||0;
+  });
+  const totalEA = Object.entries(_kpiDpMap).reduce((s,[key,pkEa])=>s+(_kpiOpMap[key]||pkEa), 0);
+  const avgEA    = workDays > 0 ? Math.round(totalEA/workDays) : 0;
+  // 불량률 = 불량 ÷ 파우치사용량
+  const _kpiPkEaTotal=pkClean.reduce((s,r)=>s+(parseFloat(r.ea)||0),0);
+  const _kpiPouch=_kpiPkEaTotal+totalDef;
+  const defRate  = _kpiPouch > 0 ? totalDef/_kpiPouch*100 : 0;
 
   setText('mo_ea',    totalEA.toLocaleString());
   setText('mo_avg',   avgEA.toLocaleString());
