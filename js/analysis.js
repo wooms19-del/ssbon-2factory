@@ -1805,21 +1805,42 @@ function renderPackingChart(dayEntries, opMap, ym) {
   });
 }
 
-function downloadPackingChart() {
+async function downloadPackingChart() {
   const canvas = document.getElementById('mo_bar_chart');
   if (!canvas) return;
-  // 흰 배경 합성 후 저장
-  const offscreen = document.createElement('canvas');
-  offscreen.width  = canvas.width;
-  offscreen.height = canvas.height;
-  const ctx = offscreen.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, offscreen.width, offscreen.height);
-  ctx.drawImage(canvas, 0, 0);
-  const a = document.createElement('a');
   const ym = _moYm || tod().slice(0,7);
+  const [y, m] = ym.split('-');
+
+  // html2canvas 동적 로드
+  if (!window.html2canvas) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  // 카드 전체 캡처 (제목+범례+차트)
+  const card = canvas.closest('.card');
+  const target = card || canvas;
+
+  // 저장 버튼 숨기기
+  const btn = card ? card.querySelector('button') : null;
+  if (btn) btn.style.visibility = 'hidden';
+
+  const capturedCanvas = await html2canvas(target, {
+    backgroundColor: '#ffffff',
+    scale: 2,
+    useCORS: true,
+    logging: false
+  });
+
+  if (btn) btn.style.visibility = '';
+
+  const a = document.createElement('a');
   a.download = ym + '_운영팀_내포장수량.png';
-  a.href = offscreen.toDataURL('image/png');
+  a.href = capturedCanvas.toDataURL('image/png');
   a.click();
 }
 
