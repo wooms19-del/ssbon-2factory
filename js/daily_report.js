@@ -2,7 +2,16 @@
 // 파일 저장 헬퍼 - File System Access API (마지막 폴더 기억)
 // ============================================================
 async function _saveXlsx(wb, fname) {
-  XLSX.writeFile(wb, fname);
+  const buf  = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ============================================================
