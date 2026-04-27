@@ -195,11 +195,13 @@ async function startThawing(){
 
 function renderThawList(){
   const today=tod();
-  const yesterday=getYesterday_();
+  const tomorrow=addDays(today, 1);
   const items=L.thawing.filter(r=>{
-    if(r.end&&r.end!=='') return false;
+    if(r.end&&r.end!=='') return false;  // 진행중인 방혈만
     const d=String(r.date||'').slice(0,10);
-    return d===today||d===yesterday;
+    // thawing.date = 종료일 기준이므로:
+    //   오늘 종료(어제 시작) 또는 내일 종료(오늘 시작) 표시
+    return d===today||d===tomorrow;
   });
   const el=document.getElementById('list-thawing');
   if(!el) return;
