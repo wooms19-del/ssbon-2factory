@@ -471,6 +471,7 @@
     <span class="dnlb" id="dLbl" style="flex:1;text-align:center"></span>
     <button class="dnbtn" onclick="chDay(1)">▶</button>
     <button class="dnbtn" onclick="toggleCal()" id="calBtn" title="날짜 선택" style="font-size:16px;padding:0 8px">📅</button>
+    <button class="dnbtn" onclick="exportThawingChecklist_daily()" title="해동 및 방혈 공정 점검표" style="font-size:13px;padding:0 12px;background:#fff7e6;border:1px solid #ffb366;color:#e67e22;font-weight:600">📥 점검표</button>
     <div id="calPop" style="display:none;position:absolute;top:44px;right:0;background:#fff;border:1px solid #ddd;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:9999;width:280px;padding:12px;user-select:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <button onclick="calMove(-1)" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0 8px;color:#555">‹</button>
@@ -845,7 +846,6 @@
       </div>
     </div>
     <button class="btn bs bblk" onclick="exportDailyReport()">📋 일지 엑셀 출력</button>
-    <button class="btn bs bblk" onclick="exportThawingChecklist()" style="margin-left:8px">📥 해동 및 방혈 공정 점검표</button>
   </div>
   <!-- 기존 데이터 업로드 -->
   <div class="card">
@@ -915,7 +915,7 @@
 <script src="js/shredding.js?v=2"></script>
 <script src="js/packing.js?v=2"></script>
 <script src="js/csv_upload.js?v=2"></script>
-<script src="js/daily_report.js?v=2"></script>
+<script src="js/daily_report.js?v=3"></script>
 <script src="js/analysis.js?v=3"></script>
 <script src="js/dashboard.js?v=2"></script>
 <script src="js/trace.js?v=3"></script>
