@@ -101,7 +101,7 @@ async function renderMonthly() {
       <td style="font-weight:500">${prod}</td>
       <td style="text-align:center">${v.days.size}일</td>
       <td style="text-align:center;font-weight:600;color:var(--p)">${v.ea.toLocaleString()}</td>
-      <td style="text-align:center">${(v.pkEa||0)>0?(v.pkEa||0).toLocaleString():'—'}</td>
+      <td style="text-align:center">${(v.pkEa+v.defect)>0?(v.pkEa+v.defect).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${pkgKg>0?pkgKg.toLocaleString()+'kg':'—'}</td>
       <td style="text-align:center;color:${dc}">${dr}</td>
     </tr>`;
@@ -110,7 +110,7 @@ async function renderMonthly() {
     tfoot.innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--g3)">
       <td>합계</td><td style="text-align:center">—</td>
       <td style="text-align:center;color:var(--p)">${totEA.toLocaleString()}</td>
-      <td style="text-align:center">${totPkEa>0?totPkEa.toLocaleString():'—'}</td>
+      <td style="text-align:center">${(totPkEa+totDef)>0?(totPkEa+totDef).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${totProdKg>0?totProdKg.toLocaleString()+'kg':'—'}</td>
       <td style="text-align:center;color:${totEA>0&&totDef/totEA*100>2?'var(--d)':'var(--s)'}">${tdr}</td>
     </tr>`; }
