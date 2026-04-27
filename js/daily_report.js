@@ -232,8 +232,8 @@ async function exportThawingChecklist() {
   const META_BG = 'D9E1F2';
   const BORDER_THIN = { style:'thin', color:{rgb:'808080'} };
   const BORDER_ALL = { top:BORDER_THIN, bottom:BORDER_THIN, left:BORDER_THIN, right:BORDER_THIN };
-  const FONT_DEFAULT = { name:'맑은 고딕', sz:11 };
-  const FONT_BOLD = { name:'맑은 고딕', sz:11, bold:true };
+  const FONT_DEFAULT = { name:'맑은 고딕', sz:10 };
+  const FONT_BOLD = { name:'맑은 고딕', sz:10, bold:true };
   const FONT_TITLE = { name:'맑은 고딕', sz:18, bold:true };
   const ALIGN_CENTER = { horizontal:'center', vertical:'center', wrapText:true };
 
@@ -438,17 +438,15 @@ async function exportThawingChecklist() {
 
     // 시트 생성
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [5, 11, 7, 11, 14, 14, 11, 14, 14, 14, 12].map(w=>({wch:w}));
+    ws['!cols'] = [5, 11, 7, 11, 14, 14, 11, 14, 18, 14, 12].map(w=>({wch:w}));
     ws['!merges'] = merges;
-    // 행 높이 설정: 메타박스/제목 영역(0~6) 큼, 헤더(8) 크게, 본문 18행 균등
+    // 행 높이 설정 (한 페이지에 18행 다 들어가도록 조정)
     const rowHeights = [];
     for(let r = 0; r < rowIdx; r++) {
-      // 메타박스 6행 + 빈 행 (0~6)
-      if(r < 7) rowHeights.push({hpt: 28});
-      // 헤더 행
-      else if(r === 7) rowHeights.push({hpt: 32});
-      // 박스 18행 (본문)
-      else rowHeights.push({hpt: 26});
+      if(r < 6) rowHeights.push({hpt: 22});       // 메타박스 6행
+      else if(r === 6) rowHeights.push({hpt: 8});  // 빈 행 (구분용 작게)
+      else if(r === 7) rowHeights.push({hpt: 26}); // 헤더
+      else rowHeights.push({hpt: 22});             // 본문 18행
     }
     ws['!rows'] = rowHeights;
     
