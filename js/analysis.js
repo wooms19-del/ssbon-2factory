@@ -1805,55 +1805,79 @@ function renderPackingChart(dayEntries, opMap, ym) {
   });
 }
 
-async function downloadPackingChart() {
-  const canvas = document.getElementById('mo_bar_chart');
-  if (!canvas) return;
-  const ym = _moYm || tod().slice(0,7);
+function downloadPackingChart() {
+  const chartCanvas = document.getElementById('mo_bar_chart');
+  if (!chartCanvas) return;
+
+  const ym  = _moYm || tod().slice(0,7);
   const [y, m] = ym.split('-');
+  const title   = '운영팀 ' + parseInt(m) + '월 내포장 수량';
+  const subtitle = '순수본 2공장';
 
-  // html2canvas 동적 로드
-  if (!window.html2canvas) {
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
-    });
-  }
+  // 범례 데이터
+  const legendEl = document.getElementById('mo_packing_legend');
+  const legendItems = legendEl ? Array.from(legendEl.querySelectorAll('span')).map(s => {
+    const colorEl = s.querySelector('span');
+    const color = colorEl ? colorEl.style.background : '#888';
+    const text  = s.textContent.trim();
+    return { color, text };
+  }) : [];
 
-  // 카드 전체 캡처 (제목+범례+차트)
-  const card = canvas.closest('.card');
-  const target = card || canvas;
+  // PPT 크기 (1280×720)
+  const W = 1280, H = 720;
+  const PAD = 40;
 
-  // 저장 버튼 숨기기
-  const btn = card ? card.querySelector('button') : null;
-  if (btn) btn.style.visibility = 'hidden';
+  const out  = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  const ctx  = out.getContext('2d');
 
-  const capturedCanvas = await html2canvas(target, {
-    backgroundColor: '#ffffff',
-    scale: 2,
-    useCORS: true,
-    logging: false
+  // 흰 배경
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // 서브타이틀
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(subtitle, W/2, PAD + 10);
+
+  // 제목
+  ctx.fillStyle = '#1e293b';
+  ctx.font = 'bold 26px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, W/2, PAD + 44);
+
+  // 구분선
+  ctx.fillStyle = '#378ADD';
+  ctx.fillRect(W/2 - 24, PAD + 54, 48, 2);
+
+  // 범례
+  let legendY = PAD + 80;
+  let legendX = PAD;
+  ctx.font = '13px sans-serif';
+  legendItems.forEach(item => {
+    ctx.fillStyle = item.color;
+    ctx.fillRect(legendX, legendY - 10, 10, 10);
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'left';
+    const tw = ctx.measureText(item.text).width;
+    ctx.fillText(item.text, legendX + 14, legendY);
+    legendX += 14 + tw + 20;
   });
 
-  if (btn) btn.style.visibility = '';
+  // 차트 (나머지 영역 가득)
+  const chartTop  = legendY + 18;
+  const chartH    = H - chartTop - PAD;
+  const chartW    = W - PAD * 2;
 
-  // PPT 1장 크기 (1280×720 = 16:9) 로 리사이즈
-  const PPT_W = 1280, PPT_H = 720;
-  const out = document.createElement('canvas');
-  out.width  = PPT_W;
-  out.height = PPT_H;
-  const octx = out.getContext('2d');
-  octx.fillStyle = '#ffffff';
-  octx.fillRect(0, 0, PPT_W, PPT_H);
-
-  // 비율 유지하며 중앙 배치
-  const ratio = Math.min(PPT_W / capturedCanvas.width, PPT_H / capturedCanvas.height);
-  const dw = capturedCanvas.width  * ratio;
-  const dh = capturedCanvas.height * ratio;
-  const dx = (PPT_W - dw) / 2;
-  const dy = (PPT_H - dh) / 2;
-  octx.drawImage(capturedCanvas, dx, dy, dw, dh);
+  // 흰 배경 위에 차트 그리기
+  const ratio = Math.min(chartW / chartCanvas.width, chartH / chartCanvas.height);
+  const dw = chartCanvas.width  * ratio;
+  const dh = chartCanvas.height * ratio;
+  const dx = PAD + (chartW - dw) / 2;
+  const dy = chartTop + (chartH - dh) / 2;
+  ctx.drawImage(chartCanvas, dx, dy, dw, dh);
 
   const a = document.createElement('a');
   a.download = ym + '_운영팀_내포장수량.png';
