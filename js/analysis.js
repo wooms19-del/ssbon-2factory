@@ -40,11 +40,15 @@ async function renderMonthly() {
   ]);
 
   // ── KPI ──────────────────────────────────────────────────
-  const totalEA  = pk.reduce((s,r)=>s+(parseFloat(r.ea)||0), 0);
-  const totalDef = pk.reduce((s,r)=>s+(parseFloat(r.defect)||0), 0);
-  const workDays = new Set(pk.map(r=>String(r.date||'').slice(0,10)).filter(Boolean)).size;
+  const opReal   = op.filter(r=>!r.testRun&&!r.isTest);
+  // testRun 제외 필터
+  const _kpiTestOpK=new Set(op.filter(r=>r.testRun||r.isTest).map(r=>`${String(r.date||'').slice(0,10)}_${r.product||''}`));
+  const _kpiIsTest=r=>!!(r.testRun||r.isTest||_kpiTestOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`));
+  const pkClean  = pk.filter(r=>!_kpiIsTest(r));
+  const totalEA  = pkClean.reduce((s,r)=>s+(parseFloat(r.ea)||0), 0);
+  const totalDef = pkClean.reduce((s,r)=>s+(parseFloat(r.defect)||0), 0);
+  const workDays = new Set(pkClean.map(r=>String(r.date||'').slice(0,10)).filter(Boolean)).size;
   const avgEA    = workDays > 0 ? Math.round(totalEA/workDays) : 0;
-  const opReal   = op.filter(r=>!r.testRun);
   const totalBoxes   = opReal.reduce((s,r)=>s+(parseInt(r.outerBoxes)||0), 0);
   const totalOuterEA = opReal.reduce((s,r)=>s+(parseInt(r.outerEa)||0), 0);
   const defRate  = totalEA > 0 ? totalDef/totalEA*100 : 0;
