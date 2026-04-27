@@ -374,15 +374,15 @@ async function exportThawingChecklist() {
     const baseMin = baseTotalMin % 60;
 
     const n = boxes.length;
-    const bloodPositions = [];
-    if(n > 0) {
-      const indices = Array.from({length:n}, (_,i)=>i);
-      for(let i = indices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [indices[i], indices[j]] = [indices[j], indices[i]];
-      }
-      bloodPositions.push(...indices.slice(0, Math.min(5, n)).sort((a,b)=>a-b));
+    // 방혈 후 품온: n개 박스를 5등분해서 각 그룹 첫 행에 배치
+    const NUM_GROUPS = Math.min(5, n);
+    const bloodGroups = []; // {start, end} 0-indexed
+    for(let g = 0; g < NUM_GROUPS; g++) {
+      const start = Math.floor(n * g / NUM_GROUPS);
+      const end   = Math.floor(n * (g + 1) / NUM_GROUPS) - 1;
+      bloodGroups.push({start, end});
     }
+    const bloodPositions = bloodGroups.map(g => g.start);
     const bloodTemps = {};
     bloodPositions.forEach(pos => {
       bloodTemps[pos] = +(Math.random() * 1.0 - 2.0).toFixed(1);
@@ -445,20 +445,15 @@ async function exportThawingChecklist() {
       rowIdx++;
     }
 
-    // 방혈 후 품온 셀 병합
-    if(bloodPositions.length > 0) {
-      const positions = [...bloodPositions, n];
-      for(let p = 0; p < positions.length - 1; p++) {
-        const start = positions[p];
-        const end = positions[p+1] - 1;
-        if(end > start) {
-          merges.push({ 
-            s:{r: boxStartRow + start, c: 10}, 
-            e:{r: boxStartRow + end, c: 10}
-          });
-        }
+    // 방혈 후 품온 셀 병합 (각 그룹 범위로)
+    bloodGroups.forEach(g => {
+      if(g.end > g.start) {
+        merges.push({
+          s:{r: boxStartRow + g.start, c: 10},
+          e:{r: boxStartRow + g.end,   c: 10}
+        });
       }
-    }
+    });
 
     // 시트 생성
     const ws = XLSX.utils.aoa_to_sheet(aoa);
