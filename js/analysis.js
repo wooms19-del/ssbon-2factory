@@ -1838,9 +1838,26 @@ async function downloadPackingChart() {
 
   if (btn) btn.style.visibility = '';
 
+  // PPT 1장 크기 (1280×720 = 16:9) 로 리사이즈
+  const PPT_W = 1280, PPT_H = 720;
+  const out = document.createElement('canvas');
+  out.width  = PPT_W;
+  out.height = PPT_H;
+  const octx = out.getContext('2d');
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, PPT_W, PPT_H);
+
+  // 비율 유지하며 중앙 배치
+  const ratio = Math.min(PPT_W / capturedCanvas.width, PPT_H / capturedCanvas.height);
+  const dw = capturedCanvas.width  * ratio;
+  const dh = capturedCanvas.height * ratio;
+  const dx = (PPT_W - dw) / 2;
+  const dy = (PPT_H - dh) / 2;
+  octx.drawImage(capturedCanvas, dx, dy, dw, dh);
+
   const a = document.createElement('a');
   a.download = ym + '_운영팀_내포장수량.png';
-  a.href = capturedCanvas.toDataURL('image/png');
+  a.href = out.toDataURL('image/png');
   a.click();
 }
 
