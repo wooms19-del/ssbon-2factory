@@ -75,8 +75,10 @@ async function renderMonthly() {
   });
   Object.values(_dpMap).forEach(({dt,pr,pkEa,defect})=>{
     const ea=_opEaMap[dt+'_'+pr]||pkEa; // 외포장 있으면 외포장, 없으면 내포장
-    if(!byProd[pr]) byProd[pr]={ea:0,defect:0,days:new Set()};
-    byProd[pr].ea+=ea; byProd[pr].defect+=defect; byProd[pr].days.add(dt);
+    if(!byProd[pr]) byProd[pr]={ea:0,defect:0,pkEa:0,days:new Set()};
+    byProd[pr].ea+=ea; byProd[pr].defect+=defect;
+    byProd[pr].pkEa+=pkEa; // 파우치 사용량 = 내포장 EA (불량 포함)
+    byProd[pr].days.add(dt);
   });
   const opByProd = {};
   opReal.forEach(r=>{ const k=r.product||'기타';
@@ -84,7 +86,7 @@ async function renderMonthly() {
     opByProd[k].outerEa+=parseInt(r.outerEa)||0; opByProd[k].boxes+=parseInt(r.outerBoxes)||0;
   });
   const tbody=document.getElementById('mo_prod_tbl'), tfoot=document.getElementById('mo_prod_total');
-  let totEA=0,totDef=0,totOuter=0,totBx=0;
+  let totEA=0,totDef=0,totOuter=0,totBx=0,totPkEa=0;
   const rows=Object.entries(byProd).sort((a,b)=>b[1].ea-a[1].ea);
   // 제품명에서 그램 파싱 → 완제품 KG (예: 170g→0.17, 3KG→3)
   function _prodKgUnit(name){ const m=(name||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i); if(!m) return 0; return m[2].toUpperCase()==='KG'?parseFloat(m[1]):parseFloat(m[1])/1000; }
@@ -92,14 +94,14 @@ async function renderMonthly() {
   if(tbody) tbody.innerHTML=rows.map(([prod,v])=>{
     const op_=opByProd[prod]||{outerEa:0,boxes:0};
     const pkgKg=r2(op_.outerEa*_prodKgUnit(prod));
-    totEA+=v.ea; totDef+=v.defect; totOuter+=op_.outerEa; totBx+=op_.boxes; totProdKg=r2(totProdKg+pkgKg);
+    totEA+=v.ea; totDef+=v.defect; totOuter+=op_.outerEa; totBx+=op_.boxes; totPkEa+=(v.pkEa||0); totProdKg=r2(totProdKg+pkgKg);
     const dr=v.ea>0?(v.defect/v.ea*100).toFixed(2)+'%':'—';
     const dc=v.ea>0&&v.defect/v.ea*100>2?'var(--d)':'var(--s)';
     return `<tr>
       <td style="font-weight:500">${prod}</td>
       <td style="text-align:center">${v.days.size}일</td>
       <td style="text-align:center;font-weight:600;color:var(--p)">${v.ea.toLocaleString()}</td>
-      <td style="text-align:center">${op_.outerEa>0?op_.outerEa.toLocaleString():'—'}</td>
+      <td style="text-align:center">${(v.pkEa||0)>0?(v.pkEa||0).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${pkgKg>0?pkgKg.toLocaleString()+'kg':'—'}</td>
       <td style="text-align:center;color:${dc}">${dr}</td>
     </tr>`;
@@ -108,7 +110,7 @@ async function renderMonthly() {
     tfoot.innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--g3)">
       <td>합계</td><td style="text-align:center">—</td>
       <td style="text-align:center;color:var(--p)">${totEA.toLocaleString()}</td>
-      <td style="text-align:center">${totOuter>0?totOuter.toLocaleString():'—'}</td>
+      <td style="text-align:center">${totPkEa>0?totPkEa.toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${totProdKg>0?totProdKg.toLocaleString()+'kg':'—'}</td>
       <td style="text-align:center;color:${totEA>0&&totDef/totEA*100>2?'var(--d)':'var(--s)'}">${tdr}</td>
     </tr>`; }
