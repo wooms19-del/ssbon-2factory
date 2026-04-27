@@ -1901,6 +1901,7 @@ async function exportPackingChartExcel() {
 }
 
 
+
 // ============================================================
 // 실제 Excel 차트 시트 주입 - 단일시리즈+dPt+multiLvlStrRef
 // ============================================================
@@ -1912,78 +1913,58 @@ async function _buildChartSheet(mainBuf, y, m) {
       s.onload=res; s.onerror=rej; document.head.appendChild(s);
     });
   }
-  const zip = await JSZip.loadAsync(mainBuf);
-  const gd  = window._moGD||{};
-  const dayEntries = gd.dayEntries||[];
-  const opMap      = gd.opMap||{};
-  const SNAME      = '내포장수량';
+  const zip=await JSZip.loadAsync(mainBuf);
+  const gd=window._moGD||{};
+  const dayEntries=gd.dayEntries||[];
+  const opMap=gd.opMap||{};
+  const SNAME='내포장수량';
 
   const DOW=['일','월','화','수','목','금','토'];
   function dLabel(d){const[dy,dm,dd]=d.split('-').map(Number);return dd+'('+DOW[new Date(dy,dm-1,dd).getDay()]+')';}
   function colLetter(n){let r='';while(n>0){r=String.fromCharCode(65+(n-1)%26)+r;n=Math.floor((n-1)/26);}return r;}
   function ps(full){const mt=(full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);if(!mt)return full.slice(0,8);return mt[2].toUpperCase()==='KG'?mt[1]+'KG':mt[1]+'g';}
+  const PROD_COLORS={'시그니처 장조림 130g':'1D9E75','코스트코 장조림 170g':'378ADD','트레이더스 장조림 460g':'EF9F27','FC 장조림 3KG':'D4537E'};
+  function pColor(p){return PROD_COLORS[p]||'888888';}
 
-  const PROD_COLORS={
-    '시그니처 장조림 130g':'1D9E75','코스트코 장조림 170g':'378ADD',
-    '트레이더스 장조림 460g':'EF9F27','FC 장조림 3KG':'D4537E',
-  };
-  function pColor(prod){return PROD_COLORS[prod]||'888888';}
-
-  // 행 펼치기 (날짜+제품별 개별 bar)
+  // 행 펼치기
   const rows=[];
   dayEntries.forEach(([date,dayRows])=>{
     [...dayRows].sort((a,b)=>b.ea-a.ea).forEach(row=>{
       const ea=opMap[date+'|'+row.product]||Math.round(row.ea||0);
-      if(ea>0) rows.push({dateLabel:dLabel(date),prodShort:ps(row.product),prodFull:row.product,ea});
+      if(ea>0) rows.push({dl:dLabel(date),ps:ps(row.product),pf:row.product,ea});
     });
   });
   const N=rows.length;
 
-  // ── sheet2.xml (A=날짜, B=제품, C=EA) ────────────────────
+  // ── sheet2.xml: A=날짜(outer), B=제품(inner), C=EA ─────────
+  // 범례 텍스트는 E열에 직접 표기
+  const legendProds=[...new Set(rows.map(r=>r.pf))];
   let cells='';
-  cells+=`<row r="1"><c r="A1" t="inlineStr"><is><t>제품</t></is></c><c r="B1" t="inlineStr"><is><t>날짜</t></is></c><c r="C1" t="inlineStr"><is><t>생산량(EA)</t></is></c></row>`;
+  // 헤더
+  cells+=`<row r="1"><c r="A1" t="inlineStr"><is><t>날짜</t></is></c><c r="B1" t="inlineStr"><is><t>제품</t></is></c><c r="C1" t="inlineStr"><is><t>EA</t></is></c><c r="E1" t="inlineStr"><is><t>범 례</t></is></c></row>`;
   rows.forEach((r,i)=>{
     const ri=i+2;
     cells+=`<row r="${ri}">`;
-    cells+=`<c r="A${ri}" t="inlineStr"><is><t>${r.prodShort}</t></is></c>`;
-    cells+=`<c r="B${ri}" t="inlineStr"><is><t>${r.dateLabel}</t></is></c>`;
+    cells+=`<c r="A${ri}" t="inlineStr"><is><t>${r.dl}</t></is></c>`;
+    cells+=`<c r="B${ri}" t="inlineStr"><is><t>${r.ps}</t></is></c>`;
     cells+=`<c r="C${ri}"><v>${r.ea}</v></c>`;
     cells+=`</row>`;
   });
+  // 범례 행 (E2~E5)
+  const legendRows=legendProds.map((p,i)=>`<row r="${i+2}"><c r="E${i+2}" t="inlineStr"><is><t>■ ${ps(p)} = ${p}</t></is></c></row>`).join('');
 
-  // 범례 헬퍼 (E열: 제품명, F열: 1) - 5개 행
-  const legendProds=[...new Set(rows.map(r=>r.prodFull))];
-  legendProds.forEach((p,i)=>{
-    // E2+i, F2+i
-    const ri=i+2;
-    cells=cells; // handled below in separate rows if needed
-  });
+  const sheet2xml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="8" customWidth="1"/><col min="3" max="3" width="10" customWidth="1"/><col min="4" max="4" width="3" customWidth="1"/><col min="5" max="5" width="28" customWidth="1"/></cols><sheetData>${cells}${legendRows}</sheetData><drawing r:id="rId1"/></worksheet>`;
 
-  const sheet2xml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData>${cells}</sheetData><drawing r:id="rId1"/></worksheet>`;
-
-  // ── chart1.xml ─────────────────────────────────────────────
-  // 1) 개별 막대 색상 (dPt)
+  // ── chart1.xml: 단일시리즈, dPt 색상, multiLvlStrRef ───────
   let dptXml='';
   rows.forEach((r,i)=>{
-    dptXml+=`<c:dPt><c:idx val="${i}"/><c:invertIfNegative val="0"/><c:spPr><a:solidFill><a:srgbClr val="${pColor(r.prodFull)}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`;
+    dptXml+=`<c:dPt><c:idx val="${i}"/><c:invertIfNegative val="0"/><c:spPr><a:solidFill><a:srgbClr val="${pColor(r.pf)}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`;
   });
 
-  // 2) 다중레벨 카테고리 캐시 (날짜=outer, 제품=inner)
-  const outerPts=rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.dateLabel}</c:v></c:pt>`).join('');
-  const innerPts=rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.prodShort}</c:v></c:pt>`).join('');
+  // outer=날짜(A col), inner=제품(B col) → 날짜 병합 + 제품명 막대 위
+  const datePts =rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.dl}</c:v></c:pt>`).join('');
+  const prodPts =rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.ps}</c:v></c:pt>`).join('');
   const valPts  =rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.ea}</c:v></c:pt>`).join('');
-
-  // 3) 범례용 phantom series (색상+이름만, 값=0)
-  let phantomSer='';
-  legendProds.forEach((prod,pi)=>{
-    phantomSer+=`<c:ser>
-      <c:idx val="${pi+1}"/><c:order val="${pi+1}"/>
-      <c:tx><c:strRef><c:f></c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${ps(prod)}</c:v></c:pt></c:strCache></c:strRef></c:tx>
-      <c:spPr><a:solidFill><a:srgbClr val="${pColor(prod)}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>
-      <c:cat><c:strRef><c:f></c:f><c:strCache><c:ptCount val="0"/></c:strCache></c:strRef></c:cat>
-      <c:val><c:numRef><c:f></c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="0"/></c:numCache></c:numRef></c:val>
-    </c:ser>`;
-  });
 
   const chartXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -2009,8 +1990,8 @@ async function _buildChartSheet(mainBuf, y, m) {
               <c:f>${SNAME}!$A$2:$B$${N+1}</c:f>
               <c:multiLvlStrCache>
                 <c:ptCount val="${N}"/>
-                <c:lvl>${innerPts}</c:lvl>
-                <c:lvl>${outerPts}</c:lvl>
+                <c:lvl>${datePts}</c:lvl>
+                <c:lvl>${prodPts}</c:lvl>
               </c:multiLvlStrCache>
             </c:multiLvlStrRef>
           </c:cat>
@@ -2021,8 +2002,7 @@ async function _buildChartSheet(mainBuf, y, m) {
             </c:numRef>
           </c:val>
         </c:ser>
-        ${phantomSer}
-        <c:gapWidth val="100"/>
+        <c:gapWidth val="60"/>
         <c:axId val="11111"/><c:axId val="22222"/>
       </c:barChart>
       <c:catAx>
@@ -2043,11 +2023,10 @@ async function _buildChartSheet(mainBuf, y, m) {
         <c:numFmt formatCode="#,##0" sourceLinked="0"/>
         <c:tickLblPos val="nextTo"/>
         <c:spPr><a:ln><a:solidFill><a:srgbClr val="DDDDDD"/></a:solidFill></a:ln></c:spPr>
-        <c:crossAx val="11111"/>
-        <c:crossBetween val="between"/>
+        <c:crossAx val="11111"/><c:crossBetween val="between"/>
       </c:valAx>
     </c:plotArea>
-    <c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>
+    <c:legend><c:legendPos val="b"/><c:overlay val="0"/><c:legendEntry><c:idx val="0"/><c:delete val="1"/></c:legendEntry></c:legend>
     <c:plotVisOnly val="1"/>
     <c:dispBlanksAs val="gap"/>
   </c:chart>
@@ -2061,8 +2040,8 @@ async function _buildChartSheet(mainBuf, y, m) {
   xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
   xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
   <xdr:twoCellAnchor editAs="oneCell">
-    <xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-    <xdr:to><xdr:col>16</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${N+4}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+    <xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+    <xdr:to><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${N+6}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
     <xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
       <xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
       <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rId1"/></a:graphicData></a:graphic>
