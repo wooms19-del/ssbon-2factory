@@ -133,6 +133,75 @@ var PS={
   sauce:     (r)=>`탱크 ${r.tank||'-'} · ${r.note||''}`,
 };
 
+// type별 수정 가능 필드 정의
+var PE_FIELDS = {
+  preprocess: [
+    {key:'cage', label:'케이지', kind:'text'},
+    {key:'start', label:'시작', kind:'time'},
+    {key:'end', label:'종료', kind:'time'},
+    {key:'kg', label:'KG', kind:'number'},
+    {key:'waste', label:'비가식부', kind:'number'},
+    {key:'workers', label:'인원', kind:'number'},
+  ],
+  cooking: [
+    {key:'cage', label:'케이지', kind:'text'},
+    {key:'tank', label:'탱크', kind:'text'},
+    {key:'wagonOut', label:'와건Out', kind:'text'},
+    {key:'start', label:'시작', kind:'time'},
+    {key:'end', label:'종료', kind:'time'},
+    {key:'kg', label:'KG', kind:'number'},
+    {key:'workers', label:'인원', kind:'number'},
+  ],
+  shredding: [
+    {key:'wagonIn', label:'와건In', kind:'text'},
+    {key:'wagonOut', label:'와건Out', kind:'text'},
+    {key:'start', label:'시작', kind:'time'},
+    {key:'end', label:'종료', kind:'time'},
+    {key:'kg', label:'KG', kind:'number'},
+    {key:'waste', label:'비가식부', kind:'number'},
+    {key:'workers', label:'인원', kind:'number'},
+  ],
+};
+
+function buildEditForm(type, r) {
+  const fields = PE_FIELDS[type];
+  if(!fields) return '';
+  const cols = fields.length <= 6 ? 3 : 4;
+  const inputs = fields.map(f => {
+    const inputAttr = f.kind === 'number' 
+      ? 'type="number" step="0.01"' 
+      : f.kind === 'time' 
+        ? 'type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM"' 
+        : 'type="text"';
+    const val = r[f.key] !== undefined && r[f.key] !== null ? r[f.key] : '';
+    return `<div><label style="font-size:11px;color:var(--g5);display:block">${f.label}</label><input class="fc" ${inputAttr} style="padding:4px 8px;font-size:12px;width:100%" id="pe_${type}_${f.key}_${r.id}" value="${val}"></div>`;
+  }).join('');
+  return `<div id="peEdit_${type}_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px"><div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px;margin-bottom:8px">${inputs}</div><div style="display:flex;gap:6px"><button class="btn bp bsm" onclick="savePEdit('${type}','${r.id}','${r.fbId||''}')">✔ 저장</button><button class="btn bo bsm" onclick="document.getElementById('peEdit_${type}_${r.id}').style.display='none'">취소</button></div></div>`;
+}
+
+async function savePEdit(type, id, fbId) {
+  const list = L[type] || [];
+  const rec = list.find(r => r.id === id);
+  if(!rec) { toast('기록 없음','d'); return; }
+  const fields = PE_FIELDS[type] || [];
+  const updates = {};
+  fields.forEach(f => {
+    const el = document.getElementById(`pe_${type}_${f.key}_${id}`);
+    if(!el) return;
+    let v = el.value;
+    if(f.kind === 'number') v = parseFloat(v) || 0;
+    updates[f.key] = v;
+  });
+  Object.assign(rec, updates);
+  saveL();
+  renderPL(type);
+  if(typeof renderDailyFromLocal_ === 'function') {
+    try { renderDailyFromLocal_(tod()); } catch(e){}
+  }
+  if(fbId) fbUpdate(FBCOL[type] || type, fbId, updates);
+  toast((PNM && PNM[type] ? PNM[type] : type) + ' 수정됨 ✓', 's');
+}
+
 function renderPL(type){
   const today=tod();
   const items=(L[type]||[]).filter(r=>String(r.date||'').slice(0,10)===today);
@@ -140,7 +209,11 @@ function renderPL(type){
   if(!el) return;
   if(!items.length){el.innerHTML='<div class="emp">데이터 없음</div>';return;}
   el.innerHTML='<div class="rl">'+items.map(r=>{
-    const editForm = type==='packing' ? `
+    // packing은 기존 pkEdit 폼 유지, 나머지는 통합 buildEditForm
+    let editForm = '';
+    let editToggle = '';
+    if(type==='packing') {
+      editForm = `
     <div id="pkEdit_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
         <div><label style="font-size:11px;color:var(--g5);display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}"></div>
@@ -154,7 +227,12 @@ function renderPL(type){
         <button class="btn bp bsm" onclick="savePkEdit('${r.id}','${r.fbId||''}')">✔ 저장</button>
         <button class="btn bo bsm" onclick="document.getElementById('pkEdit_${r.id}').style.display='none'">취소</button>
       </div>
-    </div>` : '';
+    </div>`;
+      editToggle = `<button class="btn bo bsm" onclick="document.getElementById('pkEdit_${r.id}').style.display=document.getElementById('pkEdit_${r.id}').style.display==='none'?'block':'none'">✏️</button>`;
+    } else if(PE_FIELDS[type]) {
+      editForm = buildEditForm(type, r);
+      editToggle = `<button class="btn bo bsm" onclick="document.getElementById('peEdit_${type}_${r.id}').style.display=document.getElementById('peEdit_${type}_${r.id}').style.display==='none'?'block':'none'">✏️</button>`;
+    }
     return `
     <div class="ri">
       <div>
@@ -162,7 +240,7 @@ function renderPL(type){
         <div class="rs">${(PS[type]||((r)=>''))(r)}</div>
       </div>
       <div style="display:flex;gap:4px">
-        ${type==='packing'?`<button class="btn bo bsm" onclick="document.getElementById('pkEdit_${r.id}').style.display=document.getElementById('pkEdit_${r.id}').style.display==='none'?'block':'none'">✏️</button>`:''}
+        ${editToggle}
         <button class="btn bo bsm" onclick="delR('${type}','${r.id}','${r.fbId||''}')">삭제</button>
       </div>
     </div>${editForm}`;
