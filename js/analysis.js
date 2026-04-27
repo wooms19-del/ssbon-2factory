@@ -1807,54 +1807,82 @@ function renderPackingChart(dayEntries, opMap, ym) {
 
 async function downloadPackingChart() {
   const canvas = document.getElementById('mo_bar_chart');
-  if (!canvas) return;
+  if (!canvas || !_moPackingChart) return;
   const ym = _moYm || tod().slice(0,7);
+  const [y, m] = ym.split('-');
 
-  // html2canvas 동적 로드
-  if (!window.html2canvas) {
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
+  const PPT_W = 1280, PPT_H = 720;
+
+  // offscreen 캔버스에 흰 배경
+  const off = document.createElement('canvas');
+  off.width  = PPT_W;
+  off.height = PPT_H;
+  const ctx = off.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, PPT_W, PPT_H);
+
+  // 제목 그리기
+  const subtitle = '순수본 2공장';
+  const titleText = '운영팀 ' + parseInt(m) + '월 내포장 수량';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#94A3B8';
+  ctx.font = '13px sans-serif';
+  ctx.fillText(subtitle, 24, 32);
+  ctx.fillStyle = '#1E293B';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillText(titleText, 24, 60);
+
+  // 범례 그리기
+  const legendEl = document.getElementById('mo_packing_legend');
+  if (legendEl) {
+    const spans = legendEl.querySelectorAll('span[style*="display:flex"], span[style*="display: flex"]');
+    let lx = 24;
+    const ly = 88;
+    spans.forEach(sp => {
+      const colorSp = sp.querySelector('span[style*="background"]');
+      const textSp  = sp.querySelector('span:last-child');
+      if (!colorSp || !textSp) return;
+      const bg = colorSp.style.background || colorSp.style.backgroundColor || '#888';
+      ctx.fillStyle = bg;
+      ctx.fillRect(lx, ly - 9, 10, 10);
+      ctx.fillStyle = '#555';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'left';
+      const label = textSp.textContent.trim();
+      ctx.fillText(label, lx + 14, ly);
+      lx += ctx.measureText(label).width + 36;
     });
   }
 
-  const card = canvas.closest('.card');
-  const target = card || canvas;
-  const btn = card ? card.querySelector('button') : null;
-  if (btn) btn.style.visibility = 'hidden';
+  // 차트를 offscreen에 크게 다시 그리기
+  const chartTop = 110;
+  const chartH   = PPT_H - chartTop - 10;
+  const chartConf = _moPackingChart.config;
 
-  // 현재 크기 저장
-  const PPT_W = 1280, PPT_H = 720;
-  const origStyle = target.getAttribute('style') || '';
-  const chartDiv = target.querySelector('[style*="height"]');
-  const origChartStyle = chartDiv ? chartDiv.getAttribute('style') || '' : '';
-
-  // 카드를 PPT 크기로 강제 확장
-  target.style.cssText = origStyle + '; width:' + PPT_W + 'px !important; height:' + PPT_H + 'px !important; overflow:hidden !important;';
-  if (chartDiv) chartDiv.style.cssText = origChartStyle + '; height:' + (PPT_H - 150) + 'px !important;';
-  if (_moPackingChart) _moPackingChart.resize();
-  await new Promise(r => setTimeout(r, 400));
-
-  const capturedCanvas = await html2canvas(target, {
-    backgroundColor: '#ffffff',
-    scale: 1,
-    width: PPT_W,
-    height: PPT_H,
-    useCORS: true,
-    logging: false
+  // 임시 캔버스에 차트 렌더링
+  const tmpCanvas = document.createElement('canvas');
+  tmpCanvas.width  = PPT_W;
+  tmpCanvas.height = chartH;
+  const tmpChart = new Chart(tmpCanvas, {
+    type: chartConf.type,
+    plugins: chartConf.plugins ? [] : [],
+    data: JSON.parse(JSON.stringify(chartConf.data)),
+    options: Object.assign({}, JSON.parse(JSON.stringify(chartConf.options || {})), {
+      responsive: false,
+      animation: false,
+      plugins: Object.assign({}, (chartConf.options||{}).plugins, {
+        legend: { display: false }
+      })
+    })
   });
+  await new Promise(r => setTimeout(r, 300));
 
-  // 원복
-  target.setAttribute('style', origStyle);
-  if (chartDiv) chartDiv.setAttribute('style', origChartStyle);
-  if (_moPackingChart) _moPackingChart.resize();
-  if (btn) btn.style.visibility = '';
+  ctx.drawImage(tmpCanvas, 0, chartTop, PPT_W, chartH);
+  tmpChart.destroy();
 
   const a = document.createElement('a');
   a.download = ym + '_운영팀_내포장수량.png';
-  a.href = capturedCanvas.toDataURL('image/png');
+  a.href = off.toDataURL('image/png');
   a.click();
 }
 
