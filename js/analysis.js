@@ -59,7 +59,9 @@ async function renderMonthly() {
 
   // ── 제품별 테이블 ─────────────────────────────────────────
   const byProd = {};
-  pk.forEach(r=>{ const k=r.product||'기타';
+  const _testOpK=new Set(op.filter(r=>r.testRun||r.isTest).map(r=>`${String(r.date||'').slice(0,10)}_${r.product||''}`));
+  const _isTestPk=r=>r.testRun||r.isTest||_testOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`);
+  pk.filter(r=>!_isTestPk(r)).forEach(r=>{ const k=r.product||'기타';
     if(!byProd[k]) byProd[k]={ea:0,defect:0,days:new Set()};
     byProd[k].ea+=parseFloat(r.ea)||0; byProd[k].defect+=parseFloat(r.defect)||0;
     byProd[k].days.add(String(r.date||'').slice(0,10));
