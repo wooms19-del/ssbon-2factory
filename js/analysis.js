@@ -1979,7 +1979,8 @@ async function _buildChartSheet(mainBuf, y, m) {
   });
 
   // outer=날짜(A col), inner=제품(B col) → 날짜 병합 + 제품명 막대 위
-  const datePts =rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.dl}</c:v></c:pt>`).join('');
+  // 연속 중복 날짜는 캐시에서 생략 → Excel이 같은 날짜를 하나로 병합
+  const datePts =rows.map((r,i)=>i>0&&rows[i-1].dl===r.dl?'':`<c:pt idx="${i}"><c:v>${r.dl}</c:v></c:pt>`).join('');
   const prodPts =rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.ps}</c:v></c:pt>`).join('');
   const valPts  =rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.ea}</c:v></c:pt>`).join('');
 
