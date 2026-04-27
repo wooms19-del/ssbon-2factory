@@ -258,18 +258,7 @@ async function exportThawingChecklist() {
     const endTime = th.end || '';
     const ic = th.importCodes || [];
 
-    // 제목
-    aoa.push(['해동 및 방혈 공정 점검표']);
-    merges.push({ s:{r:rowIdx,c:0}, e:{r:rowIdx,c:10} });
-    styles[cellRef(rowIdx,0)] = {
-      font: FONT_TITLE, alignment: ALIGN_CENTER
-    };
-    rowIdx++;
-
-    aoa.push(['']);
-    rowIdx++;
-
-    // 메타박스
+    // 메타박스 + 제목 (같은 행에 좌측은 큰 제목, 우측은 메타박스)
     const metaRows = [
       ['작업일자', date],
       ['총 작업 인원', '2명'],
@@ -279,13 +268,28 @@ async function exportThawingChecklist() {
     Object.entries(totalByType).forEach(([t,v])=>{
       metaRows.push([`총 무게(${t})`, v.toFixed(2)]);
     });
+    
+    const titleStartRow = rowIdx;
+    const titleEndRow = rowIdx + metaRows.length - 1;
 
-    metaRows.forEach(([label, value]) => {
+    metaRows.forEach(([label, value], idx) => {
       const row = new Array(11).fill('');
+      // 좌측 (0~7): 첫 행에만 제목 텍스트, 나머지는 빈 셀
+      if(idx === 0) row[0] = '해동 및 방혈 공정 점검표';
+      // 우측 (8~10): 메타
       row[8] = label;
       row[9] = value;
       aoa.push(row);
       
+      // 좌측 셀 스타일 (제목 박스 - 모든 행에 테두리, 첫 행만 텍스트)
+      for(let c = 0; c < 8; c++) {
+        styles[cellRef(rowIdx,c)] = {
+          font: idx === 0 ? FONT_TITLE : FONT_DEFAULT,
+          alignment: ALIGN_CENTER,
+          border: BORDER_ALL
+        };
+      }
+      // 우측 메타 셀 스타일
       styles[cellRef(rowIdx,8)] = {
         font: FONT_BOLD, alignment: ALIGN_CENTER,
         fill: { fgColor:{rgb:META_BG} }, border: BORDER_ALL
@@ -299,6 +303,9 @@ async function exportThawingChecklist() {
       merges.push({ s:{r:rowIdx,c:9}, e:{r:rowIdx,c:10} });
       rowIdx++;
     });
+    
+    // 좌측 0~7 컬럼 전체 병합 (큰 제목 박스)
+    merges.push({ s:{r:titleStartRow,c:0}, e:{r:titleEndRow,c:7} });
 
     aoa.push(['']);
     rowIdx++;
@@ -453,8 +460,13 @@ async function exportThawingChecklist() {
     };
     ws['!printOptions'] = { horizontalCentered: true };
 
-    // 시트 이름: "우둔_대차1" 형식
-    const sheetName = `${ty}_대차${cart}`.substring(0, 31); // 엑셀 시트명 31자 제한
+    // 시트 이름: "우둔_대차1" 형식, 중복 시 _2, _3 자동
+    let sheetName = `${ty}_대차${cart || '미입력'}`.substring(0, 28);
+    if(wb.SheetNames.includes(sheetName)) {
+      let n = 2;
+      while(wb.SheetNames.includes(`${sheetName}_${n}`)) n++;
+      sheetName = `${sheetName}_${n}`;
+    }
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
 
