@@ -1941,12 +1941,12 @@ async function _buildChartSheet(mainBuf, y, m) {
 
   // ── sheet2.xml (A=날짜, B=제품, C=EA) ────────────────────
   let cells='';
-  cells+=`<row r="1"><c r="A1" t="inlineStr"><is><t>날짜</t></is></c><c r="B1" t="inlineStr"><is><t>제품</t></is></c><c r="C1" t="inlineStr"><is><t>생산량(EA)</t></is></c></row>`;
+  cells+=`<row r="1"><c r="A1" t="inlineStr"><is><t>제품</t></is></c><c r="B1" t="inlineStr"><is><t>날짜</t></is></c><c r="C1" t="inlineStr"><is><t>생산량(EA)</t></is></c></row>`;
   rows.forEach((r,i)=>{
     const ri=i+2;
     cells+=`<row r="${ri}">`;
-    cells+=`<c r="A${ri}" t="inlineStr"><is><t>${r.dateLabel}</t></is></c>`;
-    cells+=`<c r="B${ri}" t="inlineStr"><is><t>${r.prodShort}</t></is></c>`;
+    cells+=`<c r="A${ri}" t="inlineStr"><is><t>${r.prodShort}</t></is></c>`;
+    cells+=`<c r="B${ri}" t="inlineStr"><is><t>${r.dateLabel}</t></is></c>`;
     cells+=`<c r="C${ri}"><v>${r.ea}</v></c>`;
     cells+=`</row>`;
   });
@@ -2009,8 +2009,8 @@ async function _buildChartSheet(mainBuf, y, m) {
               <c:f>${SNAME}!$A$2:$B$${N+1}</c:f>
               <c:multiLvlStrCache>
                 <c:ptCount val="${N}"/>
-                <c:lvl>${outerPts}</c:lvl>
                 <c:lvl>${innerPts}</c:lvl>
+                <c:lvl>${outerPts}</c:lvl>
               </c:multiLvlStrCache>
             </c:multiLvlStrRef>
           </c:cat>
