@@ -361,6 +361,14 @@ async function exportThawingChecklist() {
     //       박스마다 4박스당 +1분씩 차이
     //       박스 i의 해동시작 = thawing.start - 30분 - (총박스-1-i)/4
     //       박스 i의 해동종료 = 박스 i 해동시작 + 30분 = 박스 i 방혈시작
+    // 날짜+대차 기반 시드 고정 랜덤 (같은 날짜/대차면 항상 같은 값)
+    const _seed0 = (date+'-'+cart).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0, 0);
+    let _seedN = Math.abs(_seed0) || 1;
+    function seededRand() {
+      _seedN = (_seedN * 1664525 + 1013904223) & 0xffffffff;
+      return ((_seedN >>> 0) / 0xffffffff);
+    }
+
     const startParts = (startTime || '10:20').split(':');
     const thawStartMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || '0');
     const totalBoxesN = ic.length;
@@ -385,7 +393,7 @@ async function exportThawingChecklist() {
     const bloodPositions = bloodGroups.map(g => g.start);
     const bloodTemps = {};
     bloodPositions.forEach(pos => {
-      bloodTemps[pos] = +(Math.random() * 3.0 - 1.0).toFixed(1);
+      bloodTemps[pos] = +(seededRand() * 3.0 - 1.0).toFixed(1);
     });
 
     let bloodEnd;
@@ -411,7 +419,7 @@ async function exportThawingChecklist() {
       em = em % 60;
       const rfEnd = `${prevMD} ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
       
-      const thawTemp = +(Math.random() * 1.0 - 5.0).toFixed(1);
+      const thawTemp = +(seededRand() * 1.0 - 5.0).toFixed(1);
       const bloodTemp = bloodTemps[i] !== undefined ? bloodTemps[i] : '';
       
       // 방혈 시작 = 해동 종료 (같은 시점)
