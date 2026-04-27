@@ -2,23 +2,6 @@
 // 파일 저장 헬퍼 - File System Access API (마지막 폴더 기억)
 // ============================================================
 async function _saveXlsx(wb, fname) {
-  if (window.showSaveFilePicker) {
-    try {
-      const fh = await window.showSaveFilePicker({
-        suggestedName: fname,
-        types: [{ description: 'Excel 파일',
-          accept: {'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']} }]
-      });
-      const buf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-      const writable = await fh.createWritable();
-      await writable.write(new Blob([buf], {type:'application/octet-stream'}));
-      await writable.close();
-      return;
-    } catch(e) {
-      if (e.name === 'AbortError') return; // 사용자 취소
-      // 지원 안 되면 fallback
-    }
-  }
   XLSX.writeFile(wb, fname);
 }
 
