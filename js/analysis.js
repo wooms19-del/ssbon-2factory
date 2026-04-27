@@ -304,7 +304,7 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
     _moRenderYieldChart(dailyYields);
     _moLoadAndRenderPrevCmp(moAvgYld, moTotRm, moTotPkKg, moDays);
     // KPI 일평균 원육 사용량
-    setText('mo_avg', moDays>0?Math.round(moTotRm/moDays).toLocaleString():'—');
+    setText('mo_avg', moDays>0?(moTotRm/moDays).toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1}):'—');
   }
 
   /* ── DEAD CODE PLACEHOLDER (do not remove – replaced by _moRenderRows) ── */
