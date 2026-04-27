@@ -353,11 +353,16 @@ async function exportThawingChecklist() {
     //       박스마다 4박스당 +1분씩 차이
     //       박스 i의 해동시작 = thawing.start - 30분 - (총박스-1-i)/4
     //       박스 i의 해동종료 = 박스 i 해동시작 + 30분 = 박스 i 방혈시작
-    // 날짜+대차 기반 시드 고정 (인덱스 기반 순수함수 - 호출 순서 무관)
-    const _seed0 = Math.abs((date+'-'+String(cart)).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0, 0)) || 12345;
+    // 날짜+대차+인덱스 조합 Wang hash (분포 균등, 패턴 없음)
+    const _seed0 = (date+'-'+String(cart)).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0, 0);
     function seededVal(idx) {
-      const h = Math.abs((_seed0 ^ (idx * 2654435761)) >>> 0);
-      return (h % 10000) / 10000;
+      let h = (_seed0 ^ (idx * 1000003)) >>> 0;
+      h ^= h >>> 16;
+      h = Math.imul(h, 0x45d9f3b) >>> 0;
+      h ^= h >>> 16;
+      h = Math.imul(h, 0x27d4eb2d) >>> 0;
+      h ^= h >>> 15;
+      return (h >>> 0) / 4294967296;
     }
 
     const startParts = (startTime || '10:20').split(':');
@@ -384,7 +389,7 @@ async function exportThawingChecklist() {
     const bloodPositions = bloodGroups.map(g => g.start);
     const bloodTemps = {};
     bloodPositions.forEach(pos => {
-      bloodTemps[pos] = +(seededVal(pos + cart*100 + 1000) * 3.0 - 1.0).toFixed(1);
+      bloodTemps[pos] = +(seededVal(pos + 1000) * 3.0 - 1.0).toFixed(1);
     });
 
     let bloodEnd;
@@ -410,7 +415,7 @@ async function exportThawingChecklist() {
       em = em % 60;
       const rfEnd = `${prevMD} ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
       
-      const thawTemp = +(seededVal(i + cart*100) * 1.0 - 5.0).toFixed(1);
+      const thawTemp = +(seededVal(i) * 1.0 - 5.0).toFixed(1);
       const bloodTemp = bloodTemps[i] !== undefined ? bloodTemps[i] : '';
       
       // 방혈 시작 = 해동 종료 (같은 시점)
