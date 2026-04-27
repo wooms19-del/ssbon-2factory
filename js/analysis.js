@@ -1985,6 +1985,14 @@ async function _buildChartSheet(mainBuf, y, m) {
           <c:spPr><a:solidFill><a:srgbClr val="888888"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>
           ${dptXml}
           <c:invertIfNegative val="0"/>
+          <c:dLbls>
+            <c:numFmt formatCode="#,##0" sourceLinked="0"/>
+            <c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>
+            <c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr b="1" sz="800"/></a:pPr></a:p></c:txPr>
+            <c:dLblPos val="outEnd"/>
+            <c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/>
+            <c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/>
+          </c:dLbls>
           <c:cat>
             <c:multiLvlStrRef>
               <c:f>${SNAME}!$A$2:$B$${N+1}</c:f>
