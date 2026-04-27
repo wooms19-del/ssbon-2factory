@@ -1900,97 +1900,95 @@ async function exportPackingChartExcel() {
   toast('엑셀 다운로드 완료 ✓','s');
 }
 
+
 // ============================================================
-// 실제 Excel 차트 시트 주입 (JSZip + XML)
+// 실제 Excel 차트 시트 주입 - 단일시리즈+dPt+multiLvlStrRef
 // ============================================================
 async function _buildChartSheet(mainBuf, y, m) {
   if (!window.JSZip) {
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-      s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload=res; s.onerror=rej; document.head.appendChild(s);
     });
   }
-
-  const zip  = await JSZip.loadAsync(mainBuf);
-  const gd   = window._moGD || {};
-  const dayEntries = gd.dayEntries || [];
-  const opMap      = gd.opMap || {};
+  const zip = await JSZip.loadAsync(mainBuf);
+  const gd  = window._moGD||{};
+  const dayEntries = gd.dayEntries||[];
+  const opMap      = gd.opMap||{};
   const SNAME      = '내포장수량';
 
-  const DOW = ['일','월','화','수','목','금','토'];
-  function dLabel(d) {
-    const [dy,dm,dd] = d.split('-').map(Number);
-    return dd+'('+DOW[new Date(dy,dm-1,dd).getDay()]+')';
-  }
-  function colLetter(n) {
-    let r=''; while(n>0){r=String.fromCharCode(65+(n-1)%26)+r;n=Math.floor((n-1)/26);} return r;
-  }
+  const DOW=['일','월','화','수','목','금','토'];
+  function dLabel(d){const[dy,dm,dd]=d.split('-').map(Number);return dd+'('+DOW[new Date(dy,dm-1,dd).getDay()]+')';}
+  function colLetter(n){let r='';while(n>0){r=String.fromCharCode(65+(n-1)%26)+r;n=Math.floor((n-1)/26);}return r;}
+  function ps(full){const mt=(full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);if(!mt)return full.slice(0,8);return mt[2].toUpperCase()==='KG'?mt[1]+'KG':mt[1]+'g';}
 
-  const PROD_COLORS = {
-    '시그니처 장조림 130g':'1D9E75', '코스트코 장조림 170g':'378ADD',
-    '트레이더스 장조림 460g':'EF9F27', 'FC 장조림 3KG':'D4537E',
+  const PROD_COLORS={
+    '시그니처 장조림 130g':'1D9E75','코스트코 장조림 170g':'378ADD',
+    '트레이더스 장조림 460g':'EF9F27','FC 장조림 3KG':'D4537E',
   };
-  function pColor(prod) { return PROD_COLORS[prod]||'888888'; }
-  function ps(full) {
-    const mt=(full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);
-    if(!mt) return full.slice(0,8);
-    return mt[2].toUpperCase()==='KG'?mt[1]+'KG':mt[1]+'g';
-  }
+  function pColor(prod){return PROD_COLORS[prod]||'888888';}
 
-  // 제품 목록 (총 EA 내림차순)
-  const allProds = [];
-  dayEntries.forEach(([,rows])=>rows.forEach(r=>{ if(!allProds.includes(r.product)) allProds.push(r.product); }));
-  const tots={};
-  allProds.forEach(p=>tots[p]=0);
-  dayEntries.forEach(([d,rows])=>rows.forEach(r=>{ tots[r.product]=(tots[r.product]||0)+(opMap[d+'|'+r.product]||Math.round(r.ea||0)); }));
-  allProds.sort((a,b)=>tots[b]-tots[a]);
+  // 행 펼치기 (날짜+제품별 개별 bar)
+  const rows=[];
+  dayEntries.forEach(([date,dayRows])=>{
+    [...dayRows].sort((a,b)=>b.ea-a.ea).forEach(row=>{
+      const ea=opMap[date+'|'+row.product]||Math.round(row.ea||0);
+      if(ea>0) rows.push({dateLabel:dLabel(date),prodShort:ps(row.product),prodFull:row.product,ea});
+    });
+  });
+  const N=rows.length;
 
-  const allDates = dayEntries.map(([d])=>d);
-  const nDates   = allDates.length;
-  const nProds   = allProds.length;
-
-  // matrix[di][pi]
-  const matrix = allDates.map((d,di)=>allProds.map((prod,pi)=>{
-    const oe=opMap[d+'|'+prod];
-    if(oe>0) return oe;
-    const row=dayEntries[di][1].find(r=>r.product===prod);
-    return row?Math.round(row.ea||0):0;
-  }));
-
-  // ── sheet2.xml ───────────────────────────────────────────
+  // ── sheet2.xml (A=날짜, B=제품, C=EA) ────────────────────
   let cells='';
-  // 헤더
-  cells+=`<row r="1"><c r="A1" t="inlineStr"><is><t>날짜</t></is></c>`;
-  allProds.forEach((p,pi)=>{ cells+=`<c r="${colLetter(pi+2)}1" t="inlineStr"><is><t>${ps(p)}</t></is></c>`; });
-  cells+='</row>';
-  // 데이터
-  allDates.forEach((d,di)=>{
-    cells+=`<row r="${di+2}"><c r="A${di+2}" t="inlineStr"><is><t>${dLabel(d)}</t></is></c>`;
-    allProds.forEach((p,pi)=>{ cells+=`<c r="${colLetter(pi+2)}${di+2}"><v>${matrix[di][pi]}</v></c>`; });
-    cells+='</row>';
+  cells+=`<row r="1"><c r="A1" t="inlineStr"><is><t>날짜</t></is></c><c r="B1" t="inlineStr"><is><t>제품</t></is></c><c r="C1" t="inlineStr"><is><t>생산량(EA)</t></is></c></row>`;
+  rows.forEach((r,i)=>{
+    const ri=i+2;
+    cells+=`<row r="${ri}">`;
+    cells+=`<c r="A${ri}" t="inlineStr"><is><t>${r.dateLabel}</t></is></c>`;
+    cells+=`<c r="B${ri}" t="inlineStr"><is><t>${r.prodShort}</t></is></c>`;
+    cells+=`<c r="C${ri}"><v>${r.ea}</v></c>`;
+    cells+=`</row>`;
+  });
+
+  // 범례 헬퍼 (E열: 제품명, F열: 1) - 5개 행
+  const legendProds=[...new Set(rows.map(r=>r.prodFull))];
+  legendProds.forEach((p,i)=>{
+    // E2+i, F2+i
+    const ri=i+2;
+    cells=cells; // handled below in separate rows if needed
   });
 
   const sheet2xml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData>${cells}</sheetData><drawing r:id="rId1"/></worksheet>`;
 
-  // ── chart1.xml ──────────────────────────────────────────
-  let serXml='';
-  allProds.forEach((prod,pi)=>{
-    const CL=colLetter(pi+2);
-    const catPts=allDates.map((d,di)=>`<c:pt idx="${di}"><c:v>${dLabel(d)}</c:v></c:pt>`).join('');
-    const valPts=allDates.map((d,di)=>`<c:pt idx="${di}"><c:v>${matrix[di][pi]}</c:v></c:pt>`).join('');
-    serXml+=`<c:ser><c:idx val="${pi}"/><c:order val="${pi}"/>
-      <c:tx><c:strRef><c:f>${SNAME}!$${CL}$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${ps(prod)}</c:v></c:pt></c:strCache></c:strRef></c:tx>
+  // ── chart1.xml ─────────────────────────────────────────────
+  // 1) 개별 막대 색상 (dPt)
+  let dptXml='';
+  rows.forEach((r,i)=>{
+    dptXml+=`<c:dPt><c:idx val="${i}"/><c:invertIfNegative val="0"/><c:spPr><a:solidFill><a:srgbClr val="${pColor(r.prodFull)}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`;
+  });
+
+  // 2) 다중레벨 카테고리 캐시 (날짜=outer, 제품=inner)
+  const outerPts=rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.dateLabel}</c:v></c:pt>`).join('');
+  const innerPts=rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.prodShort}</c:v></c:pt>`).join('');
+  const valPts  =rows.map((r,i)=>`<c:pt idx="${i}"><c:v>${r.ea}</c:v></c:pt>`).join('');
+
+  // 3) 범례용 phantom series (색상+이름만, 값=0)
+  let phantomSer='';
+  legendProds.forEach((prod,pi)=>{
+    phantomSer+=`<c:ser>
+      <c:idx val="${pi+1}"/><c:order val="${pi+1}"/>
+      <c:tx><c:strRef><c:f></c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${ps(prod)}</c:v></c:pt></c:strCache></c:strRef></c:tx>
       <c:spPr><a:solidFill><a:srgbClr val="${pColor(prod)}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>
-      <c:invertIfNegative val="0"/>
-      <c:cat><c:strRef><c:f>${SNAME}!$A$2:$A$${nDates+1}</c:f><c:strCache><c:ptCount val="${nDates}"/>${catPts}</c:strCache></c:strRef></c:cat>
-      <c:val><c:numRef><c:f>${SNAME}!$${CL}$2:$${CL}$${nDates+1}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${nDates}"/>${valPts}</c:numCache></c:numRef></c:val>
+      <c:cat><c:strRef><c:f></c:f><c:strCache><c:ptCount val="0"/></c:strCache></c:strRef></c:cat>
+      <c:val><c:numRef><c:f></c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="0"/></c:numCache></c:numRef></c:val>
     </c:ser>`;
   });
 
   const chartXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <c:lang val="ko-KR"/>
   <c:chart>
     <c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr b="1" sz="1400"/></a:pPr><a:r><a:t>운영팀 ${parseInt(m)}월 내포장 수량</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
@@ -2001,10 +1999,31 @@ async function _buildChartSheet(mainBuf, y, m) {
         <c:barDir val="col"/>
         <c:grouping val="clustered"/>
         <c:varyColors val="0"/>
-        ${serXml}
-        <c:gapWidth val="150"/>
-        <c:axId val="11111"/>
-        <c:axId val="22222"/>
+        <c:ser>
+          <c:idx val="0"/><c:order val="0"/>
+          <c:spPr><a:solidFill><a:srgbClr val="888888"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>
+          ${dptXml}
+          <c:invertIfNegative val="0"/>
+          <c:cat>
+            <c:multiLvlStrRef>
+              <c:f>${SNAME}!$A$2:$B$${N+1}</c:f>
+              <c:multiLvlStrCache>
+                <c:ptCount val="${N}"/>
+                <c:lvl>${outerPts}</c:lvl>
+                <c:lvl>${innerPts}</c:lvl>
+              </c:multiLvlStrCache>
+            </c:multiLvlStrRef>
+          </c:cat>
+          <c:val>
+            <c:numRef>
+              <c:f>${SNAME}!$C$2:$C$${N+1}</c:f>
+              <c:numCache><c:formatCode>#,##0</c:formatCode><c:ptCount val="${N}"/>${valPts}</c:numCache>
+            </c:numRef>
+          </c:val>
+        </c:ser>
+        ${phantomSer}
+        <c:gapWidth val="100"/>
+        <c:axId val="11111"/><c:axId val="22222"/>
       </c:barChart>
       <c:catAx>
         <c:axId val="11111"/>
@@ -2012,9 +2031,10 @@ async function _buildChartSheet(mainBuf, y, m) {
         <c:delete val="0"/><c:axPos val="b"/>
         <c:numFmt formatCode="General" sourceLinked="0"/>
         <c:tickLblPos val="nextTo"/>
-        <c:spPr><a:ln><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:ln></c:spPr>
+        <c:spPr><a:ln><a:solidFill><a:srgbClr val="DDDDDD"/></a:solidFill></a:ln></c:spPr>
         <c:crossAx val="22222"/>
         <c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/>
+        <c:noMultiLvlLbl val="0"/>
       </c:catAx>
       <c:valAx>
         <c:axId val="22222"/>
@@ -2022,7 +2042,7 @@ async function _buildChartSheet(mainBuf, y, m) {
         <c:delete val="0"/><c:axPos val="l"/>
         <c:numFmt formatCode="#,##0" sourceLinked="0"/>
         <c:tickLblPos val="nextTo"/>
-        <c:spPr><a:ln><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:ln></c:spPr>
+        <c:spPr><a:ln><a:solidFill><a:srgbClr val="DDDDDD"/></a:solidFill></a:ln></c:spPr>
         <c:crossAx val="11111"/>
         <c:crossBetween val="between"/>
       </c:valAx>
@@ -2034,12 +2054,15 @@ async function _buildChartSheet(mainBuf, y, m) {
   <c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>
 </c:chartSpace>`;
 
-  // ── drawing1.xml ─────────────────────────────────────────
+  // ── drawing1.xml ──────────────────────────────────────────
   const drawingXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
   <xdr:twoCellAnchor editAs="oneCell">
-    <xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${nDates+3}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-    <xdr:to><xdr:col>${Math.min(nProds+3,15)}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${nDates+23}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+    <xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+    <xdr:to><xdr:col>16</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${N+4}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
     <xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
       <xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
       <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rId1"/></a:graphicData></a:graphic>
@@ -2047,33 +2070,30 @@ async function _buildChartSheet(mainBuf, y, m) {
   </xdr:twoCellAnchor>
 </xdr:wsDr>`;
 
-  // ── rels ────────────────────────────────────────────────
   const drawingRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>`;
   const sheet2Rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`;
 
-  // ── 기존 파일 수정 ────────────────────────────────────────
-  let ct = await zip.file('[Content_Types].xml').async('string');
-  ct = ct.replace('</Types>',
-    '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-    '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' +
-    '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>' +
+  let ct=await zip.file('[Content_Types].xml').async('string');
+  ct=ct.replace('</Types>',
+    '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'+
+    '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>'+
+    '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>'+
     '</Types>');
-  zip.file('[Content_Types].xml', ct);
+  zip.file('[Content_Types].xml',ct);
 
-  let wbx = await zip.file('xl/workbook.xml').async('string');
-  wbx = wbx.replace('</sheets>', `<sheet name="${SNAME}" sheetId="2" r:id="rId99"/></sheets>`);
-  zip.file('xl/workbook.xml', wbx);
+  let wbx=await zip.file('xl/workbook.xml').async('string');
+  wbx=wbx.replace('</sheets>',`<sheet name="${SNAME}" sheetId="2" r:id="rId99"/></sheets>`);
+  zip.file('xl/workbook.xml',wbx);
 
-  let wbr = await zip.file('xl/_rels/workbook.xml.rels').async('string');
-  wbr = wbr.replace('</Relationships>',
-    `<Relationship Id="rId99" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`);
-  zip.file('xl/_rels/workbook.xml.rels', wbr);
+  let wbr=await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  wbr=wbr.replace('</Relationships>',`<Relationship Id="rId99" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`);
+  zip.file('xl/_rels/workbook.xml.rels',wbr);
 
-  zip.file('xl/worksheets/sheet2.xml', sheet2xml);
-  zip.file('xl/worksheets/_rels/sheet2.xml.rels', sheet2Rels);
-  zip.file('xl/drawings/drawing1.xml', drawingXml);
-  zip.file('xl/drawings/_rels/drawing1.xml.rels', drawingRels);
-  zip.file('xl/charts/chart1.xml', chartXml);
+  zip.file('xl/worksheets/sheet2.xml',sheet2xml);
+  zip.file('xl/worksheets/_rels/sheet2.xml.rels',sheet2Rels);
+  zip.file('xl/drawings/drawing1.xml',drawingXml);
+  zip.file('xl/drawings/_rels/drawing1.xml.rels',drawingRels);
+  zip.file('xl/charts/chart1.xml',chartXml);
 
-  return await zip.generateAsync({type:'arraybuffer', compression:'DEFLATE'});
+  return await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE'});
 }
