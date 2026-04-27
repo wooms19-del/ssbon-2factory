@@ -58,13 +58,18 @@ async function renderMonthly() {
   if(defEl){ defEl.textContent=defRate.toFixed(2)+'%'; defEl.style.color=defRate>2?'var(--d)':'var(--s)'; }
 
   // ── 제품별 테이블 ─────────────────────────────────────────
+  // 내포장 EA·일자: 차트와 동일하게 opReal(외포장, testRun 제거) 기준으로 집계
   const byProd = {};
+  opReal.forEach(r=>{ const k=r.product||'기타';
+    if(!byProd[k]) byProd[k]={ea:0,defect:0,days:new Set()};
+    byProd[k].ea+=parseInt(r.outerEa)||0;
+    byProd[k].days.add(String(r.date||'').slice(0,10));
+  });
+  // 불량률은 packing에서 가져오되 testRun 제외
   const _testOpK=new Set(op.filter(r=>r.testRun||r.isTest).map(r=>`${String(r.date||'').slice(0,10)}_${r.product||''}`));
   const _isTestPk=r=>r.testRun||r.isTest||_testOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`);
   pk.filter(r=>!_isTestPk(r)).forEach(r=>{ const k=r.product||'기타';
-    if(!byProd[k]) byProd[k]={ea:0,defect:0,days:new Set()};
-    byProd[k].ea+=parseFloat(r.ea)||0; byProd[k].defect+=parseFloat(r.defect)||0;
-    byProd[k].days.add(String(r.date||'').slice(0,10));
+    if(byProd[k]) byProd[k].defect+=parseFloat(r.defect)||0;
   });
   const opByProd = {};
   opReal.forEach(r=>{ const k=r.product||'기타';
