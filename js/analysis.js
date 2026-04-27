@@ -765,7 +765,7 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
     </table>`;
 }
 
-function exportMonthlyReport() {
+async function exportMonthlyReport() {
   const ym   = _moYm || tod().slice(0,7);
   const rows = window._moReportRows || [];
   if(!rows.length){ toast('데이터 없음','d'); return; }
@@ -980,6 +980,56 @@ function exportMonthlyReport() {
   for(let ri=2; ri<=rF; ri++) ws['!rows'][ri-1] = {hpt:22};
 
   XLSX.utils.book_append_sheet(wb, ws, y+'년'+parseInt(m,10)+'월');
+
+  // 차트 시트 추가 (ExcelJS로 이미지 삽입)
+  const canvas = document.getElementById('mo_bar_chart');
+  if (canvas) {
+    try {
+      if (!window.ExcelJS) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      const xlsxBuf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+      const wb2 = new ExcelJS.Workbook();
+      await wb2.xlsx.load(xlsxBuf);
+
+      const wsChart = wb2.addWorksheet('내포장 수량 차트');
+      for (let c = 1; c <= 12; c++) wsChart.getColumn(c).width = 9;
+
+      wsChart.mergeCells('A1:L1');
+      const t1 = wsChart.getCell('A1');
+      t1.value = '순수본 2공장';
+      t1.font = { size:10, color:{argb:'FF94A3B8'} };
+      t1.alignment = { horizontal:'center' };
+
+      wsChart.mergeCells('A2:L2');
+      const t2 = wsChart.getCell('A2');
+      t2.value = '운영팀 ' + parseInt(m) + '월 내포장 수량';
+      t2.font = { size:16, bold:true, color:{argb:'FF1E293B'} };
+      t2.alignment = { horizontal:'center', vertical:'middle' };
+      wsChart.getRow(2).height = 30;
+      wsChart.getRow(3).height = 8;
+
+      const imgBase64 = canvas.toDataURL('image/png').split(',')[1];
+      const imgId = wb2.addImage({ base64: imgBase64, extension: 'png' });
+      wsChart.addImage(imgId, { tl:{col:0, row:3}, ext:{width:900, height:300} });
+
+      const buf2 = await wb2.xlsx.writeBuffer();
+      const blob = new Blob([buf2], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = ym+'_월간생산일보.xlsx';
+      a.click();
+      toast('엑셀 다운로드 완료 ✓','s');
+      return;
+    } catch(e) {
+      console.warn('차트 시트 추가 실패, 기본 저장:', e);
+    }
+  }
   XLSX.writeFile(wb, ym+'_월간생산일보.xlsx');
   toast('엑셀 다운로드 완료 ✓','s');
 }
@@ -1653,7 +1703,7 @@ function setPd(pd, el){
 var _moPackingChart = null;
 
 function renderPackingChart(dayEntries, opMap, ym) {
-  const canvas = document.getElementById('mo_packing_chart');
+  const canvas = document.getElementById('mo_bar_chart');
   if (!canvas) return;
 
   if (_moPackingChart) { _moPackingChart.destroy(); _moPackingChart = null; }
@@ -1791,11 +1841,96 @@ function renderPackingChart(dayEntries, opMap, ym) {
 }
 
 function downloadPackingChart() {
-  const canvas = document.getElementById('mo_packing_chart');
+  const canvas = document.getElementById('mo_bar_chart');
   if (!canvas) return;
   const a = document.createElement('a');
   const ym = _moYm || tod().slice(0,7);
   a.download = ym + '_운영팀_내포장수량.png';
   a.href = canvas.toDataURL('image/png');
   a.click();
+}
+
+async function exportPackingChartExcel() {
+  const canvas = document.getElementById('mo_bar_chart');
+  if (!canvas) { toast('차트 없음','d'); return; }
+
+  // ExcelJS 동적 로드
+  if (!window.ExcelJS) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  toast('엑셀 생성 중...','i');
+  const ym  = _moYm || tod().slice(0,7);
+  const [y, m] = ym.split('-');
+  const sheetName = y+'년 '+parseInt(m)+'월';
+
+  // 캔버스 → PNG base64
+  const imgBase64 = canvas.toDataURL('image/png').split(',')[1];
+  const imgW = canvas.width;
+  const imgH = canvas.height;
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(sheetName);
+
+  // 제목
+  ws.mergeCells('A1:J1');
+  ws.getCell('A1').value = '순수본 2공장';
+  ws.getCell('A1').font = { size:10, color:{argb:'FF94A3B8'} };
+  ws.getCell('A1').alignment = { horizontal:'center' };
+
+  ws.mergeCells('A2:J2');
+  ws.getCell('A2').value = '운영팀 ' + parseInt(m) + '월 내포장 수량';
+  ws.getCell('A2').font  = { size:16, bold:true, color:{argb:'FF1E293B'} };
+  ws.getCell('A2').alignment = { horizontal:'center', vertical:'middle' };
+  ws.getRow(2).height = 28;
+
+  // 이미지 삽입 (A4 셀부터)
+  const imgId = wb.addImage({ base64: imgBase64, extension: 'png' });
+  // 열 너비 조정 (총 10열, 각 10)
+  for (let c = 1; c <= 10; c++) ws.getColumn(c).width = 10;
+  ws.getRow(3).height = 6; // 여백
+
+  // 이미지 크기: 900×300 포인트 정도 (약 10열 × 30행)
+  ws.addImage(imgId, {
+    tl: { col: 0, row: 3 },
+    ext: { width: 900, height: 300 }
+  });
+
+  // 데이터 시트
+  const ws2 = wb.addWorksheet('데이터');
+  const rows2 = window._moReportRows || [];
+  const opMap = (window._moGD && window._moGD.opMap) || {};
+
+  // 헤더
+  ws2.addRow(['날짜','제품명','생산량(EA)']);
+  ws2.getRow(1).font = { bold:true };
+  ws2.getRow(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF2C5282'} };
+  ws2.getRow(1).font = { bold:true, color:{argb:'FFFFFFFF'} };
+
+  // 날짜별+제품별 데이터
+  const dayEntries = (window._moGD && window._moGD.dayEntries) || [];
+  dayEntries.forEach(([date, dayRows]) => {
+    dayRows.forEach(row => {
+      const ea = opMap[date+'|'+row.product] || Math.round(row.ea||0);
+      if (!ea) return;
+      const r = ws2.addRow([date.slice(5).replace('-','/'), row.product, ea]);
+      r.getCell(3).numFmt = '#,##0';
+    });
+  });
+  ws2.getColumn(1).width = 10;
+  ws2.getColumn(2).width = 26;
+  ws2.getColumn(3).width = 14;
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ym + '_운영팀_내포장수량.xlsx';
+  a.click();
+  toast('엑셀 다운로드 완료 ✓','s');
 }
