@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', function() {
   window.uploadBarcodes = uploadBarcodes;
   window.previewUpload = previewUpload;
   window.exportDailyReport = exportDailyReport;
+  window.exportThawingChecklist_daily = exportThawingChecklist_daily;
   // 자숙 pending
   window.addCkTankRow = addCkTankRow;
   window.removeCkRow = removeCkRow;
