@@ -1807,14 +1807,20 @@ function renderPackingChart(dayEntries, opMap, ym) {
 
 async function downloadPackingChart() {
   const canvas = document.getElementById('mo_bar_chart');
-  if (!canvas) return;
+  if (!canvas || !_moPackingChart) return;
   const ym = _moYm || tod().slice(0,7);
-  const [y, m] = ym.split('-');
+  const [, m] = ym.split('-');
 
-  const PPT_W = 1280, PPT_H = 720;
-  const HEADER_H = 110; // 제목+범례 영역
+  const PPT_W = 1280, PPT_H = 720, HEADER_H = 110;
 
-  // 1) offscreen 흰 배경
+  // 1) 차트를 PPT 크기에 맞게 임시 확대
+  const chartWrapDiv = canvas.parentElement;
+  const origWrapH = chartWrapDiv ? chartWrapDiv.style.height : '';
+  if (chartWrapDiv) chartWrapDiv.style.height = (PPT_H - HEADER_H) + 'px';
+  _moPackingChart.resize(PPT_W, PPT_H - HEADER_H);
+  await new Promise(r => setTimeout(r, 300));
+
+  // 2) offscreen 흰 배경
   const off = document.createElement('canvas');
   off.width  = PPT_W;
   off.height = PPT_H;
@@ -1822,39 +1828,40 @@ async function downloadPackingChart() {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, PPT_W, PPT_H);
 
-  // 2) 제목
+  // 3) 제목
   ctx.textAlign = 'left';
   ctx.fillStyle = '#94A3B8';
   ctx.font = '13px sans-serif';
   ctx.fillText('순수본 2공장', 24, 28);
   ctx.fillStyle = '#1E293B';
-  ctx.font = 'bold 22px sans-serif';
-  ctx.fillText('운영팀 ' + parseInt(m) + '월 내포장 수량', 24, 58);
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillText('운영팀 ' + parseInt(m) + '월 내포장 수량', 24, 60);
 
-  // 3) 범례
+  // 4) 범례 — <span style="..."><span style="background:색상"></span>이름</span> 구조
   const legendEl = document.getElementById('mo_packing_legend');
   if (legendEl) {
     let lx = 24;
-    legendEl.querySelectorAll('span').forEach(sp => {
-      const colorEl = sp.querySelector('span[style]');
-      const textEl  = sp.querySelector('span:last-child');
-      if (!colorEl || !textEl || colorEl === textEl) return;
-      const bg = colorEl.style.background || colorEl.style.backgroundColor;
-      if (!bg) return;
+    Array.from(legendEl.children).forEach(sp => {
+      const colorEl = sp.querySelector('span');
+      if (!colorEl) return;
+      const bg = colorEl.style.background || colorEl.style.backgroundColor || '#888';
+      const label = sp.textContent.trim();
       ctx.fillStyle = bg;
-      ctx.fillRect(lx, 75, 10, 10);
-      ctx.fillStyle = '#555';
+      ctx.fillRect(lx, 78, 10, 10);
+      ctx.fillStyle = '#444';
       ctx.font = '12px sans-serif';
       ctx.textAlign = 'left';
-      const label = textEl.textContent.trim();
-      ctx.fillText(label, lx + 14, 85);
-      lx += ctx.measureText(label).width + 30;
+      ctx.fillText(label, lx + 14, 88);
+      lx += ctx.measureText(label).width + 32;
     });
   }
 
-  // 4) 기존 차트 canvas를 HEADER_H 아래에 채워서 그리기
-  const chartH = PPT_H - HEADER_H;
-  ctx.drawImage(canvas, 0, HEADER_H, PPT_W, chartH);
+  // 5) 확대된 차트 그대로 붙이기
+  ctx.drawImage(canvas, 0, HEADER_H, PPT_W, PPT_H - HEADER_H);
+
+  // 6) 원복
+  if (chartWrapDiv) chartWrapDiv.style.height = origWrapH;
+  _moPackingChart.resize();
 
   const a = document.createElement('a');
   a.download = ym + '_운영팀_내포장수량.png';
