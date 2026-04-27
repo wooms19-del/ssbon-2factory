@@ -952,23 +952,27 @@ function goDate(dateStr){
 
 var _chDayDir=0;
 function chDay(d){
-  var dt=new Date(DDATE);
-  var today=new Date(); today.setHours(0,0,0,0);
+  // 로컬 날짜 문자열 변환 헬퍼 (시간대 무관)
+  function _ld(date){
+    return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+  }
+  var dt=new Date(DDATE+'T00:00:00');  // 로컬 자정으로 파싱
+  var todayStr = _ld(new Date());
   // 최초 데이터 날짜 계산
   var allDates=[];
   if(L&&L.packing) L.packing.forEach(function(r){if(r.date)allDates.push(r.date.slice(0,10));});
   if(L&&L.thawing) L.thawing.forEach(function(r){if(r.date)allDates.push(r.date.slice(0,10));});
   allDates.sort();
-  var firstDate=allDates.length?new Date(allDates[0]+'T00:00:00'):null;
+  var firstDateStr = allDates.length ? allDates[0] : null;
 
   for(var i=0;i<60;i++){
     dt.setDate(dt.getDate()+d);
-    // 미래 차단
-    if(dt>today){ toast('오늘 이후 날짜입니다','d'); return; }
+    var ds = _ld(dt);  // 로컬 날짜 문자열
+    // 미래 차단 (문자열 비교)
+    if(ds > todayStr){ toast('오늘 이후 날짜입니다','d'); return; }
     // 과거 한계 차단
-    if(d<0&&firstDate&&dt<firstDate){ toast('더 이상 데이터가 없습니다','d'); return; }
+    if(d<0 && firstDateStr && ds < firstDateStr){ toast('더 이상 데이터가 없습니다','d'); return; }
     // 해당 날짜에 데이터 있는지 L에서 체크
-    var ds=dt.toISOString().slice(0,10);
     var has=false;
     if(L&&L.packing) has=has||L.packing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
     if(!has&&L&&L.thawing) has=has||L.thawing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
