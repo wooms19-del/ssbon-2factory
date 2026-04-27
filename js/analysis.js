@@ -58,14 +58,25 @@ async function renderMonthly() {
   if(defEl){ defEl.textContent=defRate.toFixed(2)+'%'; defEl.style.color=defRate>2?'var(--d)':'var(--s)'; }
 
   // ── 제품별 테이블 ─────────────────────────────────────────
-  // 내포장 EA·일자: pk 기준, testRun 완전 제외
+  // 월간생산일보와 동일 로직: testRun 제외 + 외포장 있으면 외포장EA, 없으면 내포장EA
   const byProd = {};
   const _testOpK=new Set(op.filter(r=>r.testRun||r.isTest).map(r=>`${String(r.date||'').slice(0,10)}_${r.product||''}`));
   const _isTestPk=r=>!!(r.testRun||r.isTest||_testOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`));
-  pk.filter(r=>!_isTestPk(r)).forEach(r=>{ const k=r.product||'기타';
-    if(!byProd[k]) byProd[k]={ea:0,defect:0,days:new Set()};
-    byProd[k].ea+=parseFloat(r.ea)||0; byProd[k].defect+=parseFloat(r.defect)||0;
-    byProd[k].days.add(String(r.date||'').slice(0,10));
+  // 외포장 map (date_product → outerEa)
+  const _opEaMap={};
+  opReal.forEach(r=>{ _opEaMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=parseInt(r.outerEa)||0; });
+  // 날짜+제품 단위로 내포장 집계 (testRun 제외)
+  const _dpMap={};
+  pk.filter(r=>!_isTestPk(r)).forEach(r=>{
+    const dt=String(r.date||'').slice(0,10), pr=r.product||'기타', key=dt+'_'+pr;
+    if(!_dpMap[key]) _dpMap[key]={dt,pr,pkEa:0,defect:0};
+    _dpMap[key].pkEa+=parseFloat(r.ea)||0;
+    _dpMap[key].defect+=parseFloat(r.defect)||0;
+  });
+  Object.values(_dpMap).forEach(({dt,pr,pkEa,defect})=>{
+    const ea=_opEaMap[dt+'_'+pr]||pkEa; // 외포장 있으면 외포장, 없으면 내포장
+    if(!byProd[pr]) byProd[pr]={ea:0,defect:0,days:new Set()};
+    byProd[pr].ea+=ea; byProd[pr].defect+=defect; byProd[pr].days.add(dt);
   });
   const opByProd = {};
   opReal.forEach(r=>{ const k=r.product||'기타';
