@@ -99,8 +99,9 @@ async function renderMonthly() {
     const op_=opByProd[prod]||{outerEa:0,boxes:0};
     const pkgKg=r2(op_.outerEa*_prodKgUnit(prod));
     totEA+=v.ea; totDef+=v.defect; totOuter+=op_.outerEa; totBx+=op_.boxes; totPkEa+=(v.pkEa||0); totProdKg=r2(totProdKg+pkgKg);
-    const dr=v.ea>0?(v.defect/v.ea*100).toFixed(2)+'%':'—';
-    const dc=v.ea>0&&v.defect/v.ea*100>2?'var(--d)':'var(--s)';
+    const _pouch=(v.pkEa||0)+v.defect;
+    const dr=_pouch>0?(v.defect/_pouch*100).toFixed(2)+'%':'—';
+    const dc=_pouch>0&&v.defect/_pouch*100>2?'var(--d)':'var(--s)';
     return `<tr>
       <td style="font-weight:500">${prod}</td>
       <td style="text-align:center">${v.days.size}일</td>
@@ -110,13 +111,14 @@ async function renderMonthly() {
       <td style="text-align:center;color:${dc}">${dr}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--g4);padding:1rem">데이터 없음</td></tr>';
-  if(tfoot){ const tdr=totEA>0?(totDef/totEA*100).toFixed(2)+'%':'—';
+  const totPouch=totPkEa+totDef;
+  if(tfoot){ const tdr=totPouch>0?(totDef/totPouch*100).toFixed(2)+'%':'—';
     tfoot.innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--g3)">
       <td>합계</td><td style="text-align:center">—</td>
       <td style="text-align:center;color:var(--p)">${totEA.toLocaleString()}</td>
       <td style="text-align:center">${(totPkEa+totDef)>0?(totPkEa+totDef).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${totProdKg>0?totProdKg.toLocaleString()+'kg':'—'}</td>
-      <td style="text-align:center;color:${totEA>0&&totDef/totEA*100>2?'var(--d)':'var(--s)'}">${tdr}</td>
+      <td style="text-align:center;color:${totPouch>0&&totDef/totPouch*100>2?'var(--d)':'var(--s)'}">${tdr}</td>
     </tr>`; }
 
   // ── 차트 ─────────────────────────────────────────────────
