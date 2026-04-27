@@ -412,6 +412,8 @@ async function exportThawingChecklist() {
 
     const boxStartRow = rowIdx;
     boxes.forEach((bx, i) => {
+      // 바코드 코드 기반 해시 (순서 무관하게 동일한 값)
+      const _codeHash = ic[i] ? ic[i].split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0, 0) : i;
       const offsetMin = Math.floor(i / 4);
       let h = baseHour;
       let m = baseMin + offsetMin;
@@ -423,7 +425,7 @@ async function exportThawingChecklist() {
       em = em % 60;
       const rfEnd = `${prevMD} ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
       
-      const thawTemp = +(seededVal(i) * 1.0 - 5.0).toFixed(1);
+      const thawTemp = +(seededVal(_codeHash) * 1.0 - 5.0).toFixed(1);
       const bloodTemp = bloodTemps[i] !== undefined ? bloodTemps[i] : '';
       
       // 방혈 시작 = 해동 종료 (같은 시점)
