@@ -1807,13 +1807,14 @@ function renderPackingChart(dayEntries, opMap, ym) {
 
 async function downloadPackingChart() {
   const canvas = document.getElementById('mo_bar_chart');
-  if (!canvas || !_moPackingChart) return;
+  if (!canvas) return;
   const ym = _moYm || tod().slice(0,7);
   const [y, m] = ym.split('-');
 
   const PPT_W = 1280, PPT_H = 720;
+  const HEADER_H = 110; // 제목+범례 영역
 
-  // offscreen 캔버스에 흰 배경
+  // 1) offscreen 흰 배경
   const off = document.createElement('canvas');
   off.width  = PPT_W;
   off.height = PPT_H;
@@ -1821,64 +1822,39 @@ async function downloadPackingChart() {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, PPT_W, PPT_H);
 
-  // 제목 그리기
-  const subtitle = '순수본 2공장';
-  const titleText = '운영팀 ' + parseInt(m) + '월 내포장 수량';
+  // 2) 제목
   ctx.textAlign = 'left';
   ctx.fillStyle = '#94A3B8';
   ctx.font = '13px sans-serif';
-  ctx.fillText(subtitle, 24, 32);
+  ctx.fillText('순수본 2공장', 24, 28);
   ctx.fillStyle = '#1E293B';
   ctx.font = 'bold 22px sans-serif';
-  ctx.fillText(titleText, 24, 60);
+  ctx.fillText('운영팀 ' + parseInt(m) + '월 내포장 수량', 24, 58);
 
-  // 범례 그리기
+  // 3) 범례
   const legendEl = document.getElementById('mo_packing_legend');
   if (legendEl) {
-    const spans = legendEl.querySelectorAll('span[style*="display:flex"], span[style*="display: flex"]');
     let lx = 24;
-    const ly = 88;
-    spans.forEach(sp => {
-      const colorSp = sp.querySelector('span[style*="background"]');
-      const textSp  = sp.querySelector('span:last-child');
-      if (!colorSp || !textSp) return;
-      const bg = colorSp.style.background || colorSp.style.backgroundColor || '#888';
+    legendEl.querySelectorAll('span').forEach(sp => {
+      const colorEl = sp.querySelector('span[style]');
+      const textEl  = sp.querySelector('span:last-child');
+      if (!colorEl || !textEl || colorEl === textEl) return;
+      const bg = colorEl.style.background || colorEl.style.backgroundColor;
+      if (!bg) return;
       ctx.fillStyle = bg;
-      ctx.fillRect(lx, ly - 9, 10, 10);
+      ctx.fillRect(lx, 75, 10, 10);
       ctx.fillStyle = '#555';
       ctx.font = '12px sans-serif';
       ctx.textAlign = 'left';
-      const label = textSp.textContent.trim();
-      ctx.fillText(label, lx + 14, ly);
-      lx += ctx.measureText(label).width + 36;
+      const label = textEl.textContent.trim();
+      ctx.fillText(label, lx + 14, 85);
+      lx += ctx.measureText(label).width + 30;
     });
   }
 
-  // 차트를 offscreen에 크게 다시 그리기
-  const chartTop = 110;
-  const chartH   = PPT_H - chartTop - 10;
-  const chartConf = _moPackingChart.config;
-
-  // 임시 캔버스에 차트 렌더링
-  const tmpCanvas = document.createElement('canvas');
-  tmpCanvas.width  = PPT_W;
-  tmpCanvas.height = chartH;
-  const tmpChart = new Chart(tmpCanvas, {
-    type: chartConf.type,
-    plugins: chartConf.plugins ? [] : [],
-    data: JSON.parse(JSON.stringify(chartConf.data)),
-    options: Object.assign({}, JSON.parse(JSON.stringify(chartConf.options || {})), {
-      responsive: false,
-      animation: false,
-      plugins: Object.assign({}, (chartConf.options||{}).plugins, {
-        legend: { display: false }
-      })
-    })
-  });
-  await new Promise(r => setTimeout(r, 300));
-
-  ctx.drawImage(tmpCanvas, 0, chartTop, PPT_W, chartH);
-  tmpChart.destroy();
+  // 4) 기존 차트 canvas를 HEADER_H 아래에 채워서 그리기
+  const chartH = PPT_H - HEADER_H;
+  ctx.drawImage(canvas, 0, HEADER_H, PPT_W, chartH);
 
   const a = document.createElement('a');
   a.download = ym + '_운영팀_내포장수량.png';
