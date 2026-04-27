@@ -799,60 +799,171 @@ function exportMonthlyReport() {
   const fmtEa  = '#,##0';
   const fmtPct = '0.0%';
   const COL    = 'ABCDEFGHIJK';
+  const NCOLS  = 11;
+
+  // ── 스타일 정의 ──────────────────────────────────────────
+  const borderAll = {
+    top:    {style:'thin', color:{rgb:'BBBBBB'}},
+    bottom: {style:'thin', color:{rgb:'BBBBBB'}},
+    left:   {style:'thin', color:{rgb:'BBBBBB'}},
+    right:  {style:'thin', color:{rgb:'BBBBBB'}}
+  };
+  const borderHeader = {
+    top:    {style:'medium', color:{rgb:'3A5F8A'}},
+    bottom: {style:'medium', color:{rgb:'3A5F8A'}},
+    left:   {style:'thin',   color:{rgb:'3A5F8A'}},
+    right:  {style:'thin',   color:{rgb:'3A5F8A'}}
+  };
+  const borderTotal = {
+    top:    {style:'medium', color:{rgb:'444444'}},
+    bottom: {style:'medium', color:{rgb:'444444'}},
+    left:   {style:'thin',   color:{rgb:'888888'}},
+    right:  {style:'thin',   color:{rgb:'888888'}}
+  };
+
+  function _sHdr(v) {
+    return {
+      t:'s', v,
+      s:{ font:{bold:true, color:{rgb:'FFFFFF'}, sz:10},
+          fill:{fgColor:{rgb:'2C5282'}},
+          alignment:{horizontal:'center', vertical:'center', wrapText:true},
+          border: borderHeader }
+    };
+  }
+  function _sCell(t, v, extra) {
+    return Object.assign({t, v}, extra||{}, {
+      s: Object.assign({
+        font:{sz:10},
+        alignment:{horizontal:'center', vertical:'center'},
+        border: borderAll
+      }, (extra&&extra.s)||{})
+    });
+  }
+  function _sCellF(f, z, sExtra) {
+    return {
+      t:'n', f, z,
+      s: Object.assign({
+        font:{sz:10},
+        alignment:{horizontal:'center', vertical:'center'},
+        border: borderAll
+      }, sExtra||{})
+    };
+  }
+  function _sTotalCell(t, v, extra) {
+    return Object.assign({t, v}, extra||{}, {
+      s: Object.assign({
+        font:{bold:true, sz:10},
+        fill:{fgColor:{rgb:'EBF2FF'}},
+        alignment:{horizontal:'center', vertical:'center'},
+        border: borderTotal
+      }, (extra&&extra.s)||{})
+    });
+  }
+  function _sTotalF(f, z) {
+    return {
+      t:'n', f, z,
+      s:{ font:{bold:true, sz:10},
+          fill:{fgColor:{rgb:'EBF2FF'}},
+          alignment:{horizontal:'center', vertical:'center'},
+          border: borderTotal }
+    };
+  }
+
+  // 짝수 행 연하게
+  function _rowFill(rIdx) { // rIdx: 0-based data row index
+    return rIdx % 2 === 1 ? {fgColor:{rgb:'F7FAFF'}} : {fgColor:{rgb:'FFFFFF'}};
+  }
 
   const wb = XLSX.utils.book_new();
   const ws = {};
   const merges = [];
 
-  // 1행: 헤더
+  // ── 1행: 헤더 ────────────────────────────────────────────
   ['생산일수','생산일자','작업인원','원육종류','제품명',
    '원육 사용량(KG)','생산량(EA)','완제품 원육 중량(KG)',
    '원육수율','Full Capa','비고'
-  ].forEach((h,ci) => { ws[COL[ci]+'1'] = {t:'s', v:h}; });
+  ].forEach((h,ci) => { ws[COL[ci]+'1'] = _sHdr(h); });
 
   let r = 2;
   let i = 0;
   let dayCnt = 0;
+  let dataRowIdx = 0; // for alternating row color (per date group)
 
   while(i < rows.length) {
-    // 같은 날짜 행 묶기 (첫 행만 dayNo 있음)
     let j = i + 1;
     while(j < rows.length && rows[j].dayNo === '') j++;
     const dayRows = rows.slice(i, j);
     const cnt    = dayRows.length;
     const rStart = r;
     const rEnd   = r + cnt - 1;
-    const date   = dayRows[0].date;   // "2026-04-01"
+    const date   = dayRows[0].date;
     dayCnt++;
+    const fill   = _rowFill(dataRowIdx);
+    dataRowIdx++;
 
     dayRows.forEach((row, ri) => {
       const isFirst = ri === 0;
-      const ea = opMap[date+'|'+row.product] || 0;
-      const rmVal  = isFirst ? (parseFloat(row.rm)||0) : 0;
-      const pkVal  = parseFloat(row.pkKg)||0;
+      const ea      = opMap[date+'|'+row.product] || 0;
+      const rmVal   = isFirst ? (parseFloat(row.rm)||0) : 0;
+      const pkVal   = parseFloat(row.pkKg)||0;
       const capaRaw = isFirst ? parseFloat(String(row.capa||'').replace(/,/g,'')) : NaN;
+      const rowS    = { font:{sz:10}, fill, alignment:{horizontal:'center',vertical:'center'}, border:borderAll };
 
-      ws['A'+r] = isFirst ? {t:'n', v:parseInt(row.dayNo)||dayCnt}           : {t:'s',v:''};
-      ws['B'+r] = isFirst ? {t:'s', v:date.slice(5).replace('-','/')}         : {t:'s',v:''};
-      ws['C'+r] = isFirst && row.workers!=='' ? {t:'n', v:parseFloat(row.workers)||0} : {t:'s',v:''};
-      ws['D'+r] = isFirst ? {t:'s', v:row.meat||''}                           : {t:'s',v:''};
-      ws['E'+r] = {t:'s', v:row.product||''};
-      ws['F'+r] = isFirst && rmVal  ? {t:'n', v:rmVal,  z:fmtNum}             : {t:'s',v:''};
-      ws['G'+r] = ea>0              ? {t:'n', v:ea,     z:fmtEa}              : {t:'s',v:''};
-      ws['H'+r] = pkVal>0           ? {t:'n', v:pkVal,  z:fmtNum}             : {t:'s',v:''};
-      // 원육수율: 수식 (첫 행에만, 다제품 날은 SUM(H start:H end)/F first)
+      // A: 일수
+      ws['A'+r] = isFirst
+        ? {t:'n', v:parseInt(row.dayNo)||dayCnt, s:Object.assign({},rowS,{font:{bold:true,sz:10}})}
+        : {t:'s', v:'', s:rowS};
+      // B: 날짜
+      ws['B'+r] = isFirst
+        ? {t:'s', v:date.slice(5).replace('-','/'), s:rowS}
+        : {t:'s', v:'', s:rowS};
+      // C: 인원
+      ws['C'+r] = (isFirst && row.workers!=='')
+        ? {t:'n', v:parseFloat(row.workers)||0, s:rowS}
+        : {t:'s', v:'', s:rowS};
+      // D: 원육종류
+      ws['D'+r] = isFirst
+        ? {t:'s', v:row.meat||'', s:rowS}
+        : {t:'s', v:'', s:rowS};
+      // E: 제품명 (왼쪽 정렬)
+      ws['E'+r] = {t:'s', v:row.product||'',
+        s:Object.assign({},rowS,{alignment:{horizontal:'left',vertical:'center',indent:1}})};
+      // F: 원육 사용량
+      ws['F'+r] = (isFirst && rmVal)
+        ? {t:'n', v:rmVal, z:fmtNum, s:rowS}
+        : {t:'s', v:'', s:rowS};
+      // G: 생산량(EA)
+      ws['G'+r] = ea>0
+        ? {t:'n', v:ea, z:fmtEa, s:Object.assign({},rowS,{font:{bold:true,sz:10,color:{rgb:'1A56A0'}}})}
+        : {t:'s', v:'', s:rowS};
+      // H: 완제품 원육 중량
+      ws['H'+r] = pkVal>0
+        ? {t:'n', v:pkVal, z:fmtNum, s:rowS}
+        : {t:'s', v:'', s:rowS};
+      // I: 원육수율 (수식)
       if(isFirst && rmVal) {
         const hRef = cnt>1 ? 'SUM(H'+rStart+':H'+rEnd+')' : 'H'+r;
-        ws['I'+r] = {t:'n', f:hRef+'/F'+r, z:fmtPct};
+        const yld  = cnt>1
+          ? (dayRows.reduce((s,dr)=>(s+parseFloat(dr.pkKg)||0),0))/(rmVal)
+          : (pkVal/rmVal);
+        const yldColor = yld < 0.50 ? {rgb:'D44'} : yld >= 0.53 ? {rgb:'1A6F3C'} : {rgb:'B06000'};
+        ws['I'+r] = {t:'n', f:hRef+'/F'+r, z:fmtPct,
+          s:Object.assign({},rowS,{font:{bold:true,sz:10,color:yldColor}})};
       } else {
-        ws['I'+r] = {t:'s',v:''};
+        ws['I'+r] = {t:'s', v:'', s:rowS};
       }
-      ws['J'+r] = isFirst && !isNaN(capaRaw) && capaRaw>0 ? {t:'n', v:capaRaw, z:fmtEa} : {t:'s',v:''};
-      ws['K'+r] = isFirst ? {t:'s', v:row.note||''}                           : {t:'s',v:''};
+      // J: Full Capa
+      ws['J'+r] = (isFirst && !isNaN(capaRaw) && capaRaw>0)
+        ? {t:'n', v:capaRaw, z:fmtEa, s:Object.assign({},rowS,{font:{color:{rgb:'888888'},sz:10}})}
+        : {t:'s', v:'', s:rowS};
+      // K: 비고
+      ws['K'+r] = isFirst
+        ? {t:'s', v:row.note||'', s:Object.assign({},rowS,{alignment:{horizontal:'left',vertical:'center',indent:1}})}
+        : {t:'s', v:'', s:rowS};
       r++;
     });
 
-    // 다제품 날 → 셀 병합 (일수·날짜·인원·원육종류·원육사용량·수율·Capa·비고)
+    // 다제품 날 병합
     if(cnt > 1) {
       [0,1,2,3,5,8,9,10].forEach(ci => {
         merges.push({s:{r:rStart-1,c:ci}, e:{r:rEnd-1,c:ci}});
@@ -861,25 +972,39 @@ function exportMonthlyReport() {
     i = j;
   }
 
-  // 합계 행 (수식)
+  // ── 합계 행 (SUBTOTAL — 필터 시 보이는 행만 집계) ────────
   const rF = r;
-  ws['A'+rF] = {t:'s', v:'합  계  ('+dayCnt+'일)'};
+  const dataRange2 = 'F2:F'+(rF-1);
+  const dataRange7 = 'G2:G'+(rF-1);
+  const dataRange8 = 'H2:H'+(rF-1);
+
+  ws['A'+rF] = _sTotalCell('s','합  계  ('+dayCnt+'일)');
   merges.push({s:{r:rF-1,c:0}, e:{r:rF-1,c:4}});
-  ws['F'+rF] = {t:'n', f:'SUM(F2:F'+(rF-1)+')', z:fmtNum};
-  ws['G'+rF] = {t:'n', f:'SUM(G2:G'+(rF-1)+')', z:fmtEa};
-  ws['H'+rF] = {t:'n', f:'SUM(H2:H'+(rF-1)+')', z:fmtNum};
-  ws['I'+rF] = {t:'n', f:'H'+rF+'/F'+rF,         z:fmtPct};
+  // B~D: 병합 내 빈칸 스타일
+  ['B','C','D','E'].forEach(c => { ws[c+rF] = _sTotalCell('s',''); });
+  ws['F'+rF] = _sTotalF('SUBTOTAL(9,'+dataRange2+')', fmtNum);
+  ws['G'+rF] = _sTotalF('SUBTOTAL(9,'+dataRange7+')', fmtEa);
+  ws['H'+rF] = _sTotalF('SUBTOTAL(9,'+dataRange8+')', fmtNum);
+  ws['I'+rF] = _sTotalF('H'+rF+'/F'+rF, fmtPct);
+  ws['J'+rF] = _sTotalCell('s','');
+  ws['K'+rF] = _sTotalCell('s','');
+
+  // ── 자동필터 (헤더 행) ────────────────────────────────────
+  ws['!autofilter'] = {ref: 'A1:K'+(rF-1)};
 
   ws['!merges'] = merges;
   ws['!ref']    = 'A1:K'+rF;
   ws['!cols']   = [
-    {wch:6},{wch:10},{wch:8},{wch:12},{wch:22},
-    {wch:14},{wch:12},{wch:16},{wch:10},{wch:10},{wch:20}
+    {wch:6},{wch:10},{wch:8},{wch:12},{wch:24},
+    {wch:14},{wch:12},{wch:18},{wch:10},{wch:10},{wch:20}
   ];
+  // 행 높이: 헤더 30px, 데이터 22px
+  ws['!rows'] = [{hpt:30}];
+  for(let ri=2; ri<=rF; ri++) ws['!rows'][ri-1] = {hpt:22};
 
   XLSX.utils.book_append_sheet(wb, ws, y+'년'+parseInt(m,10)+'월');
   XLSX.writeFile(wb, ym+'_월간생산일보.xlsx');
-  toast('엑셀 다운로드 완료 ✓ (수식 포함)','s');
+  toast('엑셀 다운로드 완료 ✓','s');
 }
 
 
