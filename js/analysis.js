@@ -303,6 +303,8 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
     _moRenderYieldKPI(moTotRm, moTotPkKg, moAvgYld, moDays, moGoodDays, moLossKg);
     _moRenderYieldChart(dailyYields);
     _moLoadAndRenderPrevCmp(moAvgYld, moTotRm, moTotPkKg, moDays);
+    // KPI 일평균 원육 사용량
+    setText('mo_avg', moDays>0?Math.round(moTotRm/moDays).toLocaleString():'—');
   }
 
   /* ── DEAD CODE PLACEHOLDER (do not remove – replaced by _moRenderRows) ── */
@@ -740,8 +742,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     _moRenderPrevCmp(el,{yld:curYld,rm:curRm,pkKg:curPkKg,days:curDays},{yld:pYld,rm:pRm,pkKg:pPk,days:pDays},prevYm);
   } catch(e) {
     // KPI 일평균 원육 사용량 갱신
-  if(cur.days>0) setText('mo_avg', Math.round(cur.rm/cur.days).toLocaleString());
-  el.innerHTML=`<div class="ct">전월 비교</div><div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">전월 데이터 없음</div>`;
+    el.innerHTML=`<div class="ct">전월 비교</div><div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">전월 데이터 없음</div>`;
   }
 }
 function _moRenderPrevCmp(el, cur, prev, prevYm) {
