@@ -385,7 +385,7 @@ async function exportThawingChecklist() {
     const bloodPositions = bloodGroups.map(g => g.start);
     const bloodTemps = {};
     bloodPositions.forEach(pos => {
-      bloodTemps[pos] = +(Math.random() * 1.0 - 2.0).toFixed(1);
+      bloodTemps[pos] = +(Math.random() * 3.0 - 1.0).toFixed(1);
     });
 
     let bloodEnd;
@@ -411,7 +411,7 @@ async function exportThawingChecklist() {
       em = em % 60;
       const rfEnd = `${prevMD} ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
       
-      const thawTemp = +(Math.random() * 3.0 - 7.0).toFixed(1);
+      const thawTemp = +(Math.random() * 1.0 - 5.0).toFixed(1);
       const bloodTemp = bloodTemps[i] !== undefined ? bloodTemps[i] : '';
       
       // 방혈 시작 = 해동 종료 (같은 시점)
