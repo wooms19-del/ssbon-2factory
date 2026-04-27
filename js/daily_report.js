@@ -5,7 +5,7 @@ async function exportDailyReport() {
   if(!date) { toast('날짜를 선택하세요','d'); return; }
   toast('일지 생성 중...','i');
 
-  const prevD = (()=>{const d=new Date(date+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+  const prevD = (()=>{const d=new Date(date+'T00:00:00');d.setDate(d.getDate()-1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
 
   let [bc,th,pp,ck,sh,pk,sc_] = await Promise.all([
     fbGetByDate('barcode',prevD), fbGetByDate('thawing',date),
@@ -206,11 +206,11 @@ async function exportThawingChecklist() {
     totalByType[ty] = (totalByType[ty] || 0) + (parseFloat(t.totalKg) || 0);
   });
 
-  // 전날 (방혈 시작일)
+  // 전날 (방혈 시작일) - 시간대 무관, 로컬 날짜 문자열 사용
   const prevD = (()=>{
     const d=new Date(date+'T00:00:00');
     d.setDate(d.getDate()-1);
-    return d.toISOString().slice(0,10);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   })();
   const prevMD = prevD.slice(5);
 
