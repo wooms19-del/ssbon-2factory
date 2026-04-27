@@ -754,7 +754,7 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
           <td style="padding:7px 3px;text-align:right">${delta(cur.rm,prev.rm,true)}</td>
         </tr>
         <tr style="border-top:1px solid #f1f5f9">
-          <td style="padding:7px 3px;color:#64748b">완제품 중량</td>
+          <td style="padding:7px 3px;color:#64748b">완제품 원육 중량</td>
           <td style="padding:7px 3px;text-align:right">${fmt(prev.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
           <td style="padding:7px 3px;text-align:right;font-weight:600">${fmt(cur.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
           <td style="padding:7px 3px;text-align:right">${delta(cur.pkKg,prev.pkKg,true)}</td>
