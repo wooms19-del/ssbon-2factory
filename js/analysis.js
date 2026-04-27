@@ -1808,10 +1808,18 @@ function renderPackingChart(dayEntries, opMap, ym) {
 function downloadPackingChart() {
   const canvas = document.getElementById('mo_bar_chart');
   if (!canvas) return;
+  // 흰 배경 합성 후 저장
+  const offscreen = document.createElement('canvas');
+  offscreen.width  = canvas.width;
+  offscreen.height = canvas.height;
+  const ctx = offscreen.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+  ctx.drawImage(canvas, 0, 0);
   const a = document.createElement('a');
   const ym = _moYm || tod().slice(0,7);
   a.download = ym + '_운영팀_내포장수량.png';
-  a.href = canvas.toDataURL('image/png');
+  a.href = offscreen.toDataURL('image/png');
   a.click();
 }
 
