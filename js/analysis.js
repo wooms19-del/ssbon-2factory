@@ -110,31 +110,7 @@ async function renderMonthly() {
   const defVals=dates.map(d=>byDate[d].ea>0?parseFloat((byDate[d].def/byDate[d].ea*100).toFixed(2)):null);
   const labels=dates.map(d=>d.slice(5)+'('+dayOfWeek(d)+')');
 
-  const ctx1=document.getElementById('mo_bar_chart');
-  if(ctx1){ if(_moBarChart){_moBarChart.destroy();_moBarChart=null;}
-    // 막대 위 수치 표시 플러그인
-    const _topLbl={id:'topLbl',afterDatasetsDraw(chart){
-      const {ctx}=chart; ctx.save();
-      chart.data.datasets.forEach((_,i)=>{
-        chart.getDatasetMeta(i).data.forEach((bar,j)=>{
-          const v=chart.data.datasets[i].data[j];
-          if(v==null||v<=0) return;
-          const s=v>=1000?'약'+(v>=10000?(v/10000).toFixed(1)+'만':(v/1000).toFixed(1)+'k'):String(v);
-          ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
-          ctx.textAlign='center'; ctx.textBaseline='bottom';
-          ctx.fillText(s, bar.x, bar.y-2);
-        });
-      });
-      ctx.restore();
-    }};
-        _moBarChart=new Chart(ctx1,{type:'bar',plugins:[_topLbl],data:{labels,datasets:[
-      {label:'생산EA',data:eaVals,backgroundColor:'#3b82f6',borderRadius:5,borderSkipped:false}
-    ]},options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:v=>v.raw.toLocaleString()+' EA'}}},
-      scales:{x:{ticks:{color:'#888',font:{size:10},maxRotation:45},grid:{display:false}},
-              y:{ticks:{color:'#888',font:{size:10},callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v},
-                 grid:{color:'rgba(128,128,128,0.1)'},min:0}}}});
-  }
+  // mo_bar_chart → renderPackingChart로 위임 (renderMonthlyReport에서 호출)
   const ctx2=document.getElementById('mo_def_chart');
   if(ctx2){ if(_moDefChart){_moDefChart.destroy();_moDefChart=null;}
     _moDefChart=new Chart(ctx2,{type:'line',plugins:[{id:'lineLbl',afterDatasetsDraw(chart){
