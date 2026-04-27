@@ -1951,11 +1951,28 @@ async function _buildChartSheet(mainBuf, y, m) {
     cells+=`</row>`;
   });
   // 범례 행 (E2~E5)
-  const legendRows=legendProds.map((p,i)=>`<row r="${i+2}"><c r="E${i+2}" t="inlineStr"><is><t>■ ${ps(p)} = ${p}</t></is></c></row>`).join('');
+  // 범례 행은 데이터 아래 별도 처리
+  const legendRows='';
 
   const sheet2xml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="8" customWidth="1"/><col min="3" max="3" width="10" customWidth="1"/><col min="4" max="4" width="3" customWidth="1"/><col min="5" max="5" width="28" customWidth="1"/></cols><sheetData>${cells}${legendRows}</sheetData><drawing r:id="rId1"/></worksheet>`;
 
   // ── chart1.xml: 단일시리즈, dPt 색상, multiLvlStrRef ───────
+  // 범례용 라인 시리즈 (투명, 데이터 없음 - 범례 항목만)
+  const legendProdsUniq=[...new Set(rows.map(r=>r.pf))];
+  let legendSerXml='';
+  legendProdsUniq.forEach((prod,pi)=>{
+    const c=pColor(prod);
+    legendSerXml+=`<c:ser>
+      <c:idx val="${pi+1}"/><c:order val="${pi+1}"/>
+      <c:tx><c:strRef><c:f></c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${prod}</c:v></c:pt></c:strCache></c:strRef></c:tx>
+      <c:spPr><a:solidFill><a:srgbClr val="${c}"/></a:solidFill><a:ln w="25400"><a:solidFill><a:srgbClr val="${c}"/></a:solidFill></a:ln></c:spPr>
+      <c:marker><c:symbol val="square"/><c:size val="8"/><c:spPr><a:solidFill><a:srgbClr val="${c}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:marker>
+      <c:cat><c:strRef><c:f></c:f><c:strCache><c:ptCount val="0"/></c:strCache></c:strRef></c:cat>
+      <c:val><c:numRef><c:f></c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="0"/></c:numCache></c:numRef></c:val>
+      <c:smooth val="0"/>
+    </c:ser>`;
+  });
+
   let dptXml='';
   rows.forEach((r,i)=>{
     dptXml+=`<c:dPt><c:idx val="${i}"/><c:invertIfNegative val="0"/><c:spPr><a:solidFill><a:srgbClr val="${pColor(r.pf)}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`;
@@ -2013,6 +2030,12 @@ async function _buildChartSheet(mainBuf, y, m) {
         <c:gapWidth val="60"/>
         <c:axId val="11111"/><c:axId val="22222"/>
       </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/>
+        <c:varyColors val="0"/>
+        ${legendSerXml}
+        <c:axId val="11111"/><c:axId val="22222"/>
+      </c:lineChart>
       <c:catAx>
         <c:axId val="11111"/>
         <c:scaling><c:orientation val="minMax"/></c:scaling>
@@ -2034,7 +2057,7 @@ async function _buildChartSheet(mainBuf, y, m) {
         <c:crossAx val="11111"/><c:crossBetween val="between"/>
       </c:valAx>
     </c:plotArea>
-    <c:legend><c:legendPos val="b"/><c:overlay val="0"/><c:legendEntry><c:idx val="0"/><c:delete val="1"/></c:legendEntry></c:legend>
+    <c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>
     <c:plotVisOnly val="1"/>
     <c:dispBlanksAs val="gap"/>
   </c:chart>
