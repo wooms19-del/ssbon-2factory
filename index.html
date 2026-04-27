@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<!-- 캐시 방지: 주요 HTML/JS 항상 최신 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="mobile-web-app-capable" content="yes">
@@ -926,5 +930,42 @@
 <script src="js/attendance.js?v=19"></script>
 <script src="js/timepicker.js?v=2"></script>
 <script src="js/globals.js?v=2"></script>
+
+<script>
+// 빌드 버전 자동 감지 - 옛날 코드 사용 차단
+(function(){
+  var BUILD_VERSION = 'b20260427_1500'; // 빌드마다 자동 업데이트
+  var lastSeen = localStorage.getItem('ssbon_build_v');
+  if(lastSeen && lastSeen !== BUILD_VERSION){
+    // 이전과 다른 버전 → 코드 강제 새로고침
+    localStorage.setItem('ssbon_build_v', BUILD_VERSION);
+    if(!sessionStorage.getItem('ssbon_force_reloaded')){
+      sessionStorage.setItem('ssbon_force_reloaded', '1');
+      console.log('[빌드 갱신] 새 버전 감지, 페이지 리로드');
+      location.reload(true);
+      return;
+    }
+  } else {
+    localStorage.setItem('ssbon_build_v', BUILD_VERSION);
+  }
+  sessionStorage.removeItem('ssbon_force_reloaded');
+  
+  // 매일 자정 이후 처음 방문 시 자동 새로고침 (24시간 이상 안 새로고침한 사용자)
+  var lastVisit = parseInt(localStorage.getItem('ssbon_last_visit') || '0');
+  var now = Date.now();
+  if(lastVisit && (now - lastVisit) > 12*60*60*1000){
+    localStorage.setItem('ssbon_last_visit', String(now));
+    if(!sessionStorage.getItem('ssbon_daily_reload')){
+      sessionStorage.setItem('ssbon_daily_reload', '1');
+      console.log('[일일 갱신] 12시간 경과, 페이지 리로드');
+      location.reload(true);
+      return;
+    }
+  } else {
+    localStorage.setItem('ssbon_last_visit', String(now));
+  }
+  sessionStorage.removeItem('ssbon_daily_reload');
+})();
+</script>
 </body>
 </html>
