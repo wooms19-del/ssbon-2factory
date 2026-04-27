@@ -65,7 +65,7 @@ async function renderMonthly() {
   const defRate  = _kpiPouch > 0 ? totalDef/_kpiPouch*100 : 0;
 
   setText('mo_ea',    totalEA.toLocaleString());
-  setText('mo_avg',   avgEA.toLocaleString());
+  // mo_avg는 _moLoadAndRenderPrevCmp에서 일평균 원육으로 갱신됨
   setText('mo_days',  workDays+'작업일');
   setText('mo_boxes', totalBoxes.toLocaleString()+'박스');
   setText('mo_outer_ea', totalOuterEA.toLocaleString()+' EA');
@@ -739,7 +739,9 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     const pYld=pRm>0?pPk/pRm*100:0;
     _moRenderPrevCmp(el,{yld:curYld,rm:curRm,pkKg:curPkKg,days:curDays},{yld:pYld,rm:pRm,pkKg:pPk,days:pDays},prevYm);
   } catch(e) {
-    el.innerHTML=`<div class="ct">전월 비교</div><div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">전월 데이터 없음</div>`;
+    // KPI 일평균 원육 사용량 갱신
+  if(cur.days>0) setText('mo_avg', Math.round(cur.rm/cur.days).toLocaleString());
+  el.innerHTML=`<div class="ct">전월 비교</div><div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">전월 데이터 없음</div>`;
   }
 }
 function _moRenderPrevCmp(el, cur, prev, prevYm) {
@@ -758,41 +760,41 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
   el.innerHTML=`<div class="ct">전월 비교</div>
     <table style="width:100%;font-size:12px;border-collapse:collapse">
       <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #f1f5f9">
-        <td style="padding:5px 3px">항목</td>
-        <td style="padding:5px 3px;text-align:right">${prevLbl}</td>
-        <td style="padding:5px 3px;text-align:right">${curLbl}</td>
-        <td style="padding:5px 3px;text-align:right">증감</td>
+        <td style="padding:5px 3px;text-align:center">항목</td>
+        <td style="padding:5px 3px;text-align:center">${prevLbl}</td>
+        <td style="padding:5px 3px;text-align:center">${curLbl}</td>
+        <td style="padding:5px 3px;text-align:center">증감</td>
       </tr></thead>
       <tbody>
         <tr style="border-top:1px solid #f1f5f9">
           <td style="padding:7px 3px;color:#64748b">원육 사용량</td>
-          <td style="padding:7px 3px;text-align:right">${fmt(prev.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:right;font-weight:600">${fmt(cur.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:right">${delta(cur.rm,prev.rm,true)}</td>
+          <td style="padding:7px 3px;text-align:center">${fmt(prev.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+          <td style="padding:7px 3px;text-align:center;font-weight:600">${fmt(cur.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+          <td style="padding:7px 3px;text-align:center">${delta(cur.rm,prev.rm,true)}</td>
         </tr>
         <tr style="border-top:1px solid #f1f5f9">
           <td style="padding:7px 3px;color:#64748b">완제품 원육 중량</td>
-          <td style="padding:7px 3px;text-align:right">${fmt(prev.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:right;font-weight:600">${fmt(cur.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:right">${delta(cur.pkKg,prev.pkKg,true)}</td>
+          <td style="padding:7px 3px;text-align:center">${fmt(prev.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+          <td style="padding:7px 3px;text-align:center;font-weight:600">${fmt(cur.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+          <td style="padding:7px 3px;text-align:center">${delta(cur.pkKg,prev.pkKg,true)}</td>
         </tr>
         <tr style="border-top:1px solid #f1f5f9;background:#f8fafc">
           <td style="padding:7px 3px;font-weight:700">평균 수율</td>
-          <td style="padding:7px 3px;text-align:right">${prev.yld>0?prev.yld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:7px 3px;text-align:right;font-weight:700;color:${cur.yld>=52?'#1d4ed8':cur.yld>=50?'#c2410c':'#b91c1c'}">${cur.yld>0?cur.yld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:7px 3px;text-align:right">${delta(cur.yld,prev.yld,true)}</td>
+          <td style="padding:7px 3px;text-align:center">${prev.yld>0?prev.yld.toFixed(1)+'%':'—'}</td>
+          <td style="padding:7px 3px;text-align:center;font-weight:700;color:${cur.yld>=52?'#1d4ed8':cur.yld>=50?'#c2410c':'#b91c1c'}">${cur.yld>0?cur.yld.toFixed(1)+'%':'—'}</td>
+          <td style="padding:7px 3px;text-align:center">${delta(cur.yld,prev.yld,true)}</td>
         </tr>
         <tr style="border-top:1px solid #f1f5f9">
           <td style="padding:7px 3px;color:#64748b">작업일수</td>
-          <td style="padding:7px 3px;text-align:right">${prev.days}일</td>
-          <td style="padding:7px 3px;text-align:right;font-weight:600">${cur.days}일</td>
-          <td style="padding:7px 3px;text-align:right">${delta(cur.days,prev.days,true)}</td>
+          <td style="padding:7px 3px;text-align:center">${prev.days}일</td>
+          <td style="padding:7px 3px;text-align:center;font-weight:600">${cur.days}일</td>
+          <td style="padding:7px 3px;text-align:center">${delta(cur.days,prev.days,true)}</td>
         </tr>
         <tr style="border-top:1px solid #f1f5f9">
           <td style="padding:7px 3px;color:#64748b">일평균 원육</td>
-          <td style="padding:7px 3px;text-align:right">${prev.days>0?fmt(prev.rm/prev.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:right;font-weight:600">${cur.days>0?fmt(cur.rm/cur.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:right">${cur.days>0&&prev.days>0?delta(cur.rm/cur.days,prev.rm/prev.days,true):'—'}</td>
+          <td style="padding:7px 3px;text-align:center">${prev.days>0?fmt(prev.rm/prev.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+          <td style="padding:7px 3px;text-align:center;font-weight:600">${cur.days>0?fmt(cur.rm/cur.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+          <td style="padding:7px 3px;text-align:center">${cur.days>0&&prev.days>0?delta(cur.rm/cur.days,prev.rm/prev.days,true):'—'}</td>
         </tr>
       </tbody>
     </table>`;
