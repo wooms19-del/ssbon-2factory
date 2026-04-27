@@ -353,10 +353,11 @@ async function exportThawingChecklist() {
     //       박스마다 4박스당 +1분씩 차이
     //       박스 i의 해동시작 = thawing.start - 30분 - (총박스-1-i)/4
     //       박스 i의 해동종료 = 박스 i 해동시작 + 30분 = 박스 i 방혈시작
-    // 날짜+대차+인덱스 조합 Wang hash (분포 균등, 패턴 없음)
-    const _seed0 = (date+'-'+String(cart)).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0, 0);
+    // 날짜+대차 Wang hash (cart를 큰 소수로 곱해 시드 완전 분산)
+    const _dateHash = date.split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0, 0);
+    const _seed0 = (_dateHash ^ Math.imul(cart, 0x9e3779b9)) | 0;
     function seededVal(idx) {
-      let h = (_seed0 ^ (idx * 1000003)) >>> 0;
+      let h = (_seed0 ^ Math.imul(idx, 1000003)) >>> 0;
       h ^= h >>> 16;
       h = Math.imul(h, 0x45d9f3b) >>> 0;
       h ^= h >>> 16;
@@ -388,8 +389,15 @@ async function exportThawingChecklist() {
     }
     const bloodPositions = bloodGroups.map(g => g.start);
     const bloodTemps = {};
-    bloodPositions.forEach(pos => {
-      bloodTemps[pos] = +(seededVal(pos + 1000) * 3.0 - 1.0).toFixed(1);
+    const _usedBlood = new Set();
+    bloodPositions.forEach((pos, gi) => {
+      let v = +(seededVal(pos + 1000) * 3.0 - 1.0).toFixed(1);
+      // 중복이면 인덱스 조금 바꿔서 재시도 (최대 5회)
+      for(let t = 1; _usedBlood.has(v) && t <= 5; t++) {
+        v = +(seededVal(pos + 1000 + t * 37) * 3.0 - 1.0).toFixed(1);
+      }
+      _usedBlood.add(v);
+      bloodTemps[pos] = v;
     });
 
     let bloodEnd;
