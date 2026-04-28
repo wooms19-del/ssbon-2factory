@@ -34,11 +34,17 @@ function updPpWagon(){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
           <div>
             <label style="font-size:11px;color:var(--g5);display:block;margin-bottom:2px">시작</label>
-            <input class="fc pp-w-start" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:5px 7px;font-size:12px;width:100%;box-sizing:border-box">
+            <div style="display:flex;gap:3px">
+              <input class="fc pp-w-start" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;flex:1;box-sizing:border-box">
+              <button onclick="ppNowFill(this,'start')" style="padding:0 8px;font-size:11px;background:#1a56db;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap">⏱지금</button>
+            </div>
           </div>
           <div>
             <label style="font-size:11px;color:var(--g5);display:block;margin-bottom:2px">종료</label>
-            <input class="fc pp-w-end" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:5px 7px;font-size:12px;width:100%;box-sizing:border-box">
+            <div style="display:flex;gap:3px">
+              <input class="fc pp-w-end" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;flex:1;box-sizing:border-box">
+              <button onclick="ppNowFill(this,'end')" style="padding:0 8px;font-size:11px;background:var(--s);color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap">⏱지금</button>
+            </div>
           </div>
         </div>
         <div style="font-size:11px;color:var(--g5);margin-bottom:4px">분배할 케이지 (케이지번호 + kg)</div>
@@ -52,6 +58,15 @@ function updPpWagon(){
       </div>
     </div>`;
   }).join('');
+}
+
+// 카드 안 ⏱지금 버튼 - 현재 시각 채우기
+function ppNowFill(btn, kind){
+  const wrap = btn.closest('.pp-wagon-input');
+  if(!wrap) return;
+  const inp = wrap.querySelector(kind === 'start' ? '.pp-w-start' : '.pp-w-end');
+  if(inp) inp.value = (typeof nowHM==='function') ? nowHM() : new Date().toTimeString().slice(0,5);
+  onPpDistChange();
 }
 
 // 대차 카드 안에 케이지 행 추가
@@ -79,12 +94,12 @@ function ppRemoveCage(btn){
   onPpDistChange();
 }
 
-// 케이지 입력 변경 시 합계 갱신 + pp_kg, pp_cage, pp_type 자동 채움
 function onPpDistChange(){
   let totalKg = 0;
   const cageNums = new Set();
   const carts = [];
   const types = new Set();
+  let earliest = '', latest = '';
 
   document.querySelectorAll('.pp-wagon-input').forEach(wrap => {
     if(wrap.style.display === 'none') return;
@@ -106,6 +121,11 @@ function onPpDistChange(){
       if(wrap.dataset.cart) carts.push(wrap.dataset.cart);
       if(wrap.dataset.type) types.add(wrap.dataset.type);
     }
+    // 가장 이른 시작 / 가장 늦은 종료
+    const ws = (wrap.querySelector('.pp-w-start')||{}).value || '';
+    const we = (wrap.querySelector('.pp-w-end')||{}).value || '';
+    if(ws){ if(!earliest || ws < earliest) earliest = ws; }
+    if(we){ if(!latest || we > latest) latest = we; }
   });
 
   // 외부 공통 필드에 자동 반영
@@ -113,11 +133,16 @@ function onPpDistChange(){
   if(kgInp) kgInp.value = totalKg ? totalKg.toFixed(2) : '';
   const cageInp = document.getElementById('pp_cage');
   if(cageInp) cageInp.value = [...cageNums].join(',');
-  const typeSel = document.getElementById('pp_type');
-  if(typeSel){
-    if(types.size === 1) typeSel.value = [...types][0];
-    else if(types.size > 1) typeSel.value = '혼합';
+  const typeInp = document.getElementById('pp_type');
+  if(typeInp){
+    if(types.size === 1) typeInp.value = [...types][0];
+    else if(types.size > 1) typeInp.value = '혼합';
+    else typeInp.value = '';
   }
+  const startInp = document.getElementById('pp_start');
+  if(startInp) startInp.value = earliest;
+  const endInp = document.getElementById('pp_end');
+  if(endInp) endInp.value = latest;
 
   // 알림 영역
   const info = document.getElementById('pp_wagonInfo');
