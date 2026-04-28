@@ -469,15 +469,29 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     var opT=testOpByKey[key]||{ea:0,boxes:0};
     var innerEa=opT.ea>0?opT.ea:Math.round(r.ea);
     var defPouch=Math.max(0,Math.round(r.pouch)-innerEa);
+    // 해당 날짜(또는 전날)의 테스트 thawing 찾아서 원육 정보 추가
+    var tDate=r.date; var prevD=_perfPrevD(tDate);
+    var testThDay=th.filter(function(t){return testThIds.has(idOf(t))&&d(t)===tDate;});
+    if(!testThDay.length) testThDay=th.filter(function(t){return testThIds.has(idOf(t))&&d(t)===prevD;});
+    var tRmKg=0, tBxS=0, tBxH=0, tBxU=0, tParts=[];
+    testThDay.forEach(function(t){
+      tRmKg+=parseFloat(t.totalKg)||0;
+      var p=t.part||t.type||'';
+      if(p==='설도') tBxS+=parseInt(t.boxes)||0;
+      else if(p==='홍두깨'||p==='홍두께') tBxH+=parseInt(t.boxes)||0;
+      else if(p==='우둔') tBxU+=parseInt(t.boxes)||0;
+      if(p&&tParts.indexOf(p)<0) tParts.push(p);
+    });
+    var tRmType=tParts.length?tParts.join(', '):'홍두깨';
     testRows.push({
       date:r.date, dayNo:0, product:r.product+' (테스트)', productIndex:0,
       subRowIdx:0, totalSub:1,
-      expDate:'', rmType:'홍두깨', rmKg:0,
-      boxSeoldo:0, boxHongdu:0, boxUdun:0,
+      expDate:'', rmType:tRmType, rmKg:_perfR2(tRmKg),
+      boxSeoldo:tBxS, boxHongdu:tBxH, boxUdun:tBxU,
       ppKg:0, ckKg:0, shKg:0, sauceKg:0,
       innerEa:innerEa, defPouch:defPouch,
       outerBoxes:opT.boxes, boxDef:0, tray:0, trayDef:0, unitCnt:0,
-      outBoxes:opT.boxes, sauceFP:'', qaiKg:0,
+      outBoxes:opT.boxes, sauceFP:0, sauceFC:0, qaiKg:0,
       pouch:Math.round(r.pouch), boxUse:opT.boxes,
       isTest:true, isPending:false
     });
@@ -507,12 +521,8 @@ function _perfRenderTable(rows){
   if(st) st.style.display='none';
   wrap.style.display='';
 
-  // 병합 대상 컬럼 (인원 제거 후 0-based): 일수/날짜/소비기한/제품명 + 전처리~박스합계
-  // FP소스·FC소스 각 1컬럼씩으로 총 26컬럼
-  // 0:일수 1:날짜 2:소비기한 3:제품명 4:원육종류 5:원육kg 6:설도 7:홍두깨 8:우둔
-  // 9:전처리 10:자숙 11:파쇄 12:소스kg 13:내포장 14:불량파우치 15:완박스 16:불량박스
-  // 17:트레이 18:트레이불량 19:낱개 20:출고박스 21:FP소스 22:FC소스 23:메추리알 24:파우치 25:박스합계
-  var MCOLS=new Set([0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]);
+  // 병합 대상 컬럼: 일수·날짜·소비기한·제품명(0~3) + 전처리~박스합계(9~25) 중 소스(kg)=12 제외
+  var MCOLS=new Set([0,1,2,3,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25]);
 
   var headers=[
     '일수','날짜','소비기한','제품명',
@@ -577,7 +587,7 @@ function perfDownloadXlsx(){
     'FP소스배합(kg)','FC소스배합(kg)','깐메추리알(kg)','파우치사용량','박스사용량'
   ];
   // 병합 대상 컬럼 (0-based, 26컬럼)
-  var MCOLS_ARR=[0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25];
+  var MCOLS_ARR=[0,1,2,3,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25];
   var MCOLS=new Set(MCOLS_ARR);
 
   var aoa=[headers];
