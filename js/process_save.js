@@ -64,6 +64,11 @@ async function saveP(type){
     if(Object.keys(mxDist).length){
       d.distribution = mxDist; // {"5":{"7":80,"8":40}, ...}
     }
+    // 원육별 비가식부 (2종 이상 섞일 때)
+    if(typeof getPpWasteByType==='function'){
+      const wbt = getPpWasteByType();
+      if(wbt) d.wasteByType = wbt;
+    }
 
     // 잔여중량 차감 (매트릭스 사용 시 매트릭스 합계 기준, 아니면 기존 방식)
     wagons.forEach(async rec=>{
