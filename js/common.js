@@ -149,12 +149,11 @@ async function gasRecord(action, data) {
 function makeDocId(colName) {
   const prefix = {barcode:'bc',thawing:'th',preprocess:'pp',cooking:'ck',shredding:'sh',packing:'pk',sauce:'sc'};
   const now = new Date();
-  // thawing은 종료일(다음날) 기준으로 ID 생성 - 방혈은 시작 다음날 새벽 종료
-  const useTomorrow = (colName === 'thawing');
-  const refDate = useTomorrow ? new Date(now.getTime() + 86400000) : now;
-  const d = refDate.getFullYear().toString() +
-    String(refDate.getMonth()+1).padStart(2,'0') +
-    String(refDate.getDate()).padStart(2,'0');
+  // 로컬 날짜 문자열 (타임존 안전)
+  const todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  // thawing은 종료일(다음날) 기준으로 ID 생성
+  const dateStr = (colName === 'thawing') ? addDays(todayStr, 1) : todayStr;
+  const d = dateStr.replace(/-/g,'');
   // 시각은 실제 시작 시각(now) 그대로
   const t = String(now.getHours()).padStart(2,'0') +
     String(now.getMinutes()).padStart(2,'0') +
