@@ -196,7 +196,78 @@ function buildEditForm(type, r) {
     const val = r[f.key] !== undefined && r[f.key] !== null ? r[f.key] : '';
     return `<div><label style="font-size:11px;color:var(--g5);display:block">${f.label}</label><input class="fc" ${inputAttr} style="padding:4px 8px;font-size:12px;width:100%" id="pe_${type}_${f.key}_${r.id}" value="${val}"></div>`;
   }).join('');
-  return `<div id="peEdit_${type}_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px"><div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px;margin-bottom:8px">${inputs}</div><div style="display:flex;gap:6px"><button class="btn bp bsm" onclick="savePEdit('${type}','${r.id}','${r.fbId||''}')">✔ 저장</button><button class="btn bo bsm" onclick="document.getElementById('peEdit_${type}_${r.id}').style.display='none'">취소</button></div></div>`;
+
+  // 신규 매트릭스 필드 편집 영역
+  const matrixEdit = buildMatrixEditForm(type, r);
+
+  return `<div id="peEdit_${type}_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px"><div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px;margin-bottom:8px">${inputs}</div>${matrixEdit}<div style="display:flex;gap:6px"><button class="btn bp bsm" onclick="savePEdit('${type}','${r.id}','${r.fbId||''}')">✔ 저장</button><button class="btn bo bsm" onclick="document.getElementById('peEdit_${type}_${r.id}').style.display='none'">취소</button></div></div>`;
+}
+
+// type별 신규 매트릭스 필드 편집 영역
+function buildMatrixEditForm(type, r){
+  if(type === 'preprocess'){
+    let html = '<div style="margin-bottom:8px;padding:8px;background:#fff;border-radius:6px;border:1px dashed #1a56db">';
+    html += '<div style="font-size:11px;font-weight:600;color:#1a56db;margin-bottom:4px">대차→케이지 분배 (kg) / 탱크</div>';
+    const dist = r.distribution || {};
+    const cageTanks = r.cageTanks || {};
+    Object.keys(dist).forEach(cart => {
+      const d = dist[cart] || {};
+      const cages = d.cages || {};
+      html += `<div style="margin-bottom:6px;padding:6px;background:#f8f9fa;border-radius:4px"><div style="font-size:11px;font-weight:500;margin-bottom:3px">대차 ${cart}번 (${d.type||'-'})</div>`;
+      Object.keys(cages).forEach(cage => {
+        const tank = (d.cageTanks && d.cageTanks[cage]) || cageTanks[cage] || '';
+        html += `<div style="display:grid;grid-template-columns:60px 1fr 70px;gap:4px;align-items:center;margin-bottom:3px">
+          <span style="font-size:11px">${cage}번</span>
+          <input class="fc pe-pp-cagekg" data-cart="${cart}" data-cage="${cage}" type="number" step="0.01" value="${cages[cage]||0}" style="padding:3px 6px;font-size:11px;text-align:right">
+          <select class="fc pe-pp-tank" data-cage="${cage}" style="padding:3px 6px;font-size:11px;background:#f0fff4">
+            <option value="">탱크</option>
+            <option value="1" ${tank==='1'?'selected':''}>1번</option>
+            <option value="2" ${tank==='2'?'selected':''}>2번</option>
+            <option value="3" ${tank==='3'?'selected':''}>3번</option>
+            <option value="4" ${tank==='4'?'selected':''}>4번</option>
+            <option value="5" ${tank==='5'?'selected':''}>5번</option>
+            <option value="6" ${tank==='6'?'selected':''}>6번</option>
+          </select>
+        </div>`;
+      });
+      html += '</div>';
+    });
+    if(!Object.keys(dist).length){
+      html += '<div style="font-size:11px;color:var(--g5);text-align:center;padding:6px">분배 정보 없음 (구버전 데이터)</div>';
+    }
+    // 비가식부 원육별
+    const wbt = r.wasteByType || {};
+    if(Object.keys(wbt).length){
+      html += '<div style="margin-top:6px;padding:6px;background:#f8f9fa;border-radius:4px"><div style="font-size:11px;font-weight:500;margin-bottom:3px">원육별 비가식부</div>';
+      Object.keys(wbt).forEach(t => {
+        html += `<div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${t}</span><input class="fc pe-pp-waste" data-type="${t}" type="number" step="0.01" value="${wbt[t]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+  if(type === 'cooking'){
+    const wd = r.wagonDist || {};
+    if(!Object.keys(wd).length) return '';
+    let html = '<div style="margin-bottom:8px;padding:8px;background:#fff;border-radius:6px;border:1px dashed #1a56db"><div style="font-size:11px;font-weight:600;color:#1a56db;margin-bottom:4px">배출 와건별 KG</div>';
+    Object.keys(wd).forEach(w => {
+      html += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${w}번 와건</span><input class="fc pe-ck-wkg" data-w="${w}" type="number" step="0.01" value="${wd[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+    });
+    html += '</div>';
+    return html;
+  }
+  if(type === 'shredding'){
+    const wod = r.wagonOutDist || {};
+    if(!Object.keys(wod).length) return '';
+    let html = '<div style="margin-bottom:8px;padding:8px;background:#fff;border-radius:6px;border:1px dashed #72243E"><div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">배출 와건별 KG</div>';
+    Object.keys(wod).forEach(w => {
+      html += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${w}번 와건</span><input class="fc pe-sh-wkg" data-w="${w}" type="number" step="0.01" value="${wod[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+    });
+    html += '</div>';
+    return html;
+  }
+  return '';
 }
 
 async function savePEdit(type, id, fbId) {
@@ -212,6 +283,69 @@ async function savePEdit(type, id, fbId) {
     if(f.kind === 'number') v = parseFloat(v) || 0;
     updates[f.key] = v;
   });
+
+  // 신규 매트릭스 필드 수집
+  const editRoot = document.getElementById('peEdit_'+type+'_'+id);
+  if(editRoot){
+    if(type === 'preprocess'){
+      // distribution.cages, cageTanks 수정
+      const dist = JSON.parse(JSON.stringify(rec.distribution || {}));
+      const cageTanks = {};
+      editRoot.querySelectorAll('.pe-pp-cagekg').forEach(el => {
+        const cart = el.dataset.cart, cage = el.dataset.cage;
+        if(!dist[cart]) dist[cart] = {cages:{}};
+        if(!dist[cart].cages) dist[cart].cages = {};
+        dist[cart].cages[cage] = parseFloat(el.value) || 0;
+        // total 재계산
+        let t = 0; Object.values(dist[cart].cages).forEach(v => t+=parseFloat(v)||0);
+        dist[cart].total = t;
+      });
+      editRoot.querySelectorAll('.pe-pp-tank').forEach(el => {
+        if(el.value) cageTanks[el.dataset.cage] = el.value;
+      });
+      if(Object.keys(dist).length) updates.distribution = dist;
+      if(Object.keys(cageTanks).length) updates.cageTanks = cageTanks;
+      // distribution 안의 cageTanks도 같이 동기화
+      Object.keys(dist).forEach(cart => {
+        const ct = {};
+        Object.keys(dist[cart].cages || {}).forEach(cg => {
+          if(cageTanks[cg]) ct[cg] = cageTanks[cg];
+        });
+        if(Object.keys(ct).length) dist[cart].cageTanks = ct;
+      });
+      // 비가식부 원육별
+      const wbt = {};
+      editRoot.querySelectorAll('.pe-pp-waste').forEach(el => {
+        const v = parseFloat(el.value) || 0;
+        if(v) wbt[el.dataset.type] = v;
+      });
+      if(Object.keys(wbt).length) updates.wasteByType = wbt;
+    } else if(type === 'cooking'){
+      const wd = {};
+      editRoot.querySelectorAll('.pe-ck-wkg').forEach(el => {
+        const v = parseFloat(el.value) || 0;
+        if(v) wd[el.dataset.w] = v;
+      });
+      if(Object.keys(wd).length){
+        updates.wagonDist = wd;
+        // kg 합계 재계산
+        let total = 0; Object.values(wd).forEach(v => total += parseFloat(v)||0);
+        updates.kg = total;
+      }
+    } else if(type === 'shredding'){
+      const wod = {};
+      editRoot.querySelectorAll('.pe-sh-wkg').forEach(el => {
+        const v = parseFloat(el.value) || 0;
+        if(v) wod[el.dataset.w] = v;
+      });
+      if(Object.keys(wod).length){
+        updates.wagonOutDist = wod;
+        let total = 0; Object.values(wod).forEach(v => total += parseFloat(v)||0);
+        updates.kg = total;
+      }
+    }
+  }
+
   Object.assign(rec, updates);
   saveL();
   renderPL(type);
