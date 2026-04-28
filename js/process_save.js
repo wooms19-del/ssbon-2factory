@@ -367,6 +367,34 @@ function renderPL(type){
     let editForm = '';
     let editToggle = '';
     if(type==='packing') {
+      // 신규 매트릭스 영역
+      let pkMatrix = '<div style="margin:8px 0;padding:8px;background:#fff;border-radius:6px;border:1px dashed var(--g3)">';
+      // 와건별 kg
+      const wd = r.wagonDist || {};
+      if(Object.keys(wd).length){
+        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#1a56db;margin-bottom:4px">와건별 사용 kg</div>';
+        Object.keys(wd).forEach(w => {
+          pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${w}번</span><input class="fc pkEd-wd" data-w="${w}" type="number" step="0.01" value="${wd[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+        });
+      }
+      // 소스 탱크
+      const st = r.sauceTanks || [];
+      if(st.length){
+        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#27500A;margin:6px 0 4px">소스 탱크</div>';
+        st.forEach((s,i) => {
+          pkMatrix += `<div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${s.tank||'-'}</span><input class="fc pkEd-st" data-tank="${s.tank||''}" data-idx="${i}" type="number" step="0.01" value="${s.kg||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+        });
+      }
+      // 원육별 kg
+      const tk = r.typeKgs || {};
+      if(Object.keys(tk).length){
+        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#72243E;margin:6px 0 4px">원육별 사용 kg</div>';
+        Object.keys(tk).forEach(t => {
+          pkMatrix += `<div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${t}</span><input class="fc pkEd-tk" data-type="${t}" type="number" step="0.01" value="${tk[t]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+        });
+      }
+      pkMatrix += '</div>';
+
       editForm = `
     <div id="pkEdit_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
@@ -378,6 +406,7 @@ function renderPL(type){
         <div><label style="font-size:11px;color:var(--g5);display:block">종료</label><input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_end_${r.id}" value="${r.end||''}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">인원</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_workers_${r.id}" value="${r.workers||0}"></div>
       </div>
+      ${pkMatrix}
       <div style="display:flex;gap:6px">
         <button class="btn bp bsm" onclick="savePkEdit('${r.id}','${r.fbId||''}')">✔ 저장</button>
         <button class="btn bo bsm" onclick="document.getElementById('pkEdit_${r.id}').style.display='none'">취소</button>
@@ -412,11 +441,45 @@ function savePkEdit(id, fbId) {
   const start   = document.getElementById('pkEd_start_'+id)?.value||'';
   const end_    = document.getElementById('pkEd_end_'+id)?.value||'';
   const workers = parseFloat(document.getElementById('pkEd_workers_'+id)?.value)||0;
-  Object.assign(rec, {machine, wagon, ea, defect, start, end:end_, workers});
+
+  // 신규 매트릭스 필드 수집
+  const editRoot = document.getElementById('pkEdit_'+id);
+  const matrixUpdates = {};
+  if(editRoot){
+    // 와건별 kg
+    const wd = {};
+    editRoot.querySelectorAll('.pkEd-wd').forEach(el => {
+      const v = parseFloat(el.value) || 0;
+      if(v) wd[el.dataset.w] = v;
+    });
+    if(Object.keys(wd).length) matrixUpdates.wagonDist = wd;
+    // 소스 탱크
+    const st = [];
+    editRoot.querySelectorAll('.pkEd-st').forEach(el => {
+      const tank = el.dataset.tank;
+      const kg = parseFloat(el.value) || 0;
+      if(tank) st.push({tank, kg});
+    });
+    if(st.length){
+      matrixUpdates.sauceTanks = st;
+      // sauceKg 합계 갱신
+      let total = 0; st.forEach(x => total += x.kg);
+      matrixUpdates.sauceKg = total;
+    }
+    // 원육별 kg
+    const tk = {};
+    editRoot.querySelectorAll('.pkEd-tk').forEach(el => {
+      const v = parseFloat(el.value) || 0;
+      if(v) tk[el.dataset.type] = v;
+    });
+    if(Object.keys(tk).length) matrixUpdates.typeKgs = tk;
+  }
+
+  Object.assign(rec, {machine, wagon, ea, defect, start, end:end_, workers}, matrixUpdates);
   saveL();
   renderPL('packing');
   renderDailyFromLocal_(tod());
-  const updates = {machine, wagon, ea, defect, start, end:end_, workers};
+  const updates = Object.assign({machine, wagon, ea, defect, start, end:end_, workers}, matrixUpdates);
   if(fbId) {
     fbUpdate('packing', fbId, updates);
   } else {
