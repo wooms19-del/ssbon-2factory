@@ -303,23 +303,27 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       var innerEa = opR.ea>0 ? opR.ea : Math.round(pkr.ea);
       var defPouch = Math.max(0, Math.round(pkr.pouch) - innerEa);
       var boxUse = opR.boxes + opR.boxDef;
-      // 메추리알: subName에 '메추리' 포함되거나 subKg>0
       var qaiKg = (pkr.subKg>0) ? _perfR2(pkr.subKg) : 0;
-      // 소비기한 (제조일 + 9개월) 간단 계산
+      // 소비기한: 3KG/3kg → 제조일+60일, 그 외 → 제조일+12개월
       var dt=new Date(date+'T00:00:00');
-      dt.setMonth(dt.getMonth()+9);
+      var is3kg = (prod.indexOf('3KG')>=0)||(prod.indexOf('3kg')>=0);
+      if(is3kg){
+        dt.setDate(dt.getDate()+60);
+      } else {
+        dt.setMonth(dt.getMonth()+12);
+      }
       var expDate = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-      // 제품에 따른 원육 종류 (대표값)
+      // 원육 종류: 같은 날 thawing.part를 박스 많은 순으로 (예: "우둔(29), 홍두깨(4)")
       var rmType = '';
-      if(prod.indexOf('FC')>=0) rmType='홍두깨';
-      else if(prod.indexOf('시그니처')>=0||prod.indexOf('코코')>=0) rmType='설도';
-      else if(prod.indexOf('트레이더스')>=0) rmType='홍두깨';
-      else if(prod.indexOf('미니')>=0) rmType='우둔';
+      if(pi===0){
+        var pbItems = Object.keys(partBx).filter(function(k){return k && partBx[k]>0;}).sort(function(a,b){return partBx[b]-partBx[a];});
+        rmType = pbItems.map(function(k){return k+'('+partBx[k]+')';}).join(', ');
+      }
       rows.push({
         date: date,
         dayNo: dayNo,
         product: prod,
-        productIndex: pi,         // 0이면 일자 첫 행 (병합 표시용)
+        productIndex: pi,
         expDate: expDate,
         workers: pi===0 ? Math.round(pkr.workers||0) : 0,
         rmType: rmType,
