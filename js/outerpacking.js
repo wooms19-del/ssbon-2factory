@@ -165,6 +165,12 @@ function renderOpPending(list) {
             oninput="opSyncRem(${i})">
           <span style="font-size:11px;color:var(--g4)">자동계산</span>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:12px;color:var(--g5);min-width:72px">트레이</span>
+          <input class="fc" type="number" id="op_tray_${i}" placeholder="0"
+            style="width:88px;text-align:right;padding:5px 8px">
+          <span style="font-size:12px;color:var(--g5)">개</span>
+        </div>
 
         <!-- 포장재 테이블 -->
         <div style="font-size:11px;font-weight:500;color:var(--g5);margin-bottom:6px">포장재 사용량</div>
@@ -323,6 +329,7 @@ async function completeOuterPacking(i, date, product, innerEa) {
   const sample = parseInt(document.getElementById('op_sample_'+i).value)||0;
   const note  = (document.getElementById('op_note_'+i)||{}).value||'';
   const rem   = parseInt(document.getElementById('op_rem_'+i).value)||0;
+  const trayUsed = parseInt((document.getElementById('op_tray_'+i)||{}).value)||0;
   const rate  = parseFloat(document.getElementById('op_rate_'+i).textContent)||0;
 
   // 포장재별 실적 수집
@@ -352,6 +359,7 @@ async function completeOuterPacking(i, date, product, innerEa) {
     date, product, innerEa, outerEa, outerBoxes: boxes + (partial > 0 ? 1 : 0),
     partialBoxEa: partial,
     productDefect: defp, sample, remainEa: rem,
+    trayUsed, trayDefect: 0,
     defectRate: rate, materials, note,
     testRun: isTest ? true : false,
     savedAt: new Date().toISOString()
