@@ -216,6 +216,7 @@ function renderPL(type){
       editForm = `
     <div id="pkEdit_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+        <div><label style="font-size:11px;color:var(--g5);display:block">설비번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_machine_${r.id}" value="${r.machine||''}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">생산 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_ea_${r.id}" value="${r.ea||0}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">불량 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_defect_${r.id}" value="${r.defect||0}"></div>
@@ -250,17 +251,18 @@ function renderPL(type){
 function savePkEdit(id, fbId) {
   const rec = L.packing.find(r=>r.id===id);
   if(!rec){ toast('기록 없음','d'); return; }
+  const machine = document.getElementById('pkEd_machine_'+id)?.value||'';
   const wagon   = document.getElementById('pkEd_wagon_'+id)?.value||'';
   const ea      = parseFloat(document.getElementById('pkEd_ea_'+id)?.value)||0;
   const defect  = parseFloat(document.getElementById('pkEd_defect_'+id)?.value)||0;
   const start   = document.getElementById('pkEd_start_'+id)?.value||'';
   const end_    = document.getElementById('pkEd_end_'+id)?.value||'';
   const workers = parseFloat(document.getElementById('pkEd_workers_'+id)?.value)||0;
-  Object.assign(rec, {wagon, ea, defect, start, end:end_, workers});
+  Object.assign(rec, {machine, wagon, ea, defect, start, end:end_, workers});
   saveL();
   renderPL('packing');
   renderDailyFromLocal_(tod());
-  if(fbId) fbUpdate('packing', fbId, {wagon, ea, defect, start, end:end_, workers});
+  if(fbId) fbUpdate('packing', fbId, {machine, wagon, ea, defect, start, end:end_, workers});
   toast('포장 기록 수정됨 ✓','s');
 }
 
