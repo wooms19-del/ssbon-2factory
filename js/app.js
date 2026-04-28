@@ -32,6 +32,7 @@ function toast(msg,t='s'){
 function setMode(m){
   MODE=m;
   document.getElementById('modeI').classList.toggle('on',m==='i'); document.getElementById('modeD').classList.toggle('on',m==='d'); document.getElementById('attHdBtn').classList.remove('on');
+  var _mp=document.getElementById('modeP'); if(_mp) _mp.classList.remove('on');
   document.getElementById('inav').classList.toggle('hid',m!=='i');
   document.getElementById('dnav').classList.toggle('hid',m!=='d');
   document.getElementById('mscroll').scrollTop=0;
