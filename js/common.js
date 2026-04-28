@@ -164,12 +164,19 @@ function makeDocId(colName) {
 // 저장
 async function fbSave(colName, data, customDocId) {
   try {
+    // thawing은 date가 항상 종료일(내일) 이상이어야 함 - 잘못된 캐시/pending 방어
+    if(colName === 'thawing' && data.date) {
+      const today = tod();
+      if(data.date <= today) {
+        data = {...data, date: addDays(today, 1)};
+      }
+    }
     const docId = customDocId || makeDocId(colName);
     await db.collection(colName).doc(docId).set({
       ...data,
       _createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-    fbClearCache(colName); // 저장 후 해당 컬렉션 캐시 무효화
+    fbClearCache(colName);
     return docId;
   } catch(e) {
     console.error('Firebase 저장 오류:', e);
