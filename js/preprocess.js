@@ -25,19 +25,155 @@ function updPpWagon(){
   container.innerHTML=wagons.map(t=>{
     const remain=t.remainKg!==undefined?t.remainKg:t.totalKg;
     return `<div style="background:var(--g1);border-radius:8px;padding:10px 12px;margin-bottom:8px">
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
-        <input type="checkbox" class="pp-wagon-ck" data-id="${t.id}" data-remain="${remain}" onchange="onPpWagonChange()" style="width:18px;height:18px;accent-color:var(--p)">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" class="pp-wagon-ck" data-id="${t.id}" data-cart="${t.cart||''}" data-type="${t.type||''}" data-remain="${remain}" onchange="onPpWagonChange()" style="width:18px;height:18px;accent-color:var(--p)">
         <span style="font-size:14px;font-weight:600">${t.cart||'(대차)'}</span>
         <span style="font-size:13px;color:var(--g5);margin-left:auto">${t.type||'-'} · 잔여 <b style="color:var(--p)">${remain}kg</b></span>
       </label>
-      <div class="pp-wagon-input" id="pp_wi_${t.id}" style="display:none">
-        <label style="font-size:12px;font-weight:600;color:var(--g6)">이번 전처리 투입 중량(kg)</label>
-        <input class="fc pp-wagon-kg" type="number" step="0.01" data-id="${t.id}"
-          placeholder="최대 ${remain}kg" max="${remain}" oninput="onPpWagonChange()"
-          style="margin-top:4px">
+      <div class="pp-wagon-input" id="pp_wi_${t.id}" data-id="${t.id}" data-cart="${t.cart||''}" data-type="${t.type||''}" data-remain="${remain}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--g3)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+          <div>
+            <label style="font-size:11px;color:var(--g5);display:block;margin-bottom:2px">시작</label>
+            <input class="fc pp-w-start" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:5px 7px;font-size:12px;width:100%;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--g5);display:block;margin-bottom:2px">종료</label>
+            <input class="fc pp-w-end" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:5px 7px;font-size:12px;width:100%;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--g5);margin-bottom:4px">분배할 케이지 (케이지번호 + kg)</div>
+        <div class="pp-w-cages" style="display:flex;flex-direction:column;gap:4px">
+          <!-- 케이지 행들 -->
+        </div>
+        <div style="display:flex;gap:4px;margin-top:6px;align-items:center;justify-content:space-between;font-size:11px">
+          <button onclick="ppAddCage('${t.id}')" style="padding:4px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 케이지 추가</button>
+          <span class="pp-w-sum" style="color:var(--g5);font-weight:500">합계 0kg / ${remain}kg</span>
+        </div>
       </div>
     </div>`;
   }).join('');
+}
+
+// 대차 카드 안에 케이지 행 추가
+function ppAddCage(wagonId){
+  const wrap = document.getElementById('pp_wi_'+wagonId);
+  if(!wrap) return;
+  const list = wrap.querySelector('.pp-w-cages');
+  const row = document.createElement('div');
+  row.className = 'pp-w-cagerow';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  row.innerHTML = `
+    <input class="fc pp-w-cnum" type="text" placeholder="케이지 번호 (예: 7)" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:2px">
+      <input class="fc pp-w-ckg" type="number" step="0.01" placeholder="0" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
+      <span style="font-size:11px;color:var(--g5)">kg</span>
+    </div>
+    <button onclick="ppRemoveCage(this)" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
+  list.appendChild(row);
+  onPpDistChange();
+}
+
+function ppRemoveCage(btn){
+  const row = btn.closest('.pp-w-cagerow');
+  if(row) row.remove();
+  onPpDistChange();
+}
+
+// 케이지 입력 변경 시 합계 갱신 + pp_kg, pp_cage, pp_type 자동 채움
+function onPpDistChange(){
+  let totalKg = 0;
+  const cageNums = new Set();
+  const carts = [];
+  const types = new Set();
+
+  document.querySelectorAll('.pp-wagon-input').forEach(wrap => {
+    if(wrap.style.display === 'none') return;
+    const remain = parseFloat(wrap.dataset.remain) || 0;
+    let wSum = 0;
+    wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
+      const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
+      const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      if(cn) cageNums.add(String(cn).trim());
+      wSum += kg;
+    });
+    totalKg += wSum;
+    const sumEl = wrap.querySelector('.pp-w-sum');
+    if(sumEl){
+      sumEl.textContent = `합계 ${wSum.toFixed(2)}kg / ${remain}kg`;
+      sumEl.style.color = wSum > remain + 0.01 ? 'var(--d)' : 'var(--g5)';
+    }
+    if(wSum > 0){
+      if(wrap.dataset.cart) carts.push(wrap.dataset.cart);
+      if(wrap.dataset.type) types.add(wrap.dataset.type);
+    }
+  });
+
+  // 외부 공통 필드에 자동 반영
+  const kgInp = document.getElementById('pp_kg');
+  if(kgInp) kgInp.value = totalKg ? totalKg.toFixed(2) : '';
+  const cageInp = document.getElementById('pp_cage');
+  if(cageInp) cageInp.value = [...cageNums].join(',');
+  const typeSel = document.getElementById('pp_type');
+  if(typeSel){
+    if(types.size === 1) typeSel.value = [...types][0];
+    else if(types.size > 1) typeSel.value = '혼합';
+  }
+
+  // 알림 영역
+  const info = document.getElementById('pp_wagonInfo');
+  if(info){
+    if(carts.length){
+      info.innerHTML = `<div class="al al-i">🧊 대차 ${carts.join(',')} · ${[...types].join(',')||'-'} · 투입 <b>${totalKg.toFixed(2)}kg</b></div>`;
+      info.classList.remove('hid');
+    } else {
+      info.classList.add('hid');
+    }
+  }
+}
+
+// distribution 객체 생성 (저장 시)
+function getPpDistribution(){
+  const dist = {};
+  document.querySelectorAll('.pp-wagon-input').forEach(wrap => {
+    if(wrap.style.display === 'none') return;
+    const cart = wrap.dataset.cart;
+    if(!cart) return;
+    const cages = {};
+    let total = 0;
+    wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
+      const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
+      const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      if(cn && kg){
+        cages[String(cn).trim()] = (cages[String(cn).trim()]||0) + kg;
+        total += kg;
+      }
+    });
+    if(total > 0){
+      dist[cart] = {
+        type: wrap.dataset.type || '',
+        start: (wrap.querySelector('.pp-w-start')||{}).value || '',
+        end: (wrap.querySelector('.pp-w-end')||{}).value || '',
+        cages: cages,
+        total: total
+      };
+    }
+  });
+  return dist;
+}
+
+// 대차별 차감량 (잔여중량 차감용)
+function getPpDeductByCart(){
+  const m = {};
+  document.querySelectorAll('.pp-wagon-input').forEach(wrap => {
+    if(wrap.style.display === 'none') return;
+    const id = wrap.dataset.id;
+    let total = 0;
+    wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
+      total += parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+    });
+    if(total > 0) m[id] = total;
+  });
+  return m;
 }
 
 function getSelectedWagons(){
@@ -49,32 +185,17 @@ function getSelectedWagons(){
 function onPpWagonChange(){
   document.querySelectorAll('.pp-wagon-ck').forEach(ck=>{
     const inp=document.getElementById('pp_wi_'+ck.dataset.id);
-    if(inp) inp.style.display=ck.checked?'block':'none';
+    if(!inp) return;
+    inp.style.display = ck.checked ? 'block' : 'none';
     if(ck.checked){
-      const kgInp=inp?inp.querySelector('.pp-wagon-kg'):null;
-      // 체크 시 잔여중량 자동 입력 (기본값)
-      if(kgInp && !kgInp.value) kgInp.value = ck.dataset.remain||'';
-    } else {
-      const kgInp=inp?inp.querySelector('.pp-wagon-kg'):null;
-      if(kgInp) kgInp.value='';
+      // 체크 시 케이지 행이 없으면 1개 자동 추가
+      const list = inp.querySelector('.pp-w-cages');
+      if(list && list.children.length === 0){
+        ppAddCage(ck.dataset.id);
+      }
     }
   });
-  const selected=getSelectedWagons();
-  const info=document.getElementById('ppWagonInfo');
-  if(!selected.length){info.classList.add('hid');return;}
-  const autoType=selected[0].type?selected[0].type.split(',')[0].trim():'';
-  if(autoType) document.getElementById('pp_type').value=autoType;
-  let totalDeduct=0;
-  selected.forEach(t=>{
-    const inp=document.querySelector('.pp-wagon-kg[data-id="'+t.id+'"]');
-    totalDeduct+=parseFloat(inp&&inp.value)||0;
-  });
-  const wagons=selected.map(t=>t.cart||'(대차)').join(', ');
-  const types=[...new Set(selected.map(t=>t.type||'-'))].join(', ');
-  info.innerHTML=`<div class="al al-i">🧊 대차 ${wagons} · ${types}${totalDeduct>0?' · 투입 <b>'+totalDeduct.toFixed(2)+'kg</b>':''}</div>`;
-  info.classList.remove('hid');
-  // 매트릭스 갱신
-  if(typeof updPpMatrix==='function') updPpMatrix();
+  onPpDistChange();
 }
 
 function onPpStartBtn(){
@@ -147,146 +268,7 @@ function updateThawInfo(){
     </div>`;
   }).join('');
 }
-// ============================================================
-// 대차×케이지 분배 매트릭스
-// ============================================================
-function updPpMatrix(){
-  const wrap = document.getElementById('pp_matrixWrap');
-  const root = document.getElementById('pp_matrix');
-  if(!wrap || !root) return;
-
-  const selected = getSelectedWagons();
-  const cageStr = (document.getElementById('pp_cage')||{}).value || '';
-  const cages = cageStr.split(',').map(s=>s.trim()).filter(Boolean);
-
-  if(!selected.length || !cages.length){
-    wrap.style.display = 'none';
-    return;
-  }
-  wrap.style.display = 'block';
-
-  // 기존 입력값 보존
-  const prev = {};
-  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
-    prev[inp.dataset.cart+'|'+inp.dataset.cage] = inp.value;
-  });
-
-  let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--bg)">';
-  html += '<thead><tr style="background:var(--g2)"><th style="padding:6px;border:1px solid var(--g3);min-width:80px;text-align:left">대차 \\ 케이지</th>';
-  cages.forEach(cg => {
-    html += `<th style="padding:6px;border:1px solid var(--g3);min-width:70px">${cg}번</th>`;
-  });
-  html += '<th style="padding:6px;border:1px solid var(--g3);min-width:70px;background:#eef">합계</th>';
-  html += '<th style="padding:6px;border:1px solid var(--g3);min-width:70px;color:var(--g5)">잔여</th></tr></thead><tbody>';
-
-  selected.forEach(t => {
-    const remain = t.remainKg!==undefined?t.remainKg:t.totalKg;
-    const cart = t.cart || '-';
-    html += `<tr><td style="padding:6px;border:1px solid var(--g3);font-weight:600;background:var(--g1)">${cart}번</td>`;
-    cages.forEach(cg => {
-      const key = cart+'|'+cg;
-      const v = prev[key] || '';
-      html += `<td style="padding:2px;border:1px solid var(--g3)"><input type="number" step="0.01"
-        class="pp-mx-cell" data-cart="${cart}" data-cage="${cg}" data-id="${t.id}" data-remain="${remain}"
-        value="${v}" oninput="onPpMxInput()" placeholder="0"
-        style="width:100%;padding:4px;border:none;text-align:right;font-size:12px;background:transparent"></td>`;
-    });
-    html += `<td class="pp-mx-rowsum" data-cart="${cart}" style="padding:6px;border:1px solid var(--g3);text-align:right;background:#eef;font-weight:600">0</td>`;
-    html += `<td style="padding:6px;border:1px solid var(--g3);text-align:right;color:var(--g5)">${remain}</td></tr>`;
-  });
-
-  html += '<tr style="background:#fef"><td style="padding:6px;border:1px solid var(--g3);font-weight:600">케이지별 합</td>';
-  cages.forEach(cg => {
-    html += `<td class="pp-mx-colsum" data-cage="${cg}" style="padding:6px;border:1px solid var(--g3);text-align:right;font-weight:600">0</td>`;
-  });
-  html += `<td class="pp-mx-total" style="padding:6px;border:1px solid var(--g3);text-align:right;font-weight:700;background:#dfd">0</td>`;
-  html += `<td style="padding:6px;border:1px solid var(--g3)"></td></tr>`;
-  html += '</tbody></table></div>';
-
-  // 자동 분배 버튼
-  html += '<div style="display:flex;gap:6px;margin-top:6px"><button class="btn" onclick="ppMxAutoFill()" style="flex:1;padding:6px;font-size:12px">▦ 잔여중량 자동분배 (균등)</button><button class="btn" onclick="ppMxClear()" style="flex:1;padding:6px;font-size:12px;color:var(--d)">↺ 모두 지우기</button></div>';
-
-  root.innerHTML = html;
-  onPpMxInput();
-}
-
-function onPpMxInput(){
-  const root = document.getElementById('pp_matrix');
-  if(!root) return;
-  const rowSums = {};
-  const colSums = {};
-  let total = 0;
-  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
-    const v = parseFloat(inp.value) || 0;
-    rowSums[inp.dataset.cart] = (rowSums[inp.dataset.cart]||0) + v;
-    colSums[inp.dataset.cage] = (colSums[inp.dataset.cage]||0) + v;
-    total += v;
-  });
-  root.querySelectorAll('.pp-mx-rowsum').forEach(td => {
-    const cart = td.dataset.cart;
-    const sum = rowSums[cart] || 0;
-    // 잔여 초과 시 빨간색
-    const cell = root.querySelector('.pp-mx-cell[data-cart="'+cart+'"]');
-    const remain = cell ? parseFloat(cell.dataset.remain) || 0 : 0;
-    td.textContent = sum.toFixed(2);
-    td.style.color = sum > remain + 0.01 ? 'var(--d)' : '';
-  });
-  root.querySelectorAll('.pp-mx-colsum').forEach(td => {
-    td.textContent = (colSums[td.dataset.cage] || 0).toFixed(2);
-  });
-  const totalEl = root.querySelector('.pp-mx-total');
-  if(totalEl) totalEl.textContent = total.toFixed(2);
-
-  // 총합을 pp_kg에 반영
-  const kgInp = document.getElementById('pp_kg');
-  if(kgInp && total > 0) kgInp.value = total.toFixed(2);
-}
-
-function ppMxAutoFill(){
-  // 각 대차의 잔여중량을 케이지 수만큼 균등 분배
-  const root = document.getElementById('pp_matrix');
-  if(!root) return;
-  const cartRemains = {};
-  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
-    cartRemains[inp.dataset.cart] = parseFloat(inp.dataset.remain) || 0;
-  });
-  const cageCount = (document.getElementById('pp_cage').value||'').split(',').filter(s=>s.trim()).length;
-  if(!cageCount) return;
-  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
-    const remain = parseFloat(inp.dataset.remain) || 0;
-    inp.value = (remain / cageCount).toFixed(2);
-  });
-  onPpMxInput();
-}
-
-function ppMxClear(){
-  document.querySelectorAll('.pp-mx-cell').forEach(inp => inp.value = '');
-  onPpMxInput();
-}
-
-// 매트릭스 입력값 → distribution 객체로 변환 (저장 시 사용)
-function getPpDistribution(){
-  const dist = {};
-  document.querySelectorAll('.pp-mx-cell').forEach(inp => {
-    const v = parseFloat(inp.value) || 0;
-    if(!v) return;
-    const cart = inp.dataset.cart, cage = inp.dataset.cage;
-    if(!dist[cart]) dist[cart] = {};
-    dist[cart][cage] = v;
-  });
-  return dist;
-}
-// 대차별 총 차감량 (잔여중량 차감용)
-function getPpDeductByCart(){
-  const m = {};
-  document.querySelectorAll('.pp-mx-cell').forEach(inp => {
-    const v = parseFloat(inp.value) || 0;
-    if(!v) return;
-    const id = inp.dataset.id;
-    m[id] = (m[id]||0) + v;
-  });
-  return m;
-}
+// (구버전 매트릭스 함수들 제거됨 - B안 카드 통합 방식 사용)
 
 function savePpEdit(id, fbId) {
   const rec = L.preprocess.find(r=>r.id===id);
