@@ -76,8 +76,9 @@ async function saveP(type){
     }
 
     // 잔여중량 차감 (매트릭스 사용 시 매트릭스 합계 기준, 아니면 기존 방식)
+    // 방혈 종료(end 있음)된 cart도 차감해야 함 - 잔여중량 추적 위해
     wagons.forEach(async rec=>{
-      if(!rec||(rec.end&&rec.end!=='')) return;
+      if(!rec) return;
       let deductKg = mxDeduct[rec.id] || 0;
       if(!deductKg){
         const kgInp=document.querySelector('.pp-wagon-kg[data-id="'+rec.id+'"]');
@@ -87,7 +88,8 @@ async function saveP(type){
       const cur=rec.remainKg!==undefined?rec.remainKg:rec.totalKg;
       const remain=r2(cur-deductKg);
       rec.remainKg=remain<0?0:remain;
-      if(remain<=0) rec.end=d.start||nowHM();
+      // end는 이미 채워져 있으면 유지, 없으면 현재 시각 (방혈 진행중→종료)
+      if(!rec.end || rec.end==='') rec.end = d.start || nowHM();
       saveL();
       let fbId = rec.fbId;
       if(!fbId) {
@@ -95,8 +97,6 @@ async function saveP(type){
         const match = rows.find(r=>r.cart===rec.cart);
         if(match) { fbId=match.fbId; rec.fbId=fbId; saveL(); }
       }
-      if(!rec.end||rec.end==='') rec.end=d.start||nowHM();
-      saveL();
       if(fbId){
         const upd={remainKg:rec.remainKg, end:rec.end};
         fbUpdate('thawing', fbId, upd);
