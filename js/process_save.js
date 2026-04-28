@@ -262,7 +262,21 @@ function savePkEdit(id, fbId) {
   saveL();
   renderPL('packing');
   renderDailyFromLocal_(tod());
-  if(fbId) fbUpdate('packing', fbId, {machine, wagon, ea, defect, start, end:end_, workers});
+  const updates = {machine, wagon, ea, defect, start, end:end_, workers};
+  if(fbId) {
+    fbUpdate('packing', fbId, updates);
+  } else {
+    (async () => {
+      const rows = await fbGetByDate('packing', String(rec.date||'').slice(0,10));
+      const match = rows.find(r => r.id === id);
+      if(match && match.fbId) {
+        rec.fbId = match.fbId; saveL();
+        fbUpdate('packing', match.fbId, updates);
+      } else {
+        toast('Firebase ID 없음 - 로컬만 수정됨','w');
+      }
+    })();
+  }
   toast('포장 기록 수정됨 ✓','s');
 }
 
