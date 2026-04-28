@@ -107,36 +107,38 @@ function onShWagonChange() {
 }
 
 // ============================================================
-// 파쇄 다행 입력
+// 파쇄 다행 입력 (와건 → 와건 N:N 분배)
 // ============================================================
 function _shRowHtml(idx, data){
   data = data || {};
   return `
     <div class="sh-row" data-idx="${idx}" style="border:1px solid var(--g3);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--g1)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <strong style="font-size:13px;color:var(--g7)">와건 #${idx+1}</strong>
+        <strong style="font-size:13px;color:var(--g7)">투입 와건 #${idx+1}</strong>
         <button onclick="shRemoveRow(this)" style="font-size:12px;color:var(--d);background:none;border:none;cursor:pointer;padding:4px 8px">✕ 삭제</button>
       </div>
-      <div class="fg">
+      <div class="fg" style="margin-bottom:8px">
         <div class="fgrp">
-          <label class="fl">투입 와건번호</label>
+          <label class="fl">투입 와건</label>
           <input class="fc sh-wIn" type="text" value="${data.wagonIn||''}" placeholder="예: 22">
         </div>
         <div class="fgrp">
-          <label class="fl">배출 와건번호</label>
-          <input class="fc sh-wOut" type="text" value="${data.wagonOut||''}" placeholder="예: 30">
+          <label class="fl">시작</label>
+          <div style="display:flex;gap:3px">
+            <input class="fc sh-start" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" value="${data.start||''}" style="flex:1">
+            <button onclick="this.previousElementSibling.value=nowHM()" style="padding:0 8px;font-size:11px;background:#1a56db;color:#fff;border:none;border-radius:4px;cursor:pointer">⏱지금</button>
+          </div>
         </div>
         <div class="fgrp">
-          <label class="fl">시작시간</label>
-          <input class="fc sh-start" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" value="${data.start||''}">
+          <label class="fl">종료</label>
+          <div style="display:flex;gap:3px">
+            <input class="fc sh-end" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" value="${data.end||''}" style="flex:1">
+            <button onclick="this.previousElementSibling.value=nowHM()" style="padding:0 8px;font-size:11px;background:var(--s);color:#fff;border:none;border-radius:4px;cursor:pointer">⏱지금</button>
+          </div>
         </div>
         <div class="fgrp">
-          <label class="fl">종료시간</label>
-          <input class="fc sh-end" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" value="${data.end||''}">
-        </div>
-        <div class="fgrp">
-          <label class="fl">파쇄 KG</label>
-          <input class="fc sh-kg" type="number" step="0.01" placeholder="0.00" value="${data.kg||''}">
+          <label class="fl">파쇄 KG <span style="font-size:11px;color:var(--g4)">(자동)</span></label>
+          <input class="fc sh-kg" type="number" step="0.01" placeholder="0.00" value="${data.kg||''}" readonly style="background:#f8f8f8">
         </div>
         <div class="fgrp">
           <label class="fl">비가식부 KG</label>
@@ -147,7 +149,43 @@ function _shRowHtml(idx, data){
           <input class="fc sh-workers" type="number" placeholder="0" value="${data.workers||''}">
         </div>
       </div>
+      <div style="font-size:11px;color:var(--g5);margin-bottom:4px">배출 와건 (와건번호 + kg)</div>
+      <div class="sh-out-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      <div style="display:flex;gap:4px;margin-top:6px;align-items:center;justify-content:space-between;font-size:11px">
+        <button onclick="shAddOutWagon(this)" style="padding:4px 8px;font-size:11px;border:1px dashed #72243E;background:#fff;color:#72243E;border-radius:4px;cursor:pointer">+ 배출 와건 추가</button>
+        <span class="sh-out-sum" style="color:var(--g5);font-weight:500">배출 0kg</span>
+      </div>
     </div>`;
+}
+
+function shAddOutWagon(btnInRow){
+  const row = btnInRow.closest('.sh-row');
+  if(!row) return;
+  const list = row.querySelector('.sh-out-list');
+  const oRow = document.createElement('div');
+  oRow.className = 'sh-out-row';
+  oRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  oRow.innerHTML = `
+    <input class="fc sh-out-num" type="text" placeholder="배출 와건번호" oninput="shOutSumChange(this)" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:2px">
+      <input class="fc sh-out-kg" type="number" step="0.01" placeholder="0" oninput="shOutSumChange(this)" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
+      <span style="font-size:11px;color:var(--g5)">kg</span>
+    </div>
+    <button onclick="this.closest('.sh-out-row').remove();shOutSumChange(this)" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
+  list.appendChild(oRow);
+}
+
+function shOutSumChange(el){
+  const row = el.closest('.sh-row');
+  if(!row) return;
+  let sum = 0;
+  row.querySelectorAll('.sh-out-row').forEach(r => {
+    sum += parseFloat((r.querySelector('.sh-out-kg')||{}).value) || 0;
+  });
+  const sumEl = row.querySelector('.sh-out-sum');
+  if(sumEl) sumEl.textContent = `배출 ${sum.toFixed(2)}kg`;
+  const kgInp = row.querySelector('.sh-kg');
+  if(kgInp) kgInp.value = sum ? sum.toFixed(2) : '';
 }
 
 function shAddRow(data){
@@ -157,6 +195,10 @@ function shAddRow(data){
   const wrap = document.createElement('div');
   wrap.innerHTML = _shRowHtml(idx, data).trim();
   c.appendChild(wrap.firstChild);
+  // 첫 배출 와건 행 자동 추가
+  const newRow = c.lastElementChild;
+  const addBtn = newRow.querySelector('.sh-out-list')?.parentElement.querySelector('button');
+  if(addBtn) addBtn.click();
 }
 
 function shRemoveRow(btn){
@@ -176,18 +218,34 @@ async function saveShAll(){
 
   const recs = [];
   rows.forEach(row => {
+    // 배출 와건 분배 수집
+    const wagonOutDist = {};
+    const wagonOutList = [];
+    row.querySelectorAll('.sh-out-row').forEach(o => {
+      const wn = (o.querySelector('.sh-out-num')||{}).value || '';
+      const kg = parseFloat((o.querySelector('.sh-out-kg')||{}).value) || 0;
+      if(wn && kg){
+        const key = String(wn).trim();
+        wagonOutDist[key] = (wagonOutDist[key]||0) + kg;
+        if(!wagonOutList.includes(key)) wagonOutList.push(key);
+      }
+    });
+    let totalOutKg = 0;
+    Object.values(wagonOutDist).forEach(v => totalOutKg += v);
+
     const d = {
       id: gid(),
       date: (typeof DDATE!=='undefined' && DDATE) || tod(),
       wagonIn: row.querySelector('.sh-wIn').value.trim(),
-      wagonOut: row.querySelector('.sh-wOut').value.trim(),
+      wagonOut: wagonOutList.join(','),
+      wagonOutDist: wagonOutDist,
       start: row.querySelector('.sh-start').value.trim(),
       end: row.querySelector('.sh-end').value.trim(),
-      kg: parseFloat(row.querySelector('.sh-kg').value) || 0,
+      kg: totalOutKg,
       waste: parseFloat(row.querySelector('.sh-waste').value) || 0,
       workers: parseFloat(row.querySelector('.sh-workers').value) || 0
     };
-    if(!d.wagonIn && !d.kg && !d.start) return; // 빈 행 skip
+    if(!d.wagonIn && !d.kg && !d.start) return;
     recs.push(d);
   });
 
