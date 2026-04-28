@@ -176,8 +176,8 @@
         </select>
       </div>
       <div class="fgrp">
-        <label class="fl">케이지 번호</label>
-        <input class="fc" type="text" id="pp_cage" placeholder="예: 9,10">
+        <label class="fl">케이지 번호 <span style="font-size:11px;color:var(--g4)">(쉼표로 구분 → 표 자동생성)</span></label>
+        <input class="fc" type="text" id="pp_cage" placeholder="예: 9,10" oninput="updPpMatrix()">
       </div>
       <div class="fgrp">
         <label class="fl">종료시간</label>
@@ -195,6 +195,12 @@
         <label class="fl">비가식부 KG</label>
         <input class="fc" type="number" step="0.01" id="pp_waste" placeholder="0.00">
       </div>
+    </div>
+    <!-- 대차×케이지 분배 매트릭스 -->
+    <div id="pp_matrixWrap" style="margin:14px 0;display:none">
+      <div style="font-size:12px;font-weight:700;color:var(--g6);margin-bottom:6px">📊 대차 → 케이지 분배 (kg)</div>
+      <div id="pp_matrix"></div>
+      <div style="font-size:11px;color:var(--g5);margin-top:4px">행=대차(잔여중량), 열=케이지. 셀에 분배할 kg 입력</div>
     </div>
     <button class="btn bp bblk" onclick="saveP('preprocess')">저장</button>
   </div>
@@ -889,8 +895,8 @@
 <script src="js/common.js?v=8"></script>
 <script src="js/barcode.js?v=3"></script>
 <script src="js/thawing.js?v=9"></script>
-<script src="js/preprocess.js?v=4"></script>
-<script src="js/process_save.js?v=5"></script>
+<script src="js/preprocess.js?v=5"></script>
+<script src="js/process_save.js?v=6"></script>
 <script src="js/cooking.js?v=2"></script>
 <script src="js/shredding.js?v=3"></script>
 <script src="js/packing.js?v=2"></script>
