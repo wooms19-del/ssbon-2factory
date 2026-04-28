@@ -48,6 +48,7 @@
     <button class="mb" id="schHdBtn" onclick="setModeSchedule()" style="margin-right:4px">📅 일정표</button><button class="mb" id="attHdBtn" onclick="setModeAtt()" style="margin-right:10px">출퇴근</button>
     <button class="mb on" id="modeI" onclick="setMode('i')">입력</button>
     <button class="mb" id="modeD" onclick="setMode('d')">분석</button>
+    <button class="mb" id="modeP" onclick="setModePerf()">실적관리</button>
   </div>
 </div>
 <!-- 입력 탭 -->
@@ -81,6 +82,7 @@
 
 <!-- ===== 해동기 (바코드 스캔) ===== -->
 <div class="pg" id="p-schedule" style="padding:0"></div>
+<div class="pg" id="p-performance" style="padding:0"></div>
   <div class="pg on" id="p-barcode">
   <div class="card">
     <div class="ct">해동기 투입 <span class="bdg" id="bcCnt">0건</span></div>
@@ -929,10 +931,11 @@
 <script src="js/trace.js?v=3"></script>
 <script src="js/outerpacking.js?v=2"></script>
 <script src="js/settings.js?v=2"></script>
-<script src="js/app.js?v=4"></script>
+<script src="js/app.js?v=5"></script>
 <script src="js/schedule.js?v=2"></script>
 <script src="js/attendance.js?v=19"></script>
 <script src="js/timepicker.js?v=2"></script>
 <script src="js/globals.js?v=4"></script>
+<script src="js/performance.js?v=1"></script>
 </body>
 </html>
