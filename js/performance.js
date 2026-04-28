@@ -543,19 +543,26 @@ function _perfRenderTable(rows){
     else { rowCls='row-bg'+((r.dayNo)%2); }
     var isSubRow = r.subRowIdx > 0;
     var span = (!isSubRow && r.totalSub > 1) ? r.totalSub : 1;
+    // 숫자 포맷 헬퍼: 0이면 빈칸, 소수점 1자리까지만 천단위 콤마
+    var fmt=function(v,dec){
+      if(!v && v!==0) return '';
+      var n=parseFloat(v); if(!n) return '';
+      return dec===0 ? Math.round(n).toLocaleString('ko-KR')
+           : (Math.round(n*10)/10).toLocaleString('ko-KR',{minimumFractionDigits:0,maximumFractionDigits:1});
+    };
     var cells=[
       (r.dayNo>0 && r.productIndex===0 && !isSubRow) ? r.dayNo : '',
       (r.productIndex===0 && !isSubRow) ? r.date.slice(5) : '',
       (r.productIndex===0 && !isSubRow && r.expDate) ? r.expDate.slice(2).replace(/-/g,'.') : '',
       !isSubRow ? r.product : '',
       r.rmType||'',
-      r.rmKg||'', r.boxSeoldo||'', r.boxHongdu||'', r.boxUdun||'',
-      r.ppKg||'', r.ckKg||'', r.shKg||'', r.sauceKg||'',
-      r.innerEa ? r.innerEa.toLocaleString() : '', r.defPouch||'',
-      r.outerBoxes||'', r.boxDef||'',
-      r.tray||'', r.trayDef||'', r.outBoxes||'',
-      r.sauceFP||'', r.sauceFC||'', r.qaiKg||'',
-      r.pouch ? r.pouch.toLocaleString() : '', r.boxUse||''
+      fmt(r.rmKg,1), r.boxSeoldo||'', r.boxHongdu||'', r.boxUdun||'',
+      fmt(r.ppKg,1), fmt(r.ckKg,1), fmt(r.shKg,1), fmt(r.sauceKg,0),
+      r.innerEa ? r.innerEa.toLocaleString('ko-KR') : '', fmt(r.defPouch,0),
+      fmt(r.outerBoxes,0), r.boxDef||'',
+      fmt(r.tray,0), r.trayDef||'', fmt(r.outBoxes,0),
+      fmt(r.sauceFP,0), fmt(r.sauceFC,0), fmt(r.qaiKg,1),
+      r.pouch ? r.pouch.toLocaleString('ko-KR') : '', fmt(r.boxUse,0)
     ];
     html+='<tr class="'+rowCls+'">';
     cells.forEach(function(c, i){
