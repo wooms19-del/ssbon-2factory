@@ -523,6 +523,14 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     if(r.isTest) return;
     r.dayTotalSpan = _dayCnt[r.date]||1;
   });
+  // 날짜 내 모든 행이 단일 부위(totalSub=1)인지 → 원육 컬럼 병합 가능 여부
+  var _dayAllSingle={};
+  combined.forEach(function(r){
+    if(r.isTest) return;
+    if((r.totalSub||1)>1) _dayAllSingle[r.date]=false;
+    else if(_dayAllSingle[r.date]===undefined) _dayAllSingle[r.date]=true;
+  });
+  combined.forEach(function(r){ r.dayAllSingle=(_dayAllSingle[r.date]!==false); });
   return combined;
 }
 
@@ -590,12 +598,15 @@ function _perfRenderTable(rows){
       if(isSubRow && MCOLS.has(i)) return;
       // 날짜 2번째+ 행: DAY_MCOLS 컬럼 skip
       if(r.dayRowIdx>0 && DAY_MCOLS.has(i)) return;
+      // 원육 컬럼(4~8): 단일부위 날 + 두 번째 제품 행 → skip
+      var isRMcol=(i>=4&&i<=8);
+      if(isRMcol && r.dayAllSingle && r.dayRowIdx>0 && !isSubRow) return;
       var rs='';
       var dts = r.dayTotalSpan||1;
-      // 날짜 기반 병합 (일수·날짜·소비기한·전처리·자숙·파쇄)
       if(DAY_MCOLS.has(i) && dts>1 && r.dayRowIdx===0 && !isSubRow){
         rs=' rowspan="'+dts+'"';
-      // 부위 분리 기반 병합 (나머지 MCOLS, DAY_MCOLS 제외)
+      } else if(isRMcol && r.dayAllSingle && dts>1 && r.dayRowIdx===0 && !isSubRow){
+        rs=' rowspan="'+dts+'"';
       } else if(MCOLS.has(i) && span>1 && !isSubRow && !DAY_MCOLS.has(i)){
         rs=' rowspan="'+span+'"';
       }
