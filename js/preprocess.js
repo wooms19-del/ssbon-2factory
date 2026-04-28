@@ -24,7 +24,19 @@ function updPpWagon(){
   }
   container.innerHTML=wagons.map(t=>{
     const remain=t.remainKg!==undefined?t.remainKg:t.totalKg;
-    return `<div style="background:var(--g1);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+    const isDone = remain < 0.01;
+    const cardStyle = isDone
+      ? 'background:#f3f4f6;border-radius:8px;padding:10px 12px;margin-bottom:8px;opacity:0.6;cursor:not-allowed'
+      : 'background:var(--g1);border-radius:8px;padding:10px 12px;margin-bottom:8px';
+    if(isDone){
+      return `<div style="${cardStyle}">
+        <label style="display:flex;align-items:center;gap:10px;cursor:not-allowed">
+          <input type="checkbox" disabled style="width:18px;height:18px">
+          <span style="font-size:14px;font-weight:600;text-decoration:line-through;color:var(--g5)">${t.cart||'(대차)'}</span>
+          <span style="font-size:13px;color:var(--g5);margin-left:auto">${t.type||'-'} · ✅완료 (잔여 0)</span>
+        </label></div>`;
+    }
+    return `<div style="${cardStyle}">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
         <input type="checkbox" class="pp-wagon-ck" data-id="${t.id}" data-cart="${t.cart||''}" data-type="${t.type||''}" data-remain="${remain}" onchange="onPpWagonChange()" style="width:18px;height:18px;accent-color:var(--p)">
         <span style="font-size:14px;font-weight:600">${t.cart||'(대차)'}</span>
