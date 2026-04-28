@@ -72,15 +72,35 @@ function renderSchedule(){
 }
 
 // ── 일정 저장 탭 ──────────────────────────────────────────────
+// 호환성 정규화: 단일객체 → {items:[],note:''}
+function _schNorm(rec){
+  if(!rec) return {items:[],note:''};
+  if(Array.isArray(rec.items)) return {items:rec.items.slice(),note:rec.note||''};
+  if(rec.product||rec.rawMeat||rec.packQty){
+    return {items:[{product:rec.product||'',rawMeat:rec.rawMeat||'',packQty:rec.packQty||''}],note:rec.note||''};
+  }
+  return {items:[],note:rec.note||''};
+}
+
+function _schItemRowHtml(d,idx,it,canDel){
+  return '<div class="sch-item-row" data-idx="'+idx+'" style="display:grid;grid-template-columns:1fr 110px 110px 26px;gap:6px;align-items:center">'
+    +'<select class="fc sch-prod" style="width:100%;padding:4px 6px;font-size:12px">'+_schProdOpts(it.product||'')+'</select>'
+    +'<div style="display:flex;align-items:center;gap:2px"><input class="fc sch-rm" type="number" value="'+(it.rawMeat||'')+'" placeholder="0" style="width:65px;padding:4px 6px;font-size:12px;text-align:right"><span style="font-size:11px;color:var(--g4)">kg</span></div>'
+    +'<div style="display:flex;align-items:center;gap:2px"><input class="fc sch-pk" type="number" value="'+(it.packQty||'')+'" placeholder="0" style="width:65px;padding:4px 6px;font-size:12px;text-align:right"><span style="font-size:11px;color:var(--g4)">ea</span></div>'
+    +(canDel
+      ? '<button onclick="schRemoveItem('+d+',this)" style="width:24px;height:24px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:14px;cursor:pointer">−</button>'
+      : '<button onclick="schAddItem('+d+')" style="width:24px;height:24px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:#1a56db;font-size:14px;cursor:pointer">+</button>')
+    +'</div>';
+}
+
 function _renderInput(days){
   var el=document.getElementById('sch_body');if(!el)return;
   var lastDate=new Date(_schYear,_schMonth+1,0).getDate();
   var today=new Date();
   var dow=['일','월','화','수','목','금','토'];
 
-  // 헤더 라벨
-  var header='<div style="display:grid;grid-template-columns:52px 1fr 110px 110px 1fr;gap:6px;padding:6px 10px;background:var(--g2);border-radius:8px 8px 0 0;font-size:11px;font-weight:600;color:var(--g5);margin-bottom:2px">'
-    +'<div>날짜</div><div>제품명</div><div>원육 사용량</div><div>예상 포장량</div><div>기타 일정</div></div>';
+  var header='<div style="display:grid;grid-template-columns:52px 1fr 130px;gap:6px;padding:6px 10px;background:var(--g2);border-radius:8px 8px 0 0;font-size:11px;font-weight:600;color:var(--g5);margin-bottom:2px">'
+    +'<div>날짜</div><div>제품 / 원육 / 포장량</div><div>기타 일정</div></div>';
 
   var listHtml='<div style="border:0.5px solid var(--g2);border-radius:0 0 10px 10px;overflow:hidden;margin-bottom:14px">';
   for(var d=1;d<=lastDate;d++){
@@ -90,24 +110,19 @@ function _renderInput(days){
     var isToday=d===today.getDate()&&_schMonth===today.getMonth()&&_schYear===today.getFullYear();
     var isSun=dt.getDay()===0,isSat=dt.getDay()===6;
     var dc=isSun?'var(--d)':isSat?'#1a56db':'var(--g7)';
-    var rec=days[ds]||{};
+    var rec=_schNorm(days[ds]);
+    var items=rec.items.length?rec.items:[{}];
     var bg=isToday?'#f0f7ff':d%2===0?'var(--g1)':'var(--bg)';
 
-    listHtml+='<div style="display:grid;grid-template-columns:52px 1fr 110px 110px 1fr;gap:6px;padding:6px 8px;border-bottom:0.5px solid var(--g2);background:'+bg+';align-items:center">'
-      // 날짜
-      +'<div style="font-size:13px;font-weight:'+(isToday?700:500)+';color:'+dc+'">'+d+'<span style="font-size:10px;margin-left:2px">('+dayName+')</span></div>'
-      // 제품명 드롭다운
-      +'<select id="sch_prod_'+d+'" class="fc" style="width:100%;padding:4px 6px;font-size:12px">'+_schProdOpts(rec.product||'')+'</select>'
-      // 원육 사용량
-      +'<div style="display:flex;align-items:center;gap:2px">'
-      +'<input class="fc" type="number" id="sch_rm_'+d+'" value="'+(rec.rawMeat||'')+'" placeholder="0" style="width:65px;padding:4px 6px;font-size:12px;text-align:right">'
-      +'<span style="font-size:11px;color:var(--g4)">kg</span></div>'
-      // 예상 포장량
-      +'<div style="display:flex;align-items:center;gap:2px">'
-      +'<input class="fc" type="number" id="sch_pk_'+d+'" value="'+(rec.packQty||'')+'" placeholder="0" style="width:65px;padding:4px 6px;font-size:12px;text-align:right">'
-      +'<span style="font-size:11px;color:var(--g4)">ea</span></div>'
-      // 기타 일정
-      +'<input class="fc" id="sch_note_'+d+'" value="'+(rec.note||'').replace(/"/g,'&quot;')+'" placeholder="기타 일정..." style="width:100%;padding:4px 6px;font-size:12px">'
+    var itemRowsHtml='';
+    items.forEach(function(it,idx){
+      itemRowsHtml+=_schItemRowHtml(d,idx,it,idx>0);
+    });
+
+    listHtml+='<div data-day="'+d+'" style="display:grid;grid-template-columns:52px 1fr 130px;gap:6px;padding:6px 8px;border-bottom:0.5px solid var(--g2);background:'+bg+';align-items:start">'
+      +'<div style="font-size:13px;font-weight:'+(isToday?700:500)+';color:'+dc+';padding-top:5px">'+d+'<span style="font-size:10px;margin-left:2px">('+dayName+')</span></div>'
+      +'<div class="sch-items" id="sch_items_'+d+'" style="display:flex;flex-direction:column;gap:4px">'+itemRowsHtml+'</div>'
+      +'<input class="fc" id="sch_note_'+d+'" value="'+(rec.note||'').replace(/"/g,'&quot;')+'" placeholder="기타 일정..." style="width:100%;padding:4px 6px;font-size:12px;align-self:start;margin-top:2px">'
       +'</div>';
   }
   listHtml+='</div>';
@@ -116,35 +131,86 @@ function _renderInput(days){
   el.innerHTML=header+listHtml+saveBtn;
 }
 
+function schAddItem(d){
+  var c=document.getElementById('sch_items_'+d);if(!c)return;
+  // 기존 모든 + 버튼을 - 버튼으로 변환
+  Array.from(c.children).forEach(function(row,idx){
+    var btn=row.querySelector('button');
+    if(btn && btn.textContent==='+'){
+      btn.textContent='−';
+      btn.style.color='var(--d)';
+      btn.setAttribute('onclick','schRemoveItem('+d+',this)');
+    }
+  });
+  // 새 행 추가 (마지막 행이 +버튼)
+  var newIdx=c.children.length;
+  var wrap=document.createElement('div');
+  wrap.innerHTML=_schItemRowHtml(d,newIdx,{},false); // 마지막=+ 유지
+  c.appendChild(wrap.firstChild);
+  // 마지막 직전 행은 -로 다시 (마지막은 +)
+  var rows=c.children;
+  if(rows.length>1){
+    var prev=rows[rows.length-2].querySelector('button');
+    if(prev){
+      prev.textContent='−';
+      prev.style.color='var(--d)';
+      prev.setAttribute('onclick','schRemoveItem('+d+',this)');
+    }
+  }
+}
+
+function schRemoveItem(d,btn){
+  var c=document.getElementById('sch_items_'+d);if(!c)return;
+  var row=btn.closest('.sch-item-row');
+  if(!row)return;
+  if(c.children.length<=1)return; // 최소 1개
+  row.remove();
+  // 마지막 행을 +버튼으로
+  var last=c.children[c.children.length-1].querySelector('button');
+  if(last){
+    last.textContent='+';
+    last.style.color='#1a56db';
+    last.setAttribute('onclick','schAddItem('+d+')');
+  }
+}
+
 // ── 저장 ─────────────────────────────────────────────────────
 function schSaveAll(){
   var lastDate=new Date(_schYear,_schMonth+1,0).getDate();
   var days={};
-  var totals={}; // 제품별 원육/포장 합산
+  var totals={};
 
   for(var d=1;d<=lastDate;d++){
     var ds=_schYear+'-'+String(_schMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-    var prod=(document.getElementById('sch_prod_'+d)||{}).value||'';
-    var rm=parseFloat((document.getElementById('sch_rm_'+d)||{}).value)||0;
-    var pk=parseInt((document.getElementById('sch_pk_'+d)||{}).value)||0;
     var note=((document.getElementById('sch_note_'+d)||{}).value||'').trim();
-    if(!prod&&!rm&&!pk&&!note) continue;
-    days[ds]={product:prod,rawMeat:rm||'',packQty:pk||'',note:note};
-    // 합산
-    if(prod){
-      if(!totals[prod]) totals[prod]={product:prod,rawMeat:0,packQty:0,days:0};
-      totals[prod].rawMeat+=rm;
-      totals[prod].packQty+=pk;
-      totals[prod].days++;
+    var c=document.getElementById('sch_items_'+d);
+    var items=[];
+    if(c){
+      Array.from(c.children).forEach(function(row){
+        var prod=(row.querySelector('.sch-prod')||{}).value||'';
+        var rm=parseFloat((row.querySelector('.sch-rm')||{}).value)||0;
+        var pk=parseInt((row.querySelector('.sch-pk')||{}).value)||0;
+        if(prod||rm||pk) items.push({product:prod,rawMeat:rm||'',packQty:pk||''});
+      });
     }
+    if(items.length===0 && !note) continue;
+    days[ds]={items:items,note:note};
+    items.forEach(function(it){
+      if(it.product){
+        if(!totals[it.product]) totals[it.product]={product:it.product,rawMeat:0,packQty:0,days:0};
+        totals[it.product].rawMeat+=parseFloat(it.rawMeat)||0;
+        totals[it.product].packQty+=parseInt(it.packQty)||0;
+        totals[it.product].days++;
+      }
+    });
   }
-  var items=Object.values(totals);
+  var items2=Object.values(totals);
   var docId=_schDocId(_schYear,_schMonth);
   firebase.firestore().collection('schedules').doc(docId).get().then(function(doc){
     var data=doc.exists?doc.data():{days:{},summary:{}};
     data.days=days;
     if(!data.summary) data.summary={};
-    data.summary.items=items;
+    data.summary.items=items2;
     data.updatedAt=new Date().toISOString();
     return firebase.firestore().collection('schedules').doc(docId).set(data);
   }).then(function(){
@@ -157,14 +223,17 @@ function schSaveAll(){
 // ── 일정 현황 탭 ──────────────────────────────────────────────
 function _renderView(days){
   var el=document.getElementById('sch_body');if(!el)return;
-  // 합산
+  // 합산 (items 배열 + 구버전 객체 모두 처리)
   var totals={};
   Object.values(days).forEach(function(rec){
-    var p=rec.product;if(!p)return;
-    if(!totals[p]) totals[p]={product:p,rawMeat:0,packQty:0,days:0};
-    totals[p].rawMeat+=parseFloat(rec.rawMeat)||0;
-    totals[p].packQty+=parseInt(rec.packQty)||0;
-    totals[p].days++;
+    var n=_schNorm(rec);
+    n.items.forEach(function(it){
+      var p=it.product;if(!p)return;
+      if(!totals[p]) totals[p]={product:p,rawMeat:0,packQty:0,days:0};
+      totals[p].rawMeat+=parseFloat(it.rawMeat)||0;
+      totals[p].packQty+=parseInt(it.packQty)||0;
+      totals[p].days++;
+    });
   });
   var totalItems=Object.values(totals);
 
@@ -202,12 +271,14 @@ function _renderCal(days){
         var isT=date===today.getDate()&&_schMonth===today.getMonth()&&_schYear===today.getFullYear();
         var isSun=dw===0,isSat=dw===6;
         var dc=isSun?'var(--d)':isSat?'#1a56db':'var(--g7)';
-        var rec=days[ds]||{};
+        var rec=_schNorm(days[ds]);
         html+='<td style="height:100px;vertical-align:top;padding:4px;border:0.5px solid var(--g2);cursor:pointer;background:'+(isT?'#eff6ff':'var(--bg)')+'" onclick="schDayEdit(\''+ds+'\')">';
         html+='<div style="font-size:12px;font-weight:'+(isT?700:500)+';color:'+dc+';'+(isT?'width:22px;height:22px;background:#1a56db;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:2px;':'')+'">'+date+'</div>';
-        if(rec.product) html+='<div style="font-size:10px;padding:1px 4px;background:#eff6ff;color:#1a56db;border-radius:3px;margin-top:1px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+rec.product+'</div>';
-        if(rec.packQty) html+='<div style="font-size:10px;color:var(--g5);margin-top:1px">📦 '+Number(rec.packQty).toLocaleString()+'ea</div>';
-        if(rec.rawMeat) html+='<div style="font-size:10px;color:var(--g5)">🥩 '+rec.rawMeat+'kg</div>';
+        rec.items.forEach(function(it){
+          if(it.product) html+='<div style="font-size:10px;padding:1px 4px;background:#eff6ff;color:#1a56db;border-radius:3px;margin-top:1px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+it.product+'</div>';
+          if(it.packQty) html+='<div style="font-size:10px;color:var(--g5);margin-top:1px">📦 '+Number(it.packQty).toLocaleString()+'ea</div>';
+          if(it.rawMeat) html+='<div style="font-size:10px;color:var(--g5)">🥩 '+it.rawMeat+'kg</div>';
+        });
         if(rec.note) html+='<div style="font-size:10px;color:var(--g4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+rec.note+'</div>';
         html+='</td>';
         date++;
@@ -265,16 +336,14 @@ function schDayEdit(ds){
   var docId=_schDocId(_schYear,_schMonth);
   firebase.firestore().collection('schedules').doc(docId).get().then(function(doc){
     var data=doc.exists?doc.data():{days:{},summary:{}};
-    var rec=(data.days||{})[ds]||{};
+    var rec=_schNorm((data.days||{})[ds]);
+    var items=rec.items.length?rec.items:[{}];
+    var itemsHtml='';
+    items.forEach(function(it,idx){
+      itemsHtml+=_schModalRowHtml(idx,it,idx>0);
+    });
     var body='<div style="display:flex;flex-direction:column;gap:10px">'
-      +'<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">제품명</div>'
-      +'<select class="fc" id="sch_edit_prod" style="width:100%;padding:7px 8px;font-size:13px">'+_schProdOpts(rec.product||'')+'</select></div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-      +'<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">예상 원육 사용량 (kg)</div>'
-      +'<input class="fc" type="number" id="sch_edit_rm" value="'+(rec.rawMeat||'')+'" placeholder="0" style="width:100%;padding:7px 8px;font-size:13px;box-sizing:border-box"></div>'
-      +'<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">예상 포장량 (ea)</div>'
-      +'<input class="fc" type="number" id="sch_edit_pk" value="'+(rec.packQty||'')+'" placeholder="0" style="width:100%;padding:7px 8px;font-size:13px;box-sizing:border-box"></div>'
-      +'</div>'
+      +'<div id="sch_edit_items" style="display:flex;flex-direction:column;gap:8px">'+itemsHtml+'</div>'
       +'<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">기타 일정</div>'
       +'<input class="fc" id="sch_edit_note" value="'+(rec.note||'').replace(/"/g,'&quot;')+'" placeholder="기타 일정 메모..." style="width:100%;padding:7px 8px;font-size:13px;box-sizing:border-box"></div>'
       +'</div>'
@@ -286,25 +355,73 @@ function schDayEdit(ds){
   });
 }
 
+function _schModalRowHtml(idx,it,canDel){
+  return '<div class="sch-edit-row" style="display:grid;grid-template-columns:1fr 80px 80px 26px;gap:6px;align-items:end">'
+    +'<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">제품</div>'
+    +'<select class="fc sch-edit-prod" style="width:100%;padding:6px;font-size:12px">'+_schProdOpts(it.product||'')+'</select></div>'
+    +'<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">원육(kg)</div>'
+    +'<input class="fc sch-edit-rm" type="number" value="'+(it.rawMeat||'')+'" placeholder="0" style="width:100%;padding:6px;font-size:12px;box-sizing:border-box;text-align:right"></div>'
+    +'<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">포장(ea)</div>'
+    +'<input class="fc sch-edit-pk" type="number" value="'+(it.packQty||'')+'" placeholder="0" style="width:100%;padding:6px;font-size:12px;box-sizing:border-box;text-align:right"></div>'
+    +(canDel
+      ? '<button onclick="schModalRemoveItem(this)" style="width:24px;height:32px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:14px;cursor:pointer">−</button>'
+      : '<button onclick="schModalAddItem()" style="width:24px;height:32px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:#1a56db;font-size:14px;cursor:pointer">+</button>')
+    +'</div>';
+}
+
+function schModalAddItem(){
+  var c=document.getElementById('sch_edit_items');if(!c)return;
+  Array.from(c.children).forEach(function(row){
+    var btn=row.querySelector('button');
+    if(btn && btn.textContent==='+'){
+      btn.textContent='−';btn.style.color='var(--d)';
+      btn.setAttribute('onclick','schModalRemoveItem(this)');
+    }
+  });
+  var newIdx=c.children.length;
+  var wrap=document.createElement('div');
+  wrap.innerHTML=_schModalRowHtml(newIdx,{},false);
+  c.appendChild(wrap.firstChild);
+}
+
+function schModalRemoveItem(btn){
+  var c=document.getElementById('sch_edit_items');if(!c)return;
+  var row=btn.closest('.sch-edit-row');
+  if(!row||c.children.length<=1)return;
+  row.remove();
+  var last=c.children[c.children.length-1].querySelector('button');
+  if(last){last.textContent='+';last.style.color='#1a56db';last.setAttribute('onclick','schModalAddItem()');}
+}
+
 function schDaySave(docId,ds){
-  var prod=(document.getElementById('sch_edit_prod')||{}).value||'';
-  var rm=parseFloat((document.getElementById('sch_edit_rm')||{}).value)||0;
-  var pk=parseInt((document.getElementById('sch_edit_pk')||{}).value)||0;
+  var c=document.getElementById('sch_edit_items');
+  var items=[];
+  if(c){
+    Array.from(c.children).forEach(function(row){
+      var prod=(row.querySelector('.sch-edit-prod')||{}).value||'';
+      var rm=parseFloat((row.querySelector('.sch-edit-rm')||{}).value)||0;
+      var pk=parseInt((row.querySelector('.sch-edit-pk')||{}).value)||0;
+      if(prod||rm||pk) items.push({product:prod,rawMeat:rm||'',packQty:pk||''});
+    });
+  }
   var note=((document.getElementById('sch_edit_note')||{}).value||'').trim();
   var ref=firebase.firestore().collection('schedules').doc(docId);
   ref.get().then(function(doc){
     var data=doc.exists?doc.data():{days:{},summary:{}};
     if(!data.days) data.days={};
-    if(prod||rm||pk||note) data.days[ds]={product:prod,rawMeat:rm||'',packQty:pk||'',note:note};
+    if(items.length||note) data.days[ds]={items:items,note:note};
     else delete data.days[ds];
     // 합산 재계산
     var totals={};
     Object.values(data.days).forEach(function(r){
-      var p=r.product;if(!p)return;
-      if(!totals[p]) totals[p]={product:p,rawMeat:0,packQty:0,days:0};
-      totals[p].rawMeat+=parseFloat(r.rawMeat)||0;
-      totals[p].packQty+=parseInt(r.packQty)||0;
-      totals[p].days++;
+      var n=_schNorm(r);
+      n.items.forEach(function(it){
+        var p=it.product;if(!p)return;
+        if(!totals[p]) totals[p]={product:p,rawMeat:0,packQty:0,days:0};
+        totals[p].rawMeat+=parseFloat(it.rawMeat)||0;
+        totals[p].packQty+=parseInt(it.packQty)||0;
+        totals[p].days++;
+      });
     });
     if(!data.summary) data.summary={};
     data.summary.items=Object.values(totals);
@@ -376,3 +493,5 @@ window.schSwitchTab=schSwitchTab;       window.schSaveAll=schSaveAll;
 window.schDayEdit=schDayEdit;           window.schDaySave=schDaySave;
 window.schDayDelete=schDayDelete;       window.schEditExtra=schEditExtra;
 window.schSaveExtra=schSaveExtra;       window._schCloseModal=_schCloseModal;
+window.schAddItem=schAddItem;           window.schRemoveItem=schRemoveItem;
+window.schModalAddItem=schModalAddItem; window.schModalRemoveItem=schModalRemoveItem;
