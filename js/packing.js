@@ -32,6 +32,27 @@ function addPkMachRow(){
     }
   });
   const shWagons = Object.keys(shWagonsMap);
+  // 완료/사용중 판정 — 잔여 ≤ 0 이면 차단
+  const usedMap = {};
+  (L.packing||[]).filter(p => String(p.date||'').slice(0,10)===today).forEach(p => {
+    if(p.wagonDist){
+      Object.entries(p.wagonDist).forEach(([w,kg])=>{ usedMap[w]=(usedMap[w]||0)+(parseFloat(kg)||0); });
+    } else {
+      (p.wagon||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(w=>{
+        // wagonDist 없으면 와건의 총량을 다 썼다고 가정
+        usedMap[w] = (usedMap[w]||0) + (shWagonsMap[w]||0);
+      });
+    }
+  });
+  (L.packing_pending||[]).filter(p => String(p.date||'').slice(0,10)===today).forEach(p => {
+    if(p.wagonDist){
+      Object.entries(p.wagonDist).forEach(([w,kg])=>{ usedMap[w]=(usedMap[w]||0)+(parseFloat(kg)||0); });
+    } else {
+      (p.wagon||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(w=>{
+        usedMap[w] = (usedMap[w]||0) + (shWagonsMap[w]||0);
+      });
+    }
+  });
   const wagonOpts = '<option value="">직접입력</option>' + shWagons.map(w=>`<option value="${w}">${w}번 와건</option>`).join('');
 
   const row = document.createElement('div');
@@ -53,7 +74,18 @@ function addPkMachRow(){
       <div class="fgrp cs2">
         <label class="fl">투입 와건번호 <span style="font-size:11px;color:var(--g4)">(버튼 토글 또는 직접입력 → 카드별 kg 분배)</span></label>
         <div id="pkWagonBtns_${idx}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-          ${shWagons.map(w=>`<button type="button" class="pk-wagon-btn" data-idx="${idx}" data-w="${w}" data-total="${shWagonsMap[w]||0}" onclick="togglePkWagon(${idx},'${w}')" style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#fff;cursor:pointer;font-size:13px">${w}번 <span class="pk-w-rem" style="color:var(--g5)">(${(shWagonsMap[w]||0).toFixed(0)}kg)</span></button>`).join('')}
+          ${shWagons.map(w=>{
+            const total = shWagonsMap[w]||0;
+            const used = usedMap[w]||0;
+            const remain = total - used;
+            const isDone = remain < 0.01;
+            const style = isDone
+              ? 'padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#f3f4f6;color:var(--g5);cursor:not-allowed;font-size:13px;text-decoration:line-through'
+              : 'padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#fff;cursor:pointer;font-size:13px';
+            const onclick = isDone ? `toast('${w}번 와건은 이미 포장 완료됨','d')` : `togglePkWagon(${idx},'${w}')`;
+            const remText = isDone ? '(완료)' : `(${remain.toFixed(0)}kg)`;
+            return `<button type="button" class="pk-wagon-btn" data-idx="${idx}" data-w="${w}" data-total="${total}" data-done="${isDone}" onclick="${onclick}" style="${style}">${w}번 <span class="pk-w-rem" style="color:${isDone?'var(--g5)':'var(--g5)'}">${remText}</span></button>`;
+          }).join('')}
         </div>
         <input type="hidden" class="pk-row-wagon" data-idx="${idx}" value="">
         <!-- 와건별 kg 분배 -->
@@ -344,20 +376,26 @@ function pkRefreshWagonRemain(){
     const u = used[w] || 0;
     const remain = total - u;
     const remEl = btn.querySelector('.pk-w-rem');
+    const isDone = remain < 0.01 && total > 0;
+    // 완료 상태 동적 갱신 (완전 소진되면 즉시 차단)
+    if(isDone && btn.dataset.done !== 'true'){
+      btn.dataset.done = 'true';
+      btn.style.background = '#f3f4f6';
+      btn.style.color = 'var(--g5)';
+      btn.style.cursor = 'not-allowed';
+      btn.style.textDecoration = 'line-through';
+      btn.onclick = () => toast(w+'번 와건은 이미 포장 완료됨','d');
+    }
     if(remEl){
-      if(u > 0){
-        remEl.textContent = `(잔여 ${remain.toFixed(0)}kg)`;
-        remEl.style.color = remain < -0.01 ? 'var(--d)' : remain < 0.01 ? 'var(--s)' : 'var(--g5)';
-      } else {
-        remEl.textContent = `(${total.toFixed(0)}kg)`;
-        remEl.style.color = 'var(--g5)';
-      }
+      if(isDone) remEl.textContent = '(완료)';
+      else if(u > 0) remEl.textContent = `(잔여 ${remain.toFixed(0)}kg)`;
+      else remEl.textContent = `(${total.toFixed(0)}kg)`;
+      remEl.style.color = remain < -0.01 ? 'var(--d)' : 'var(--g5)';
     }
   });
   // 매트릭스 행 색상 갱신
   document.querySelectorAll('.pk-wd-row').forEach(r => {
     const wn = (r.querySelector('.pk-wd-num')||{}).value || '';
-    const kg = parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
     const kgInp = r.querySelector('.pk-wd-kg');
     if(!kgInp || !wn) return;
     const total = pkGetWagonTotal(wn);
