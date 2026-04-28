@@ -112,13 +112,22 @@ async function saveP(type){
     if(el&&!f.h) el.value='';
   });
   if(type==='preprocess'){
-    document.getElementById('pp_startBtn').textContent='지금 시작';
-    document.getElementById('pp_startBtn').style.background='';
-    document.getElementById('pp_startDisplay').textContent='';
-    document.getElementById('pp_start').value='';
+    const startBtn = document.getElementById('pp_startBtn');
+    if(startBtn){
+      startBtn.textContent='지금 시작';
+      startBtn.style.background='';
+    }
+    const startDisp = document.getElementById('pp_startDisplay');
+    if(startDisp) startDisp.textContent='';
+    const startInp = document.getElementById('pp_start');
+    if(startInp) startInp.value='';
     document.querySelectorAll('.pp-wagon-ck').forEach(c=>c.checked=false);
-    document.getElementById('ppWagonInfo').classList.add('hid');
+    const wagonInfo = document.getElementById('ppWagonInfo');
+    if(wagonInfo) wagonInfo.classList.add('hid');
     _ppSelectedWagons = [];
+    // 새 매트릭스 폼 필드들도 초기화
+    document.querySelectorAll('.pp-wagon-input').forEach(w => w.style.display = 'none');
+    document.querySelectorAll('.pp-w-cagerow').forEach(r => r.remove());
   }
 
   renderPL(type);
