@@ -304,13 +304,14 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       var defPouch = Math.max(0, Math.round(pkr.pouch) - innerEa);
       var boxUse = opR.boxes + opR.boxDef;
       var qaiKg = (pkr.subKg>0) ? _perfR2(pkr.subKg) : 0;
-      // 소비기한: 3KG/3kg → 제조일+60일, 그 외 → 제조일+12개월
+      // 소비기한 (당일 포함 일수): 3KG/3kg → 60일(=+59일), 그 외 → 12개월(=+12개월 -1일)
       var dt=new Date(date+'T00:00:00');
       var is3kg = (prod.indexOf('3KG')>=0)||(prod.indexOf('3kg')>=0);
       if(is3kg){
-        dt.setDate(dt.getDate()+60);
+        dt.setDate(dt.getDate()+59);
       } else {
         dt.setMonth(dt.getMonth()+12);
+        dt.setDate(dt.getDate()-1);
       }
       var expDate = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
       // 원육 종류: 같은 날 thawing.part를 박스 많은 순으로 (예: "우둔(29), 홍두깨(4)")
