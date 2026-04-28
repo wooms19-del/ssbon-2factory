@@ -164,14 +164,39 @@ function makeDocId(colName) {
 // 저장
 async function fbSave(colName, data, customDocId) {
   try {
-    // thawing은 date가 항상 종료일(내일) 이상이어야 함 - 잘못된 캐시/pending 방어
-    if(colName === 'thawing' && data.date) {
+    let docId = customDocId || makeDocId(colName);
+    // thawing 저장 시 무결성 검증·보정
+    if(colName === 'thawing') {
       const today = tod();
-      if(data.date <= today) {
+      // (1) date: 항상 내일(종료일) 이상 - 잘못된 캐시/pending 방어
+      if(data.date && data.date <= today) {
         data = {...data, date: addDays(today, 1)};
       }
+      // (2) cart 누락 시 wagon에서 폴백
+      if(!data.cart && data.wagon) {
+        data = {...data, cart: data.wagon};
+      }
+      // (3) 문서ID 날짜 = data.date 일치 보장 (시작일 기반 ID 자동 보정)
+      if(data.date) {
+        const expectedPrefix = 'th_' + data.date.replace(/-/g,'') + '_';
+        if(!docId.startsWith(expectedPrefix)) {
+          const tail = docId.split('_').slice(-1)[0]; // HHMMSS
+          docId = expectedPrefix + tail;
+        }
+      }
+      // (4) 중복 저장 방지: 같은 importCodes[0] + 진행중인 레코드 있으면 차단
+      if(data.importCodes && data.importCodes.length > 0) {
+        try {
+          const dupSnap = await db.collection('thawing')
+            .where('importCodes', 'array-contains', data.importCodes[0])
+            .where('end', '==', '').get();
+          if(!dupSnap.empty) {
+            console.warn('[fbSave] thawing 중복 차단:', data.importCodes[0]);
+            return dupSnap.docs[0].id; // 기존 docId 반환 (재저장 안 함)
+          }
+        } catch(e) { /* 검증 실패해도 저장은 진행 */ }
+      }
     }
-    const docId = customDocId || makeDocId(colName);
     await db.collection(colName).doc(docId).set({
       ...data,
       _createdAt: firebase.firestore.FieldValue.serverTimestamp()
