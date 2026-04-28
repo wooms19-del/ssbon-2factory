@@ -176,18 +176,25 @@ function renderCkPending(){
         </div>
       </div>
       <div id="ckEndForm_${r.id}" style="display:none;padding:12px;background:#fff">
-        <div class="fg">
+        <div class="fg" style="margin-bottom:8px">
           <div class="fgrp">
             <label class="fl">종료시간 <span class="req">*</span></label>
             <input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" id="ckEnd_t_${r.id}">
           </div>
-          <div class="fgrp">
-            <label class="fl">자숙 KG <span class="req">*</span></label>
-            <input class="fc" type="number" step="0.01" id="ckEnd_kg_${r.id}" placeholder="0.00">
+          <div class="fgrp" style="display:flex;align-items:flex-end">
+            <button type="button" class="btn bo bsm" onclick="document.getElementById('ckEnd_t_${r.id}').value=nowHM()">⏱지금</button>
           </div>
+        </div>
+        <div style="font-size:11px;color:var(--g5);margin-bottom:4px">배출 와건 분배 (와건번호 + kg)</div>
+        <div class="ck-end-wagons" id="ckEnd_wagons_${r.id}" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
+        <div style="display:flex;gap:4px;margin-bottom:8px;align-items:center;justify-content:space-between;font-size:11px">
+          <button onclick="ckAddWagon('${r.id}')" style="padding:4px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 와건 추가</button>
+          <span id="ckEnd_sum_${r.id}" style="color:var(--g5);font-weight:500">합계 0kg</span>
+        </div>
+        <div class="fg">
           <div class="fgrp">
-            <label class="fl">배출 와건번호</label>
-            <input class="fc" type="text" id="ckEnd_wout_${r.id}" placeholder="예: 30,17">
+            <label class="fl">자숙 KG <span style="font-size:11px;color:var(--g4)">(자동)</span></label>
+            <input class="fc" type="number" step="0.01" id="ckEnd_kg_${r.id}" placeholder="0.00" readonly style="background:#f8f8f8">
           </div>
           <div class="fgrp">
             <label class="fl">특이사항</label>
@@ -202,9 +209,46 @@ function renderCkPending(){
     </div>`).join('');
 }
 
+function ckAddWagon(pendId){
+  const c = document.getElementById('ckEnd_wagons_'+pendId);
+  if(!c) return;
+  const row = document.createElement('div');
+  row.className = 'ck-end-wrow';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  row.innerHTML = `
+    <input class="fc ck-w-num" type="text" placeholder="와건번호" oninput="ckSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:2px">
+      <input class="fc ck-w-kg" type="number" step="0.01" placeholder="0" oninput="ckSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
+      <span style="font-size:11px;color:var(--g5)">kg</span>
+    </div>
+    <button onclick="this.closest('.ck-end-wrow').remove();ckSumChange('${pendId}')" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
+  c.appendChild(row);
+  ckSumChange(pendId);
+}
+
+function ckSumChange(pendId){
+  const c = document.getElementById('ckEnd_wagons_'+pendId);
+  if(!c) return;
+  let sum = 0;
+  c.querySelectorAll('.ck-end-wrow').forEach(row => {
+    sum += parseFloat((row.querySelector('.ck-w-kg')||{}).value) || 0;
+  });
+  const sumEl = document.getElementById('ckEnd_sum_'+pendId);
+  if(sumEl) sumEl.textContent = `합계 ${sum.toFixed(2)}kg`;
+  const kgInp = document.getElementById('ckEnd_kg_'+pendId);
+  if(kgInp) kgInp.value = sum ? sum.toFixed(2) : '';
+}
+
 function toggleCkEndForm(id){
   const form = document.getElementById('ckEndForm_'+id);
-  if(form) form.style.display = form.style.display==='none'?'':'none';
+  if(form){
+    form.style.display = form.style.display==='none'?'':'none';
+    // 처음 펼칠 때 와건 행 자동 1개 추가
+    if(form.style.display !== 'none'){
+      const c = document.getElementById('ckEnd_wagons_'+id);
+      if(c && c.children.length === 0) ckAddWagon(id);
+    }
+  }
 }
 
 async function deleteCkPending(id){
@@ -226,13 +270,36 @@ async function saveCkEnd(id){
   const rec = L.cooking_pending.find(r=>r.id===id);
   if(!rec){ toast('데이터 없음','d'); return; }
   const end = document.getElementById('ckEnd_t_'+id).value;
-  const kg = parseFloat(document.getElementById('ckEnd_kg_'+id).value)||0;
-  const wagonOut = document.getElementById('ckEnd_wout_'+id).value.trim();
   const note = document.getElementById('ckEnd_note_'+id).value.trim();
   if(!end){ toast('종료시간을 입력하세요','d'); return; }
-  if(!kg){ toast('자숙 KG를 입력하세요','d'); return; }
 
-  const completed = {...rec, end, kg, wagonOut, note};
+  // 와건 분배 수집
+  const wagonDist = {}; // {와건번호: kg}
+  const wagonList = [];
+  const c = document.getElementById('ckEnd_wagons_'+id);
+  if(c){
+    c.querySelectorAll('.ck-end-wrow').forEach(row => {
+      const wn = (row.querySelector('.ck-w-num')||{}).value || '';
+      const kg = parseFloat((row.querySelector('.ck-w-kg')||{}).value) || 0;
+      if(wn && kg){
+        const key = String(wn).trim();
+        wagonDist[key] = (wagonDist[key]||0) + kg;
+        if(!wagonList.includes(key)) wagonList.push(key);
+      }
+    });
+  }
+  let totalKg = 0;
+  Object.values(wagonDist).forEach(v => totalKg += v);
+  if(!totalKg){ toast('배출 와건 분배를 입력하세요','d'); return; }
+
+  const completed = {
+    ...rec,
+    end,
+    kg: totalKg,
+    wagonOut: wagonList.join(','),  // 기존 호환 필드
+    wagonDist: wagonDist,            // 신규: 와건별 kg
+    note
+  };
   L.cooking_pending = L.cooking_pending.filter(r=>r.id!==id);
   L.cooking.push(completed);
   saveL();
