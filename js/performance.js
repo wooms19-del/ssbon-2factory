@@ -184,6 +184,14 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
   var d = function(r){return String(r.date||'').slice(0,10);};
   var idOf = function(r){return r.fbId||r.id||'';};
 
+  // 0) sauce 날짜별 FP/FC 집계
+  var scFP={}, scFC={};
+  (sc||[]).forEach(function(r){
+    var dt=d(r); var nm=r.name||''; var kg=parseInt(r.kg)||0;
+    if(nm.indexOf('FP')>=0){ scFP[dt]=(scFP[dt]||0)+kg; }
+    else if(nm.indexOf('FC')>=0){ scFC[dt]=(scFC[dt]||0)+kg; }
+  });
+
   // 1) 외포장 testRun 키 (date|product) 셋
   var opTestKeys = new Set();
   op.forEach(function(r){ if(r.testRun||r.isTest) opTestKeys.add(d(r)+'|'+(r.product||'')); });
@@ -396,7 +404,8 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
             trayDef: isFR ? opR.trayDef : 0,
             unitCnt: isFR ? opR.unitCnt : 0,
             outBoxes: isFR ? opR.boxes : 0,
-            sauceFP: '',
+            sauceFP: isFR ? (scFP[date]||0) : 0,
+            sauceFC: isFR ? (scFC[date]||0) : 0,
             qaiKg: isFR ? qaiKg : 0,
             pouch: isFR ? Math.round(pkr.pouch) : 0,
             boxUse: isFR ? boxUse : 0,
@@ -427,7 +436,9 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
           outerBoxes: opR.boxes, boxDef: opR.boxDef,
           tray: opR.tray, trayDef: opR.trayDef,
           unitCnt: opR.unitCnt, outBoxes: opR.boxes,
-          sauceFP: '', qaiKg: qaiKg,
+          sauceFP: pi===0 ? (scFP[date]||0) : 0,
+          sauceFC: pi===0 ? (scFC[date]||0) : 0,
+          qaiKg: qaiKg,
           pouch: Math.round(pkr.pouch), boxUse: boxUse,
           isTest: false,
           isPending: isPending
@@ -497,7 +508,11 @@ function _perfRenderTable(rows){
   wrap.style.display='';
 
   // 병합 대상 컬럼 (인원 제거 후 0-based): 일수/날짜/소비기한/제품명 + 전처리~박스합계
-  var MCOLS=new Set([0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]);
+  // FP소스·FC소스 각 1컬럼씩으로 총 26컬럼
+  // 0:일수 1:날짜 2:소비기한 3:제품명 4:원육종류 5:원육kg 6:설도 7:홍두깨 8:우둔
+  // 9:전처리 10:자숙 11:파쇄 12:소스kg 13:내포장 14:불량파우치 15:완박스 16:불량박스
+  // 17:트레이 18:트레이불량 19:낱개 20:출고박스 21:FP소스 22:FC소스 23:메추리알 24:파우치 25:박스합계
+  var MCOLS=new Set([0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]);
 
   var headers=[
     '일수','날짜','소비기한','제품명',
@@ -505,7 +520,7 @@ function _perfRenderTable(rows){
     '전처리<br>(kg)','자숙<br>(kg)','파쇄<br>(kg)','소스<br>(kg)',
     '내포장<br>(EA)','불량<br>파우치','완박스','불량<br>박스',
     '트레이','트레이<br>불량','낱개','출고<br>박스',
-    'FP/FC<br>소스','메추리<br>알(kg)','파우치<br>합계','박스<br>합계'
+    'FP소스<br>(kg)','FC소스<br>(kg)','메추리<br>알(kg)','파우치<br>합계','박스<br>합계'
   ];
   var html='<table class="perf-tbl"><thead><tr>';
   headers.forEach(function(h){ html+='<th>'+h+'</th>'; });
@@ -528,7 +543,7 @@ function _perfRenderTable(rows){
       r.innerEa ? r.innerEa.toLocaleString() : '', r.defPouch||'',
       r.outerBoxes||'', r.boxDef||'',
       r.tray||'', r.trayDef||'', r.unitCnt||'', r.outBoxes||'',
-      r.sauceFP||'', r.qaiKg||'',
+      r.sauceFP||'', r.sauceFC||'', r.qaiKg||'',
       r.pouch ? r.pouch.toLocaleString() : '', r.boxUse||''
     ];
     html+='<tr class="'+rowCls+'">';
@@ -559,10 +574,10 @@ function perfDownloadXlsx(){
     '전처리(kg)','자숙(kg)','파쇄(kg)','소스사용량(kg)',
     '내포장수량(EA)','불량파우치(EA)','완박스','불량박스',
     '트레이(EA)','트레이불량(EA)','낱개수량','출고박스',
-    'FP/FC소스배합','깐메추리알(kg)','파우치사용량','박스사용량'
+    'FP소스배합(kg)','FC소스배합(kg)','깐메추리알(kg)','파우치사용량','박스사용량'
   ];
-  // 병합 대상 컬럼 (0-based)
-  var MCOLS_ARR=[0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24];
+  // 병합 대상 컬럼 (0-based, 26컬럼)
+  var MCOLS_ARR=[0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25];
   var MCOLS=new Set(MCOLS_ARR);
 
   var aoa=[headers];
@@ -591,6 +606,7 @@ function perfDownloadXlsx(){
       (!isSubRow) ? (r.unitCnt||'') : '',
       (!isSubRow) ? (r.outBoxes||'') : '',
       (!isSubRow) ? (r.sauceFP||'') : '',
+      (!isSubRow) ? (r.sauceFC||'') : '',
       (!isSubRow) ? (r.qaiKg||'') : '',
       (!isSubRow) ? (r.pouch||'') : '',
       (!isSubRow) ? (r.boxUse||'') : ''
@@ -611,7 +627,7 @@ function perfDownloadXlsx(){
     {wch:10},{wch:9},{wch:9},{wch:11},
     {wch:12},{wch:10},{wch:8},{wch:8},
     {wch:9},{wch:11},{wch:8},{wch:9},
-    {wch:11},{wch:10},{wch:11},{wch:9}
+    {wch:11},{wch:11},{wch:10},{wch:11},{wch:9}
   ];
   if(merges.length) ws['!merges']=merges;
   ws['!freeze']={xSplit:4,ySplit:1};
