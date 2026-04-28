@@ -57,18 +57,28 @@ async function saveP(type){
     const wagons = _ppSelectedWagons.length
       ? _ppSelectedWagons.map(w => L.thawing.find(t=>t.cart===w)).filter(Boolean)
       : (getSelectedWagons ? getSelectedWagons() : []);
-    // 저장 시에도 잔여중량 차감 (지금시작 안 눌렀을 때)
+
+    // 매트릭스(distribution) 우선 - 대차별 차감량은 매트릭스 합계 기준
+    const mxDeduct = (typeof getPpDeductByCart==='function') ? getPpDeductByCart() : {};
+    const mxDist   = (typeof getPpDistribution==='function') ? getPpDistribution() : {};
+    if(Object.keys(mxDist).length){
+      d.distribution = mxDist; // {"5":{"7":80,"8":40}, ...}
+    }
+
+    // 잔여중량 차감 (매트릭스 사용 시 매트릭스 합계 기준, 아니면 기존 방식)
     wagons.forEach(async rec=>{
       if(!rec||(rec.end&&rec.end!=='')) return;
-      const kgInp=document.querySelector('.pp-wagon-kg[data-id="'+rec.id+'"]');
-      const deductKg=parseFloat(kgInp&&kgInp.value)||0;
+      let deductKg = mxDeduct[rec.id] || 0;
+      if(!deductKg){
+        const kgInp=document.querySelector('.pp-wagon-kg[data-id="'+rec.id+'"]');
+        deductKg=parseFloat(kgInp&&kgInp.value)||0;
+      }
       if(!deductKg) return;
       const cur=rec.remainKg!==undefined?rec.remainKg:rec.totalKg;
       const remain=r2(cur-deductKg);
       rec.remainKg=remain<0?0:remain;
       if(remain<=0) rec.end=d.start||nowHM();
       saveL();
-      // fbId 없으면 Firebase에서 직접 찾아서 업데이트
       let fbId = rec.fbId;
       if(!fbId) {
         const rows = await fbGetByDate('thawing', String(rec.date||'').slice(0,10));
