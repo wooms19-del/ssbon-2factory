@@ -56,11 +56,19 @@ function addPkMachRow(){
           </div>
         </div>
       </div>
-      <div class="fgrp">
-        <label class="fl">원육 타입 <span style="font-size:11px;color:var(--g4)">(와건 선택 시 자동)</span></label>
-        <select class="fc pk-row-type" data-idx="${idx}">
+      <div class="fgrp cs2">
+        <label class="fl">원육 타입 <span style="font-size:11px;color:var(--g4)">(와건 선택 시 자동, 여러 종류면 자동 분리)</span></label>
+        <!-- 단일 셀렉트 (호환용) -->
+        <select class="fc pk-row-type" data-idx="${idx}" style="display:none">
           <option value="">자동감지</option><option>설도</option><option>홍두깨</option><option>우둔</option>
         </select>
+        <!-- 단일 표시 -->
+        <div class="pk-type-single" id="pkTypeSingle_${idx}" style="background:var(--g2);padding:8px 10px;border-radius:6px;font-size:13px;color:var(--g6)">와건 선택 시 자동 감지</div>
+        <!-- 다중(원육별 kg) -->
+        <div class="pk-type-multi" id="pkTypeMulti_${idx}" style="display:none;padding:8px;background:#f0f7ff;border:1px dashed #1a56db;border-radius:6px">
+          <div style="font-size:11px;color:#1a56db;font-weight:600;margin-bottom:4px">⚠ 와건 원육 2종 이상 — 원육별 사용량</div>
+          <div class="pk-type-rows" id="pkTypeRows_${idx}" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
       </div>
       <div class="fgrp">
         <label class="fl">인원</label>
@@ -102,7 +110,6 @@ function addPkMachRow(){
 function togglePkWagon(idx, w){
   const btn = document.querySelector(`#pkRow_${idx} .pk-wagon-btn[data-w="${w}"]`);
   const hidden = document.querySelector(`#pkRow_${idx} .pk-row-wagon`);
-  const directInput = document.querySelector(`#pkRow_${idx} .pk-row-wagon-input`);
   const distC = document.getElementById('pkWagonDist_'+idx);
   if(!btn || !hidden) return;
   const cur = (hidden.value||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -110,7 +117,6 @@ function togglePkWagon(idx, w){
   if(i>=0){
     cur.splice(i,1);
     btn.style.background='#fff'; btn.style.color=''; btn.style.borderColor='var(--g3)';
-    // 매트릭스에서 해당 와건 행 제거
     if(distC){
       const row = distC.querySelector(`.pk-wd-row[data-w="${w}"]`);
       if(row) row.remove();
@@ -118,30 +124,11 @@ function togglePkWagon(idx, w){
   } else {
     cur.push(w);
     btn.style.background='var(--p)'; btn.style.color='#fff'; btn.style.borderColor='var(--p)';
-    // 매트릭스에 행 추가 (없으면)
     if(distC && !distC.querySelector(`.pk-wd-row[data-w="${w}"]`)){
       pkAddWagonRow(idx, w);
     }
   }
   hidden.value = cur.join(',');
-  if(directInput) directInput.value='';
-
-  // 와건 → 원육 타입 자동
-  if(cur.length){
-    const wNum = cur[0];
-    const shRec = L.shredding.find(r=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(wNum));
-    if(shRec){
-      const wIns = (shRec.wagonIn||'').split(',').map(x=>x.trim()).filter(Boolean);
-      for(const wIn of wIns){
-        const ckRec = L.cooking.find(r=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn));
-        if(ckRec && ckRec.type){
-          const typeEl = document.querySelector(`#pkRow_${idx} .pk-row-type`);
-          if(typeEl) typeEl.value = ckRec.type.split(',')[0].trim();
-          break;
-        }
-      }
-    }
-  }
   pkWagonSumChange(idx);
 }
 
@@ -167,11 +154,104 @@ function pkWagonSumChange(idx){
   const c = document.getElementById('pkWagonDist_'+idx);
   if(!c) return;
   let sum = 0;
+  // 와건별 kg + 와건의 원육 추적 → 원육별 합산
+  const typeKg = {}; // {원육: kg}
   c.querySelectorAll('.pk-wd-row').forEach(r => {
-    sum += parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
+    const wn = (r.querySelector('.pk-wd-num')||{}).value || '';
+    const kg = parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
+    sum += kg;
+    if(wn && kg){
+      const t = pkResolveTypeFromWagon(String(wn).trim());
+      if(t){
+        typeKg[t] = (typeKg[t]||0) + kg;
+      }
+    }
   });
   const sumEl = document.getElementById('pkWagonSum_'+idx);
   if(sumEl) sumEl.textContent = `합계 ${sum.toFixed(2)}kg`;
+
+  // 원육 타입 표시 갱신
+  refreshPkTypeUI(idx, typeKg);
+}
+
+// 와건번호 → 원육 타입 (cooking/preprocess 추적)
+function pkResolveTypeFromWagon(wNum){
+  // shredding.wagonOut에서 wagonIn 찾기 → cooking.wagonOut에서 매칭 → cooking.type
+  const sh = (L.shredding||[]).find(r => (r.wagonOut||'').split(',').map(x=>x.trim()).includes(wNum));
+  if(!sh) return '';
+  const wIns = (sh.wagonIn||'').split(',').map(x=>x.trim()).filter(Boolean);
+  for(const wIn of wIns){
+    const ck = (L.cooking||[]).find(r => (r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn));
+    if(ck && ck.type) return ck.type.split(',')[0].trim();
+  }
+  return '';
+}
+
+// 원육 단일/다중 자동 전환 + 사용자 수정 보존
+function refreshPkTypeUI(idx, typeKg){
+  const single = document.getElementById('pkTypeSingle_'+idx);
+  const multi  = document.getElementById('pkTypeMulti_'+idx);
+  const rows   = document.getElementById('pkTypeRows_'+idx);
+  const hidden = document.querySelector(`#pkRow_${idx} .pk-row-type`);
+  if(!single || !multi || !rows) return;
+
+  const types = Object.keys(typeKg);
+
+  // 0종 → 단일 안내
+  if(types.length === 0){
+    single.style.display = 'block';
+    single.style.background = 'var(--g2)';
+    single.style.color = 'var(--g6)';
+    single.textContent = '와건 선택 시 자동 감지';
+    multi.style.display = 'none';
+    if(hidden) hidden.value = '';
+    return;
+  }
+
+  // 1종 → 단일 표시
+  if(types.length === 1){
+    single.style.display = 'block';
+    single.style.background = '#e6f4ea';
+    single.style.color = '#1e7e34';
+    single.textContent = `${types[0]} (자동 감지)`;
+    multi.style.display = 'none';
+    if(hidden) hidden.value = types[0];
+    return;
+  }
+
+  // 2종 이상 → 다중 표시
+  single.style.display = 'none';
+  multi.style.display = 'block';
+  if(hidden) hidden.value = '혼합';
+
+  // 기존 입력값 보존
+  const prev = {};
+  rows.querySelectorAll('.pk-type-inp').forEach(i => prev[i.dataset.type] = i.value);
+
+  rows.innerHTML = types.map(t => {
+    const auto = typeKg[t];
+    const v = prev[t] !== undefined ? prev[t] : auto.toFixed(2);
+    return `
+      <div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center">
+        <span style="font-size:12px;color:var(--g6);font-weight:500">${t}</span>
+        <input class="fc pk-type-inp" type="number" step="0.01" data-type="${t}" data-auto="${auto}" value="${v}" style="padding:4px 6px;font-size:12px;text-align:right">
+        <span style="font-size:11px;color:var(--g5)">kg</span>
+      </div>`;
+  }).join('');
+}
+
+// 저장 시 원육별 사용량 (다중일 때만)
+function getPkTypeKgs(idx){
+  const rows = document.getElementById('pkTypeRows_'+idx);
+  if(!rows) return null;
+  const inps = rows.querySelectorAll('.pk-type-inp');
+  if(inps.length < 2) return null;
+  const m = {};
+  inps.forEach(i => {
+    const v = parseFloat(i.value) || 0;
+    if(v) m[i.dataset.type] = v;
+  });
+  return Object.keys(m).length ? m : null;
 }
 
 function getPkWagonDist(idx){
@@ -303,6 +383,7 @@ async function onPkStartBtn(){
     const idxAttr = parseInt(row.id.replace('pkRow_',''));
     const wagonDist = (typeof getPkWagonDist==='function') ? getPkWagonDist(idxAttr) : null;
     const sauceTanks = (typeof getPkSauceTanks==='function') ? getPkSauceTanks(idxAttr) : null;
+    const typeKgs = (typeof getPkTypeKgs==='function') ? getPkTypeKgs(idxAttr) : null;
 
     const rec = {
       id: gid(), date: DDATE||tod(),
@@ -313,6 +394,7 @@ async function onPkStartBtn(){
     };
     if(wagonDist) rec.wagonDist = wagonDist;
     if(sauceTanks) rec.sauceTanks = sauceTanks;
+    if(typeKgs) rec.typeKgs = typeKgs;
     L.packing_pending.push(rec);
     added++;
   });
