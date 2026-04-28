@@ -47,7 +47,13 @@ function updPpWagon(){
             </div>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--g5);margin-bottom:4px">분배할 케이지 (케이지번호 + kg)</div>
+        <div style="font-size:11px;color:var(--g5);margin-bottom:4px">분배할 케이지</div>
+        <div style="display:grid;grid-template-columns:80px 1fr 70px 28px;gap:4px;margin-bottom:3px;padding:0 4px">
+          <div style="font-size:10px;color:var(--g5);font-weight:500">케이지</div>
+          <div style="font-size:10px;color:var(--g5);font-weight:500;text-align:right">kg</div>
+          <div style="font-size:10px;color:var(--g5);font-weight:500;text-align:center">탱크</div>
+          <div></div>
+        </div>
         <div class="pp-w-cages" style="display:flex;flex-direction:column;gap:4px">
           <!-- 케이지 행들 -->
         </div>
@@ -55,6 +61,7 @@ function updPpWagon(){
           <button onclick="ppAddCage('${t.id}')" style="padding:4px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 케이지 추가</button>
           <span class="pp-w-sum" style="color:var(--g5);font-weight:500">합계 0kg / ${remain}kg</span>
         </div>
+        <div class="pp-w-tank-summary" style="display:none;margin-top:6px;padding:6px 8px;background:#f0fff4;border-radius:4px;font-size:11px;line-height:1.5"></div>
       </div>
     </div>`;
   }).join('');
@@ -127,13 +134,14 @@ function ppAddCage(wagonId){
   const list = wrap.querySelector('.pp-w-cages');
   const row = document.createElement('div');
   row.className = 'pp-w-cagerow';
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 70px 28px;gap:4px;align-items:center';
   row.innerHTML = `
-    <input class="fc pp-w-cnum" type="text" placeholder="케이지 번호 (예: 7)" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
+    <input class="fc pp-w-cnum" type="text" placeholder="케이지" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
     <div style="display:flex;align-items:center;gap:2px">
       <input class="fc pp-w-ckg" type="number" step="0.01" placeholder="0" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
       <span style="font-size:11px;color:var(--g5)">kg</span>
     </div>
+    <input class="fc pp-w-tank" type="text" placeholder="탱크" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:center;background:#f0fff4">
     <button onclick="ppRemoveCage(this)" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
   list.appendChild(row);
   onPpDistChange();
@@ -156,18 +164,32 @@ function onPpDistChange(){
     if(wrap.style.display === 'none') return;
     const remain = parseFloat(wrap.dataset.remain) || 0;
     let wSum = 0;
+    const wagonTanks = {}; // 탱크별 합계 (이 대차)
     wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
       const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
       const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      const tk = (row.querySelector('.pp-w-tank')||{}).value || '';
       if(cn) cageNums.add(String(cn).trim());
       wSum += kg;
+      if(tk && kg) wagonTanks[String(tk).trim()] = (wagonTanks[String(tk).trim()]||0) + kg;
     });
     totalKg += wSum;
     const sumEl = wrap.querySelector('.pp-w-sum');
     if(sumEl){
       const willRemain = remain - wSum;
       sumEl.innerHTML = `합계 <b>${wSum.toFixed(2)}kg</b> / ${remain}kg · 빠지면 잔여 <b style="color:${willRemain<-0.01?'var(--d)':willRemain<0.01?'var(--s)':'var(--p)'}">${willRemain.toFixed(2)}kg</b>`;
-      sumEl.style.color = wSum > remain + 0.01 ? 'var(--d)' : 'var(--g5)';
+    }
+    // 탱크별 요약 표시
+    const tankBox = wrap.querySelector('.pp-w-tank-summary');
+    if(tankBox){
+      const keys = Object.keys(wagonTanks);
+      if(keys.length){
+        tankBox.style.display = 'block';
+        tankBox.innerHTML = '<div style="color:var(--g5);font-weight:500;margin-bottom:2px">📦 탱크별</div>' +
+          keys.map(k => `<div style="display:flex;justify-content:space-between"><span style="color:#27500A;font-weight:500">탱크 ${k}번</span><span>${wagonTanks[k].toFixed(2)}kg</span></div>`).join('');
+      } else {
+        tankBox.style.display = 'none';
+      }
     }
     if(wSum > 0){
       if(wrap.dataset.cart) carts.push(wrap.dataset.cart);
@@ -218,13 +240,17 @@ function getPpDistribution(){
     if(wrap.style.display === 'none') return;
     const cart = wrap.dataset.cart;
     if(!cart) return;
-    const cages = {};
+    const cages = {};       // {케이지번호: kg}
+    const cageTanks = {};   // {케이지번호: 탱크번호}
     let total = 0;
     wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
       const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
       const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      const tk = (row.querySelector('.pp-w-tank')||{}).value || '';
       if(cn && kg){
-        cages[String(cn).trim()] = (cages[String(cn).trim()]||0) + kg;
+        const key = String(cn).trim();
+        cages[key] = (cages[key]||0) + kg;
+        if(tk) cageTanks[key] = String(tk).trim();
         total += kg;
       }
     });
@@ -234,11 +260,23 @@ function getPpDistribution(){
         start: (wrap.querySelector('.pp-w-start')||{}).value || '',
         end: (wrap.querySelector('.pp-w-end')||{}).value || '',
         cages: cages,
+        cageTanks: cageTanks,
         total: total
       };
     }
   });
   return dist;
+}
+
+// 케이지 → 탱크 매핑 (전역, 저장용)
+function getPpCageTankMap(){
+  const m = {};
+  document.querySelectorAll('.pp-w-cagerow').forEach(row => {
+    const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
+    const tk = (row.querySelector('.pp-w-tank')||{}).value || '';
+    if(cn && tk) m[String(cn).trim()] = String(tk).trim();
+  });
+  return m;
 }
 
 // 대차별 차감량 (잔여중량 차감용)
