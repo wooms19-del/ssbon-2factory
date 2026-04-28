@@ -250,10 +250,13 @@ function shAddRow(data){
   const wrap = document.createElement('div');
   wrap.innerHTML = _shRowHtml(idx, data).trim();
   c.appendChild(wrap.firstChild);
-  // 첫 배출 와건 행 자동 추가
+  // 첫 배출 와건 행 자동 추가 — 'shAddOutWagon' 버튼만 정확히 찾기
   const newRow = c.lastElementChild;
-  const addBtn = newRow.querySelector('.sh-out-list')?.parentElement.querySelector('button');
-  if(addBtn) addBtn.click();
+  if(newRow && typeof shAddOutWagon === 'function'){
+    const addBtn = [...newRow.querySelectorAll('button')]
+      .find(b => /onclick/.test(b.outerHTML) && /shAddOutWagon/.test(b.getAttribute('onclick')||''));
+    if(addBtn) shAddOutWagon(addBtn);
+  }
 }
 
 function shRemoveRow(btn){
