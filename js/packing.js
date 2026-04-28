@@ -42,12 +42,21 @@ function addPkMachRow(){
         </select>
       </div>
       <div class="fgrp cs2">
-        <label class="fl">투입 와건번호 <span style="font-size:11px;color:var(--g4)">(여러 개 선택 가능)</span></label>
+        <label class="fl">투입 와건번호 <span style="font-size:11px;color:var(--g4)">(버튼 토글 또는 직접입력 → 카드별 kg 분배)</span></label>
         <div id="pkWagonBtns_${idx}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
           ${shWagons.map(w=>`<button type="button" class="pk-wagon-btn" data-idx="${idx}" data-w="${w}" onclick="togglePkWagon(${idx},'${w}')" style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#fff;cursor:pointer;font-size:13px">${w}번</button>`).join('')}
         </div>
         <input class="fc pk-row-wagon-input" type="text" placeholder="직접입력 (예: 14,15)" data-idx="${idx}" oninput="onPkWagonDirectInput(${idx})">
         <input type="hidden" class="pk-row-wagon" data-idx="${idx}" value="">
+        <!-- 와건별 kg 분배 -->
+        <div style="margin-top:6px;padding:6px;background:#fff;border-radius:6px;border:1px dashed var(--g3)">
+          <div style="font-size:11px;color:var(--g5);margin-bottom:4px">투입 와건별 사용 kg</div>
+          <div class="pk-wagon-dist" id="pkWagonDist_${idx}" style="display:flex;flex-direction:column;gap:4px"></div>
+          <div style="display:flex;gap:4px;margin-top:4px;align-items:center;justify-content:space-between;font-size:11px">
+            <button onclick="pkAddWagonRow(${idx})" style="padding:3px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 와건 추가</button>
+            <span id="pkWagonSum_${idx}" style="color:var(--g5);font-weight:500">합계 0kg</span>
+          </div>
+        </div>
       </div>
       <div class="fgrp">
         <label class="fl">원육 타입 <span style="font-size:11px;color:var(--g4)">(와건 선택 시 자동)</span></label>
@@ -87,41 +96,90 @@ function addPkMachRow(){
 
 // 와건 버튼 토글 (다중 선택)
 function togglePkWagon(idx, w){
-  const btn = document.querySelector(`#pkWagonBtns_${idx} [data-w="${w}"]`);
+  const btn = document.querySelector(`#pkRow_${idx} .pk-wagon-btn[data-w="${w}"]`);
   const hidden = document.querySelector(`#pkRow_${idx} .pk-row-wagon`);
   const directInput = document.querySelector(`#pkRow_${idx} .pk-row-wagon-input`);
-  if(!btn||!hidden) return;
-
-  // 현재 선택 목록 관리
-  const current = hidden.value ? hidden.value.split(',').map(x=>x.trim()).filter(Boolean) : [];
-  const idx2 = current.indexOf(w);
-  if(idx2 >= 0) {
-    current.splice(idx2,1);
-    btn.style.background='#fff'; btn.style.borderColor='var(--g3)'; btn.style.color='';
+  const distC = document.getElementById('pkWagonDist_'+idx);
+  if(!btn || !hidden) return;
+  const cur = (hidden.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const i = cur.indexOf(w);
+  if(i>=0){
+    cur.splice(i,1);
+    btn.style.background='#fff'; btn.style.color=''; btn.style.borderColor='var(--g3)';
+    // 매트릭스에서 해당 와건 행 제거
+    if(distC){
+      const row = distC.querySelector(`.pk-wd-row[data-w="${w}"]`);
+      if(row) row.remove();
+    }
   } else {
-    current.push(w);
-    btn.style.background='var(--p)'; btn.style.borderColor='var(--p)'; btn.style.color='#fff';
+    cur.push(w);
+    btn.style.background='var(--p)'; btn.style.color='#fff'; btn.style.borderColor='var(--p)';
+    // 매트릭스에 행 추가 (없으면)
+    if(distC && !distC.querySelector(`.pk-wd-row[data-w="${w}"]`)){
+      pkAddWagonRow(idx, w);
+    }
   }
-  hidden.value = current.join(',');
-  if(directInput) directInput.value = current.join(',');
+  hidden.value = cur.join(',');
+  if(directInput) directInput.value='';
 
-  // 원육타입 자동 추적 (첫 번째 와건 기준)
-  if(current.length > 0){
-    const wNum = current[0];
+  // 와건 → 원육 타입 자동
+  if(cur.length){
+    const wNum = cur[0];
     const shRec = L.shredding.find(r=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(wNum));
     if(shRec){
       const wIns = (shRec.wagonIn||'').split(',').map(x=>x.trim()).filter(Boolean);
       for(const wIn of wIns){
         const ckRec = L.cooking.find(r=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn));
         if(ckRec && ckRec.type){
-          const row = document.getElementById('pkRow_'+idx);
-          const typeEl = row&&row.querySelector('.pk-row-type');
+          const typeEl = document.querySelector(`#pkRow_${idx} .pk-row-type`);
           if(typeEl) typeEl.value = ckRec.type.split(',')[0].trim();
           break;
         }
       }
     }
   }
+  pkWagonSumChange(idx);
+}
+
+function pkAddWagonRow(idx, prefilledW){
+  const c = document.getElementById('pkWagonDist_'+idx);
+  if(!c) return;
+  const row = document.createElement('div');
+  row.className = 'pk-wd-row';
+  row.dataset.w = prefilledW || '';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  row.innerHTML = `
+    <input class="fc pk-wd-num" type="text" value="${prefilledW||''}" placeholder="와건번호" oninput="this.closest('.pk-wd-row').dataset.w=this.value;pkWagonSumChange(${idx})" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:2px">
+      <input class="fc pk-wd-kg" type="number" step="0.01" placeholder="0" oninput="pkWagonSumChange(${idx})" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
+      <span style="font-size:11px;color:var(--g5)">kg</span>
+    </div>
+    <button onclick="this.closest('.pk-wd-row').remove();pkWagonSumChange(${idx})" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
+  c.appendChild(row);
+  pkWagonSumChange(idx);
+}
+
+function pkWagonSumChange(idx){
+  const c = document.getElementById('pkWagonDist_'+idx);
+  if(!c) return;
+  let sum = 0;
+  c.querySelectorAll('.pk-wd-row').forEach(r => {
+    sum += parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
+  });
+  const sumEl = document.getElementById('pkWagonSum_'+idx);
+  if(sumEl) sumEl.textContent = `합계 ${sum.toFixed(2)}kg`;
+}
+
+function getPkWagonDist(idx){
+  const c = document.getElementById('pkWagonDist_'+idx);
+  if(!c) return null;
+  const dist = {};
+  c.querySelectorAll('.pk-wd-row').forEach(r => {
+    const wn = (r.querySelector('.pk-wd-num')||{}).value || '';
+    const kg = parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
+    if(wn && kg) dist[String(wn).trim()] = (dist[String(wn).trim()]||0) + kg;
+  });
+  return Object.keys(dist).length ? dist : null;
 }
 
 function removePkRow(idx){
@@ -171,6 +229,9 @@ async function onPkStartBtn(){
     const type = row.querySelector('.pk-row-type')?.value||'';
     const sauceTank = row.querySelector('.pk-row-stank').value;
     const subName = row.querySelector('.pk-row-subnm').value;
+    // 와건별 kg 분배
+    const idxAttr = parseInt(row.id.replace('pkRow_',''));
+    const wagonDist = (typeof getPkWagonDist==='function') ? getPkWagonDist(idxAttr) : null;
 
     const rec = {
       id: gid(), date: DDATE||tod(),
@@ -179,6 +240,7 @@ async function onPkStartBtn(){
       sauceTank, subName,
       end:'', ea:0, pouch:0, defect:0, sauceKg:0, subKg:0
     };
+    if(wagonDist) rec.wagonDist = wagonDist;
     L.packing_pending.push(rec);
     added++;
   });
