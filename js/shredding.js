@@ -34,6 +34,8 @@ function renderShWagonList() {
         <span style="font-size:13px;color:var(--g5);margin-left:auto">${w.type||'-'} · 케이지 ${w.cage||'-'}</span>
         <span style="font-size:12px;color:#4caf50;font-weight:600">✅파쇄완료</span>
       </div>`).join('');
+  // 입력 행 초기화 보장
+  if(typeof initShRows==='function') initShRows();
 }
 
 function renderPkWagonList() {
@@ -78,22 +80,155 @@ function renderPkWagonList() {
 }
 function onShWagonChange() {
   const checked = [...document.querySelectorAll('.sh-wagon-cb:checked')];
-  if(!checked.length) return;
-  const wagonNums = checked.map(w=>w.dataset.wagon).join(',');
-  const el = document.getElementById('sh_wIn');
-  if(el) el.value = wagonNums;
+  const c = document.getElementById('sh_rows');
+  if(!c) return;
+  // 기존 행 입력값 보존
+  const existingRows = [...c.querySelectorAll('.sh-row')].map(row => ({
+    wagonIn: row.querySelector('.sh-wIn').value.trim(),
+    wagonOut: row.querySelector('.sh-wOut').value.trim(),
+    start: row.querySelector('.sh-start').value.trim(),
+    end: row.querySelector('.sh-end').value.trim(),
+    kg: row.querySelector('.sh-kg').value,
+    waste: row.querySelector('.sh-waste').value,
+    workers: row.querySelector('.sh-workers').value
+  }));
+  c.innerHTML = '';
+  if(checked.length === 0){
+    if(existingRows.length) existingRows.forEach(r => shAddRow(r));
+    else shAddRow();
+    return;
+  }
+  // 체크된 와건마다 행 생성 (기존 입력 매칭하여 보존)
+  checked.forEach(cb => {
+    const wNum = cb.dataset.wagon;
+    const existing = existingRows.find(r => r.wagonIn === wNum);
+    shAddRow(existing || { wagonIn: wNum });
+  });
 }
 
 // ============================================================
-// 파쇄 탭 - 지금시작 버튼
+// 파쇄 다행 입력
+// ============================================================
+function _shRowHtml(idx, data){
+  data = data || {};
+  return `
+    <div class="sh-row" data-idx="${idx}" style="border:1px solid var(--g3);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--g1)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <strong style="font-size:13px;color:var(--g7)">와건 #${idx+1}</strong>
+        <button onclick="shRemoveRow(this)" style="font-size:12px;color:var(--d);background:none;border:none;cursor:pointer;padding:4px 8px">✕ 삭제</button>
+      </div>
+      <div class="fg">
+        <div class="fgrp">
+          <label class="fl">투입 와건번호</label>
+          <input class="fc sh-wIn" type="text" value="${data.wagonIn||''}" placeholder="예: 22">
+        </div>
+        <div class="fgrp">
+          <label class="fl">배출 와건번호</label>
+          <input class="fc sh-wOut" type="text" value="${data.wagonOut||''}" placeholder="예: 30">
+        </div>
+        <div class="fgrp">
+          <label class="fl">시작시간</label>
+          <input class="fc sh-start" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" value="${data.start||''}">
+        </div>
+        <div class="fgrp">
+          <label class="fl">종료시간</label>
+          <input class="fc sh-end" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" value="${data.end||''}">
+        </div>
+        <div class="fgrp">
+          <label class="fl">파쇄 KG</label>
+          <input class="fc sh-kg" type="number" step="0.01" placeholder="0.00" value="${data.kg||''}">
+        </div>
+        <div class="fgrp">
+          <label class="fl">비가식부 KG</label>
+          <input class="fc sh-waste" type="number" step="0.01" placeholder="0.00" value="${data.waste||''}">
+        </div>
+        <div class="fgrp">
+          <label class="fl">인원</label>
+          <input class="fc sh-workers" type="number" placeholder="0" value="${data.workers||''}">
+        </div>
+      </div>
+    </div>`;
+}
+
+function shAddRow(data){
+  const c = document.getElementById('sh_rows');
+  if(!c) return;
+  const idx = c.children.length;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = _shRowHtml(idx, data).trim();
+  c.appendChild(wrap.firstChild);
+}
+
+function shRemoveRow(btn){
+  const row = btn.closest('.sh-row');
+  if(row) row.remove();
+  document.querySelectorAll('#sh_rows .sh-row').forEach((r,i)=>{
+    r.dataset.idx = i;
+    const s = r.querySelector('strong'); if(s) s.textContent = '와건 #'+(i+1);
+  });
+  const c = document.getElementById('sh_rows');
+  if(c && c.children.length===0) shAddRow();
+}
+
+async function saveShAll(){
+  const rows = [...document.querySelectorAll('#sh_rows .sh-row')];
+  if(!rows.length){ toast('입력된 와건이 없습니다','d'); return; }
+
+  const recs = [];
+  rows.forEach(row => {
+    const d = {
+      id: gid(),
+      date: (typeof DDATE!=='undefined' && DDATE) || tod(),
+      wagonIn: row.querySelector('.sh-wIn').value.trim(),
+      wagonOut: row.querySelector('.sh-wOut').value.trim(),
+      start: row.querySelector('.sh-start').value.trim(),
+      end: row.querySelector('.sh-end').value.trim(),
+      kg: parseFloat(row.querySelector('.sh-kg').value) || 0,
+      waste: parseFloat(row.querySelector('.sh-waste').value) || 0,
+      workers: parseFloat(row.querySelector('.sh-workers').value) || 0
+    };
+    if(!d.wagonIn && !d.kg && !d.start) return; // 빈 행 skip
+    recs.push(d);
+  });
+
+  if(!recs.length){ toast('저장할 내용 없음','d'); return; }
+
+  toast(`파쇄 ${recs.length}건 저장중...`,'i');
+  let okCount = 0, failCount = 0;
+  for(const d of recs){
+    L.shredding.push(d); saveL();
+    const fbId = await fbSave('shredding', d);
+    if(fbId){
+      d.fbId = fbId; saveL();
+      if(typeof gasRecord==='function') gasRecord('saveShredding', d);
+      okCount++;
+    } else {
+      failCount++;
+    }
+  }
+
+  // 폼 초기화
+  document.getElementById('sh_rows').innerHTML = '';
+  shAddRow();
+  document.querySelectorAll('.sh-wagon-cb:checked').forEach(cb => cb.checked = false);
+
+  if(typeof renderPL==='function') renderPL('shredding');
+  if(typeof renderShWagonList==='function') renderShWagonList();
+  if(typeof renderPkWagonList==='function') renderPkWagonList();
+
+  if(failCount===0) toast(`파쇄 ${okCount}건 저장됨 ✓`,'s');
+  else toast(`파쇄 ${okCount}건 저장, ${failCount}건 실패`,'d');
+}
+
+// 초기 빈 행 보장
+function initShRows(){
+  const c = document.getElementById('sh_rows');
+  if(c && c.children.length === 0) shAddRow();
+}
+
+// ============================================================
+// 파쇄 탭 - 지금시작 버튼 (제거됨, 다행 구조에서는 카드별 시간 입력)
 // ============================================================
 var _shStartTime = '';
 
-function onShStartBtn(){
-  const existing = document.getElementById('sh_start').value;
-  _shStartTime = existing || nowHM();
-  document.getElementById('sh_start').value = _shStartTime;
-  document.getElementById('sh_startDisplay').textContent = `✅ 파쇄 시작: ${_shStartTime}`;
-  document.getElementById('sh_startBtn').textContent = `파쇄 시작됨 ${_shStartTime}`;
-  document.getElementById('sh_startBtn').style.background = 'var(--s)';
-}
+function onShStartBtn(){ /* deprecated */ }
