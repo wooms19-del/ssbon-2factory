@@ -69,6 +69,57 @@ function ppNowFill(btn, kind){
   onPpDistChange();
 }
 
+// 비가식부 - 원육 2종 이상이면 원육별 입력 펼침
+function refreshPpWasteByType(typeList){
+  const wrap = document.getElementById('pp_wasteByType');
+  const rows = document.getElementById('pp_wasteByTypeRows');
+  const wInp = document.getElementById('pp_waste');
+  if(!wrap || !rows) return;
+  if(!typeList || typeList.length < 2){
+    wrap.style.display = 'none';
+    if(wInp) wInp.disabled = false;
+    return;
+  }
+  wrap.style.display = 'block';
+  if(wInp) wInp.disabled = true; // 분리 입력 사용 시 총합 자동
+  // 기존 입력 보존
+  const prev = {};
+  rows.querySelectorAll('.pp-wt-inp').forEach(i => prev[i.dataset.type] = i.value);
+  rows.innerHTML = typeList.map(t => `
+    <div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center">
+      <span style="font-size:12px;color:var(--g6);font-weight:500">${t}</span>
+      <input class="fc pp-wt-inp" type="number" step="0.01" data-type="${t}" value="${prev[t]||''}" placeholder="0" oninput="syncPpWasteByType()" style="padding:4px 6px;font-size:12px;text-align:right">
+      <span style="font-size:11px;color:var(--g5)">kg</span>
+    </div>`).join('');
+  syncPpWasteByType();
+}
+
+// 원육별 비가식부 입력 → pp_waste 합계 자동 반영
+function syncPpWasteByType(){
+  const rows = document.getElementById('pp_wasteByTypeRows');
+  const wInp = document.getElementById('pp_waste');
+  if(!rows || !wInp) return;
+  const inps = rows.querySelectorAll('.pp-wt-inp');
+  if(inps.length < 2) return; // 분리 모드 아니면 사용자 직접 입력값 유지
+  let sum = 0;
+  inps.forEach(i => sum += parseFloat(i.value) || 0);
+  wInp.value = sum.toFixed(2);
+}
+
+// 저장 시 원육별 비가식부 객체 (있으면)
+function getPpWasteByType(){
+  const rows = document.getElementById('pp_wasteByTypeRows');
+  if(!rows) return null;
+  const inps = rows.querySelectorAll('.pp-wt-inp');
+  if(inps.length < 2) return null;
+  const m = {};
+  inps.forEach(i => {
+    const v = parseFloat(i.value) || 0;
+    if(v) m[i.dataset.type] = v;
+  });
+  return Object.keys(m).length ? m : null;
+}
+
 // 대차 카드 안에 케이지 행 추가
 function ppAddCage(wagonId){
   const wrap = document.getElementById('pp_wi_'+wagonId);
@@ -144,6 +195,9 @@ function onPpDistChange(){
   if(startInp) startInp.value = earliest;
   const endInp = document.getElementById('pp_end');
   if(endInp) endInp.value = latest;
+
+  // 원육 2종 이상이면 비가식부 분리 입력 펼침
+  refreshPpWasteByType([...types]);
 
   // 알림 영역
   const info = document.getElementById('pp_wagonInfo');
