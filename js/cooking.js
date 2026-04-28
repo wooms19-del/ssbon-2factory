@@ -14,6 +14,27 @@ function renderCkCageList() {
   ]);
   const el = document.getElementById('ck_cageList');
   if(!el) return;
+
+  // 케이지별 전처리 배출량 합산 (distribution.cages 우선, 없으면 분배 추정)
+  const cageOutKg = {}; // {케이지번호: kg}
+  ppList.forEach(pp => {
+    if(pp.distribution){
+      Object.values(pp.distribution).forEach(d => {
+        const cgs = d.cages || {};
+        Object.entries(cgs).forEach(([k,v])=>{
+          cageOutKg[k] = (cageOutKg[k]||0) + (parseFloat(v)||0);
+        });
+      });
+    } else {
+      // 호환: distribution 없으면 kg을 cage들에 균등 분배
+      const cs = (pp.cage||'').split(',').map(c=>c.trim()).filter(Boolean);
+      if(cs.length && pp.kg){
+        const each = parseFloat(pp.kg)/cs.length;
+        cs.forEach(c => { cageOutKg[c] = (cageOutKg[c]||0) + each; });
+      }
+    }
+  });
+
   const cages = [];
   ppList.forEach(pp => {
     (pp.cage||'').split(',').map(c=>c.trim()).filter(Boolean).forEach(cageNum => {
@@ -26,13 +47,18 @@ function renderCkCageList() {
   const done    = cages.filter(c=>c.used);
   el.innerHTML =
     (pending.length ? '<div style="font-size:12px;font-weight:600;color:var(--g6);margin-bottom:8px">케이지 선택 → 자동 입력</div>' : '') +
-    pending.map(c => `
+    pending.map(c => {
+      const outKg = cageOutKg[c.num] || 0;
+      const kgText = outKg ? `<span style="font-size:12px;color:#16a34a;font-weight:600;margin-right:8px">${outKg.toFixed(1)}kg</span>` : '';
+      return `
       <label style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;cursor:pointer">
-        <input type="checkbox" class="ck-cage-cb" data-cage="${c.num}" data-type="${c.type}"
+        <input type="checkbox" class="ck-cage-cb" data-cage="${c.num}" data-type="${c.type}" data-outkg="${outKg}"
           onchange="onCkCageChange()" style="width:18px;height:18px;accent-color:var(--p)">
         <span style="font-size:14px;font-weight:700">${c.num}번 케이지</span>
         <span style="font-size:13px;color:var(--g5);margin-left:auto">${c.type||'-'}</span>
-      </label>`).join('') +
+        ${kgText}
+      </label>`;
+    }).join('') +
     done.map(c => `
       <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#f3f4f6;border-radius:8px;margin-bottom:6px;opacity:0.55;cursor:not-allowed">
         <input type="checkbox" disabled style="width:18px;height:18px">
@@ -215,12 +241,16 @@ function ckAddWagon(pendId){
   if(!c) return;
   const row = document.createElement('div');
   row.className = 'ck-end-wrow';
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 1fr 28px;gap:4px;align-items:center';
   row.innerHTML = `
-    <input class="fc ck-w-num" type="text" placeholder="와건번호" oninput="ckSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
+    <input class="fc ck-w-num" type="text" placeholder="와건" oninput="ckSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
     <div style="display:flex;align-items:center;gap:2px">
-      <input class="fc ck-w-kg" type="number" step="0.01" placeholder="0" oninput="ckSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
-      <span style="font-size:11px;color:var(--g5)">kg</span>
+      <input class="fc ck-w-in" type="number" step="0.01" placeholder="투입" oninput="ckSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right;background:#fff5f5">
+      <span style="font-size:10px;color:var(--g5)">kg</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:2px">
+      <input class="fc ck-w-kg" type="number" step="0.01" placeholder="배출" oninput="ckSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right;background:#f5fff5">
+      <span style="font-size:10px;color:var(--g5)">kg</span>
     </div>
     <button onclick="this.closest('.ck-end-wrow').remove();ckSumChange('${pendId}')" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
   c.appendChild(row);
@@ -230,14 +260,16 @@ function ckAddWagon(pendId){
 function ckSumChange(pendId){
   const c = document.getElementById('ckEnd_wagons_'+pendId);
   if(!c) return;
-  let sum = 0;
+  let sumIn = 0, sumOut = 0;
   c.querySelectorAll('.ck-end-wrow').forEach(row => {
-    sum += parseFloat((row.querySelector('.ck-w-kg')||{}).value) || 0;
+    sumIn += parseFloat((row.querySelector('.ck-w-in')||{}).value) || 0;
+    sumOut += parseFloat((row.querySelector('.ck-w-kg')||{}).value) || 0;
   });
   const sumEl = document.getElementById('ckEnd_sum_'+pendId);
-  if(sumEl) sumEl.textContent = `합계 ${sum.toFixed(2)}kg`;
+  if(sumEl) sumEl.innerHTML = `투입 <b style="color:#b91c1c">${sumIn.toFixed(2)}kg</b> · 배출 <b style="color:#16a34a">${sumOut.toFixed(2)}kg</b>`;
+  // 자숙 KG = 배출 (다음 공정으로)
   const kgInp = document.getElementById('ckEnd_kg_'+pendId);
-  if(kgInp) kgInp.value = sum ? sum.toFixed(2) : '';
+  if(kgInp) kgInp.value = sumOut ? sumOut.toFixed(2) : '';
 }
 
 function toggleCkEndForm(id){
@@ -274,31 +306,37 @@ async function saveCkEnd(id){
   const note = document.getElementById('ckEnd_note_'+id).value.trim();
   if(!end){ toast('종료시간을 입력하세요','d'); return; }
 
-  // 와건 분배 수집
-  const wagonDist = {}; // {와건번호: kg}
+  // 와건 분배 수집 (투입 + 배출)
+  const wagonDist = {};   // 배출 (와건에 담긴 양)
+  const wagonInDist = {}; // 투입 (케이지에서 빠진 양)
   const wagonList = [];
   const c = document.getElementById('ckEnd_wagons_'+id);
   if(c){
     c.querySelectorAll('.ck-end-wrow').forEach(row => {
       const wn = (row.querySelector('.ck-w-num')||{}).value || '';
-      const kg = parseFloat((row.querySelector('.ck-w-kg')||{}).value) || 0;
-      if(wn && kg){
+      const inKg = parseFloat((row.querySelector('.ck-w-in')||{}).value) || 0;
+      const outKg = parseFloat((row.querySelector('.ck-w-kg')||{}).value) || 0;
+      if(wn && (inKg || outKg)){
         const key = String(wn).trim();
-        wagonDist[key] = (wagonDist[key]||0) + kg;
+        if(outKg) wagonDist[key] = (wagonDist[key]||0) + outKg;
+        if(inKg) wagonInDist[key] = (wagonInDist[key]||0) + inKg;
         if(!wagonList.includes(key)) wagonList.push(key);
       }
     });
   }
-  let totalKg = 0;
-  Object.values(wagonDist).forEach(v => totalKg += v);
-  if(!totalKg){ toast('배출 와건 분배를 입력하세요','d'); return; }
+  let totalIn = 0, totalOut = 0;
+  Object.values(wagonInDist).forEach(v => totalIn += v);
+  Object.values(wagonDist).forEach(v => totalOut += v);
+  if(!totalOut && !totalIn){ toast('배출 와건 분배를 입력하세요','d'); return; }
 
   const completed = {
     ...rec,
     end,
-    kg: totalKg,
-    wagonOut: wagonList.join(','),  // 기존 호환 필드
-    wagonDist: wagonDist,            // 신규: 와건별 kg
+    kg: totalOut,                 // 자숙 kg = 배출 기준
+    kgIn: totalIn,                // 신규: 투입 (케이지에서)
+    wagonOut: wagonList.join(','),
+    wagonDist: wagonDist,         // 배출 (와건에 들어간 양)
+    wagonInDist: wagonInDist,     // 투입 (케이지에서 빠진 양)
     note
   };
   L.cooking_pending = L.cooking_pending.filter(r=>r.id!==id);
