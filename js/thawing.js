@@ -173,7 +173,7 @@ async function startThawing(){
   document.getElementById('tw_summary').innerHTML='';
 
   const rec = {
-    id:gid(), date:DDATE||addDays(tod(),1), cart:wagon, type,
+    id:gid(), date:addDays(tod(),1), cart:wagon, type,
     start:startTime, end:'',
     boxes:totalBoxes, totalKg, remainKg:totalKg,
     importCodes
