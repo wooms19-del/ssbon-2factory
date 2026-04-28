@@ -157,39 +157,21 @@
     <!-- hidden - 기존 코드 호환용 -->
     <select id="pp_wagon" style="display:none"><option value="">선택</option></select>
 
-    <!-- STEP 2: 시작시간 + 지금시작 -->
-    <div class="fg1" style="margin-bottom:0.5rem">
-      <div class="fgrp">
-        <label class="fl">시작시간</label>
-        <input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" id="pp_start">
-      </div>
-    </div>
-    <button class="btn bp bblk" id="pp_startBtn" onclick="onPpStartBtn()" style="margin-bottom:0.5rem">지금 시작</button>
-    <div id="pp_startDisplay" style="font-size:13px;color:var(--s);margin-bottom:1rem;font-weight:600;text-align:center"></div>
+    <!-- 자동 채워지는 hidden 필드들 (대차 카드 안에서 수집) -->
+    <input type="hidden" id="pp_start">
+    <input type="hidden" id="pp_end">
+    <input type="hidden" id="pp_type">
+    <input type="hidden" id="pp_cage">
 
-    <!-- STEP 3: 나머지 입력 -->
+    <!-- 추가 입력 -->
     <div class="fg">
-      <div class="fgrp">
-        <label class="fl">원육 타입 <span style="font-size:11px;color:var(--g4)">(대차 선택 시 자동)</span></label>
-        <select class="fc" id="pp_type">
-          <option value="">선택</option><option>설도</option><option>홍두깨</option><option>우둔</option>
-        </select>
-      </div>
-      <div class="fgrp">
-        <label class="fl">케이지 번호 <span style="font-size:11px;color:var(--g4)">(대차 카드에서 자동 수집)</span></label>
-        <input class="fc" type="text" id="pp_cage" placeholder="자동" readonly style="background:#f8f8f8">
-      </div>
-      <div class="fgrp">
-        <label class="fl">종료시간</label>
-        <input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" id="pp_end">
-      </div>
       <div class="fgrp">
         <label class="fl">인원</label>
         <input class="fc" type="number" id="pp_workers" placeholder="0">
       </div>
       <div class="fgrp">
-        <label class="fl">전처리 KG</label>
-        <input class="fc" type="number" step="0.01" id="pp_kg" placeholder="0.00">
+        <label class="fl">전처리 KG <span style="font-size:11px;color:var(--g4)">(자동)</span></label>
+        <input class="fc" type="number" step="0.01" id="pp_kg" placeholder="0.00" readonly style="background:#f8f8f8">
       </div>
       <div class="fgrp">
         <label class="fl">비가식부 KG</label>
@@ -889,7 +871,7 @@
 <script src="js/common.js?v=8"></script>
 <script src="js/barcode.js?v=3"></script>
 <script src="js/thawing.js?v=9"></script>
-<script src="js/preprocess.js?v=6"></script>
+<script src="js/preprocess.js?v=7"></script>
 <script src="js/process_save.js?v=6"></script>
 <script src="js/cooking.js?v=2"></script>
 <script src="js/shredding.js?v=3"></script>
