@@ -46,7 +46,6 @@ function addPkMachRow(){
         <div id="pkWagonBtns_${idx}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
           ${shWagons.map(w=>`<button type="button" class="pk-wagon-btn" data-idx="${idx}" data-w="${w}" onclick="togglePkWagon(${idx},'${w}')" style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#fff;cursor:pointer;font-size:13px">${w}번</button>`).join('')}
         </div>
-        <input class="fc pk-row-wagon-input" type="text" placeholder="직접입력 (예: 14,15)" data-idx="${idx}" oninput="onPkWagonDirectInput(${idx})">
         <input type="hidden" class="pk-row-wagon" data-idx="${idx}" value="">
         <!-- 와건별 kg 분배 -->
         <div style="margin-top:6px;padding:6px;background:#fff;border-radius:6px;border:1px dashed var(--g3)">
