@@ -28,12 +28,25 @@ function initAttendance(){
 function _saveAttEmps(){localStorage.setItem(ATT_EMP_KEY,JSON.stringify(_attEmps));}
 function _attDateKey(d){return 'att_day_'+d;}
 
-function _loadAttDate(date){
+async function _loadAttDate(date){
   _attDate=date; _attSelStatus='';
-  var raw=localStorage.getItem(_attDateKey(date));
-  _attRecs=raw?JSON.parse(raw):{};
   var lbl=document.getElementById('attDateLabel');
   if(lbl)lbl.textContent=_attFmtLabel(date);
+
+  // Firebase 우선 - 다른 PC/브라우저에서도 데이터 보존
+  try{
+    var doc = await firebase.firestore().collection('attendance').doc(date).get();
+    if(doc.exists){
+      _attRecs = doc.data().records || {};
+      localStorage.setItem(_attDateKey(date), JSON.stringify(_attRecs));
+      _renderAttAll();
+      return;
+    }
+  }catch(e){console.error('attendance load error', e);}
+
+  // Firebase에 없으면 localStorage 폴백
+  var raw=localStorage.getItem(_attDateKey(date));
+  _attRecs=raw?JSON.parse(raw):{};
   _renderAttAll();
 }
 function _attFmtLabel(d){
