@@ -114,7 +114,8 @@ function onPpDistChange(){
     totalKg += wSum;
     const sumEl = wrap.querySelector('.pp-w-sum');
     if(sumEl){
-      sumEl.textContent = `합계 ${wSum.toFixed(2)}kg / ${remain}kg`;
+      const willRemain = remain - wSum;
+      sumEl.innerHTML = `합계 <b>${wSum.toFixed(2)}kg</b> / ${remain}kg · 빠지면 잔여 <b style="color:${willRemain<-0.01?'var(--d)':willRemain<0.01?'var(--s)':'var(--p)'}">${willRemain.toFixed(2)}kg</b>`;
       sumEl.style.color = wSum > remain + 0.01 ? 'var(--d)' : 'var(--g5)';
     }
     if(wSum > 0){
