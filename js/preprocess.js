@@ -13,11 +13,11 @@ function updPpWagon(){
   const container=document.getElementById('pp_wagonChecks');
   if(!container) return;
   const _today=tod(), _yst=getYesterday_();
-  // 방혈 종료(end 채워짐) + 잔여중량 > 0 인 cart만 표시
+  // today/yesterday의 cart 모두 표시 (방혈 진행중이든 종료됐든)
+  // 단, 잔여중량 ≤ 0인 건 제외 (이미 다 쓴 것)
   const wagons=L.thawing.filter(t=>{
-    if(!t.end || t.end==='') return false;  // 방혈 진행중이면 제외
     const remain = t.remainKg!==undefined ? t.remainKg : t.totalKg;
-    if(remain <= 0.01) return false;        // 잔여 다 쓴 건 제외
+    if(remain <= 0.01) return false;
     const d=String(t.date||'').slice(0,10);
     return d===_today||d===_yst;
   });
