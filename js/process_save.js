@@ -506,26 +506,50 @@ function delR(type,id,fbId){
   if(fbId) fbDelete(FBCOL[type]||type, fbId);
   if(type==='thawing') renderThawList();
 
-  // 전처리 삭제 시 → 연결된 방혈 대차 잔여중량 복원
+  // 전처리 삭제 시 → 연결된 방혈 대차 잔여중량 복원 (날짜+cart 둘 다 일치하는 것만)
   if(type==='preprocess' && rec) {
     const ppKg = parseFloat(rec.kg)||0;
     const wagonsStr = rec.wagons||'';
+    const ppDate = String(rec.date||'').slice(0,10);
+    // 분배(distribution)가 있으면 정확한 차감량을 알 수 있음
+    const dist = rec.distribution || {};
+
     wagonsStr.split(',').map(w=>w.trim()).filter(Boolean).forEach(async wagonNum => {
-      // 로컬에서 해당 대차 찾기
-      const th = L.thawing.find(t=>t.cart===wagonNum);
-      if(th) {
-        th.remainKg = r2((parseFloat(th.remainKg)||0) + ppKg);
-        th.end = ''; // 방혈 종료 취소
-        saveL();
-        // Firebase 업데이트
-        let fbThId = th.fbId;
-        if(!fbThId) {
-          const rows = await fbGetByDate('thawing', String(th.date||'').slice(0,10));
-          const match = rows.find(r=>r.cart===wagonNum);
-          if(match) { fbThId=match.fbId; th.fbId=fbThId; saveL(); }
-        }
-        if(fbThId) fbUpdate('thawing', fbThId, {remainKg:th.remainKg, end:''});
+      // 같은 날짜 + 같은 cart 번호 매칭
+      // (전처리 date = 방혈 종료일 = thawing.date 와 같다고 가정)
+      let th = L.thawing.find(t => t.cart===wagonNum && String(t.date||'').slice(0,10) === ppDate);
+      if(!th){
+        // 못 찾으면 어제 날짜로 한번 더 시도 (전처리는 보통 방혈 종료 당일/다음날에 진행)
+        const yst = (typeof getYesterday_==='function') ? getYesterday_() : addDays(ppDate,-1);
+        th = L.thawing.find(t => t.cart===wagonNum && String(t.date||'').slice(0,10) === yst);
       }
+      if(!th){
+        // 그래도 못 찾으면 안전하게 SKIP (옛날 cart는 건드리지 않음)
+        toast(`복원 SKIP: ${wagonNum}번 cart (${ppDate} 매칭 없음)`,'w');
+        return;
+      }
+
+      // 차감량 = distribution.cart.totalIn(투입) > total(배출) > 단순 비례 분배
+      let restoreKg = 0;
+      if(dist[wagonNum]){
+        restoreKg = parseFloat(dist[wagonNum].totalIn || dist[wagonNum].total || 0) || 0;
+      }
+      if(!restoreKg){
+        // distribution 없으면 cart 수로 균등 분배 (기존 호환)
+        const cartCount = wagonsStr.split(',').filter(s=>s.trim()).length;
+        restoreKg = cartCount ? ppKg/cartCount : 0;
+      }
+
+      th.remainKg = r2((parseFloat(th.remainKg)||0) + restoreKg);
+      th.end = ''; // 방혈 종료 취소
+      saveL();
+      let fbThId = th.fbId;
+      if(!fbThId) {
+        const rows = await fbGetByDate('thawing', String(th.date||'').slice(0,10));
+        const match = rows.find(r=>r.cart===wagonNum);
+        if(match) { fbThId=match.fbId; th.fbId=fbThId; saveL(); }
+      }
+      if(fbThId) fbUpdate('thawing', fbThId, {remainKg:th.remainKg, end:''});
     });
     updPpWagon();
     updateThawInfo();
