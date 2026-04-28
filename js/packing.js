@@ -29,7 +29,6 @@ function addPkMachRow(){
   row.style.cssText = 'background:var(--g1);border-radius:8px;padding:12px;margin-bottom:8px;position:relative';
   row.innerHTML = `
     <button onclick="removePkRow(${idx})" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--g4);font-size:16px;cursor:pointer">✕</button>
-    <div style="font-size:12px;font-weight:700;color:var(--g6);margin-bottom:8px">설비 ${idx+1}</div>
     <div class="fg">
       <div class="fgrp cs2">
         <label class="fl">제품명 <span class="req">*</span></label>
