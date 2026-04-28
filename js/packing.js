@@ -10,18 +10,28 @@ function addPkMachRow(){
   const prodOpts = '<option value="">선택</option>'+L.products.map(p=>`<option>${p.name}</option>`).join('');
   const subOpts = '<option value="">없음</option>'+(L.submats||[]).map(s=>`<option>${s}</option>`).join('');
 
-  // 파쇄 완료 와건 목록 생성
+  // 파쇄 완료 와건 목록 생성 (kg 포함, wagonOutDist 우선)
   const today = tod();
   const yesterday = getYesterday_();
-  const shWagons = [];
+  const shWagonsMap = {}; // {와건번호: 총kg}
   L.shredding.filter(r=>{
     const d = String(r.date||'').slice(0,10);
     return (d===today||d===yesterday) && r.wagonOut && r.end;
   }).forEach(sh=>{
-    (sh.wagonOut||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(w=>{
-      if(!shWagons.includes(w)) shWagons.push(w);
-    });
+    if(sh.wagonOutDist){
+      Object.entries(sh.wagonOutDist).forEach(([w,kg])=>{
+        shWagonsMap[w] = (shWagonsMap[w]||0) + (parseFloat(kg)||0);
+      });
+    } else {
+      // 호환: wagonOutDist 없으면 sh.kg을 와건들에 균등 분배 (추정)
+      const ws = (sh.wagonOut||'').split(',').map(x=>x.trim()).filter(Boolean);
+      if(ws.length){
+        const each = (parseFloat(sh.kg)||0)/ws.length;
+        ws.forEach(w => { shWagonsMap[w] = (shWagonsMap[w]||0) + each; });
+      }
+    }
   });
+  const shWagons = Object.keys(shWagonsMap);
   const wagonOpts = '<option value="">직접입력</option>' + shWagons.map(w=>`<option value="${w}">${w}번 와건</option>`).join('');
 
   const row = document.createElement('div');
@@ -43,7 +53,7 @@ function addPkMachRow(){
       <div class="fgrp cs2">
         <label class="fl">투입 와건번호 <span style="font-size:11px;color:var(--g4)">(버튼 토글 또는 직접입력 → 카드별 kg 분배)</span></label>
         <div id="pkWagonBtns_${idx}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-          ${shWagons.map(w=>`<button type="button" class="pk-wagon-btn" data-idx="${idx}" data-w="${w}" onclick="togglePkWagon(${idx},'${w}')" style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#fff;cursor:pointer;font-size:13px">${w}번</button>`).join('')}
+          ${shWagons.map(w=>`<button type="button" class="pk-wagon-btn" data-idx="${idx}" data-w="${w}" data-total="${shWagonsMap[w]||0}" onclick="togglePkWagon(${idx},'${w}')" style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--g3);background:#fff;cursor:pointer;font-size:13px">${w}번 <span class="pk-w-rem" style="color:var(--g5)">(${(shWagonsMap[w]||0).toFixed(0)}kg)</span></button>`).join('')}
         </div>
         <input type="hidden" class="pk-row-wagon" data-idx="${idx}" value="">
         <!-- 와건별 kg 분배 -->
@@ -139,10 +149,20 @@ function pkAddWagonRow(idx, prefilledW){
   row.className = 'pk-wd-row';
   row.dataset.w = prefilledW || '';
   row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+
+  // 잔여만큼 기본값 (와건 토글로 추가된 경우)
+  let defaultKg = '';
+  if(prefilledW){
+    const total = pkGetWagonTotal(prefilledW);
+    const used = pkGetWagonGlobalUsed();
+    const remain = total - (used[prefilledW]||0);
+    if(remain > 0.01) defaultKg = remain.toFixed(2);
+  }
+
   row.innerHTML = `
     <input class="fc pk-wd-num" type="text" value="${prefilledW||''}" placeholder="와건번호" oninput="this.closest('.pk-wd-row').dataset.w=this.value;pkWagonSumChange(${idx})" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
     <div style="display:flex;align-items:center;gap:2px">
-      <input class="fc pk-wd-kg" type="number" step="0.01" placeholder="0" oninput="pkWagonSumChange(${idx})" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
+      <input class="fc pk-wd-kg" type="number" step="0.01" value="${defaultKg}" placeholder="0" oninput="pkWagonSumChange(${idx})" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
       <span style="font-size:11px;color:var(--g5)">kg</span>
     </div>
     <button onclick="this.closest('.pk-wd-row').remove();pkWagonSumChange(${idx})" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
@@ -172,6 +192,9 @@ function pkWagonSumChange(idx){
 
   // 원육 타입 표시 갱신
   refreshPkTypeUI(idx, typeKg);
+
+  // 전역 잔여 갱신 (모든 설비 카드 + pending 합산)
+  pkRefreshWagonRemain();
 }
 
 // 와건번호 → 원육 타입 (cooking/preprocess 추적)
@@ -266,7 +289,90 @@ function getPkWagonDist(idx){
   return Object.keys(dist).length ? dist : null;
 }
 
-// ===== 소스 탱크 다중 입력 =====
+// ===== 와건 전역 사용량/잔여 추적 =====
+// 모든 설비 카드 + pending에서 와건별 사용 kg 합산
+function pkGetWagonGlobalUsed(){
+  const used = {};
+  // 1) 현재 입력 중인 카드들 (모든 설비 카드)
+  document.querySelectorAll('.pk-wd-row').forEach(r => {
+    const wn = (r.querySelector('.pk-wd-num')||{}).value || '';
+    const kg = parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
+    if(wn && kg) used[String(wn).trim()] = (used[String(wn).trim()]||0) + kg;
+  });
+  // 2) pending (이미 시작된 다른 설비)
+  (L.packing_pending||[]).filter(r => String(r.date||'').slice(0,10) === tod()).forEach(p => {
+    if(p.wagonDist){
+      Object.entries(p.wagonDist).forEach(([w,kg])=>{
+        used[w] = (used[w]||0) + (parseFloat(kg)||0);
+      });
+    }
+  });
+  // 3) 완료된 packing
+  (L.packing||[]).filter(r => String(r.date||'').slice(0,10) === tod()).forEach(p => {
+    if(p.wagonDist){
+      Object.entries(p.wagonDist).forEach(([w,kg])=>{
+        used[w] = (used[w]||0) + (parseFloat(kg)||0);
+      });
+    }
+  });
+  return used;
+}
+
+// 와건의 총량 (shredding 기준)
+function pkGetWagonTotal(wNum){
+  // 화면에 그려진 버튼의 data-total 우선
+  const btn = document.querySelector(`.pk-wagon-btn[data-w="${wNum}"]`);
+  if(btn && btn.dataset.total) return parseFloat(btn.dataset.total) || 0;
+  // 없으면 직접 계산
+  let total = 0;
+  (L.shredding||[]).forEach(sh => {
+    if(sh.wagonOutDist && sh.wagonOutDist[wNum]) total += parseFloat(sh.wagonOutDist[wNum])||0;
+    else if((sh.wagonOut||'').split(',').map(x=>x.trim()).includes(wNum)){
+      const ws = (sh.wagonOut||'').split(',').map(x=>x.trim()).filter(Boolean);
+      total += (parseFloat(sh.kg)||0)/ws.length;
+    }
+  });
+  return total;
+}
+
+// 모든 와건 버튼 라벨 갱신 (잔여 표시) + 매트릭스 색상
+function pkRefreshWagonRemain(){
+  const used = pkGetWagonGlobalUsed();
+  document.querySelectorAll('.pk-wagon-btn').forEach(btn => {
+    const w = btn.dataset.w;
+    const total = parseFloat(btn.dataset.total) || 0;
+    const u = used[w] || 0;
+    const remain = total - u;
+    const remEl = btn.querySelector('.pk-w-rem');
+    if(remEl){
+      if(u > 0){
+        remEl.textContent = `(잔여 ${remain.toFixed(0)}kg)`;
+        remEl.style.color = remain < -0.01 ? 'var(--d)' : remain < 0.01 ? 'var(--s)' : 'var(--g5)';
+      } else {
+        remEl.textContent = `(${total.toFixed(0)}kg)`;
+        remEl.style.color = 'var(--g5)';
+      }
+    }
+  });
+  // 매트릭스 행 색상 갱신
+  document.querySelectorAll('.pk-wd-row').forEach(r => {
+    const wn = (r.querySelector('.pk-wd-num')||{}).value || '';
+    const kg = parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
+    const kgInp = r.querySelector('.pk-wd-kg');
+    if(!kgInp || !wn) return;
+    const total = pkGetWagonTotal(wn);
+    const totalUsed = used[wn] || 0;
+    if(total > 0 && totalUsed > total + 0.01){
+      kgInp.style.background = '#FBEAF0';
+      kgInp.style.color = 'var(--d)';
+      kgInp.title = `초과! 총 ${total}kg, 사용 ${totalUsed.toFixed(2)}kg`;
+    } else {
+      kgInp.style.background = '';
+      kgInp.style.color = '';
+      kgInp.title = '';
+    }
+  });
+}
 function pkAddStankRow(idx){
   const c = document.getElementById('pkStank_'+idx);
   if(!c) return;
