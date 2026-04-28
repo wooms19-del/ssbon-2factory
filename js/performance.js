@@ -260,9 +260,9 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     if(!opMap[key]) opMap[key]={ea:0,boxes:0,tray:0,trayDef:0,unitCnt:0,boxDef:0};
     opMap[key].ea += parseInt(r.outerEa)||0;
     opMap[key].boxes += parseInt(r.outerBoxes)||0;
-    opMap[key].tray += parseInt(r.tray)||0;
+    opMap[key].tray += parseInt(r.trayUsed||r.tray)||0;
     opMap[key].trayDef += parseInt(r.trayDefect)||0;
-    opMap[key].unitCnt += parseInt(r.unitCount)||0;
+    opMap[key].unitCnt += parseInt(r.unitCount||r.remainEa)||0;
     opMap[key].boxDef += parseInt(r.boxDefect)||0;
   });
 
