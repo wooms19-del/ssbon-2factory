@@ -511,14 +511,18 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     testRows.filter(function(r){return r.date===dt;}).forEach(function(r){combined.push(r);});
   });
 
-  // 날짜별 dayRowIdx / dayTotalSpan 계산
-  var _dayFirst={}, _dayCnt={};
-  combined.forEach(function(r,i){
-    if(_dayFirst[r.date]===undefined) _dayFirst[r.date]=i;
-    r.dayRowIdx = i - _dayFirst[r.date];
+  // 날짜별 dayRowIdx / dayTotalSpan 계산 (테스트 행 제외)
+  var _dayIdx={}, _dayCnt={};
+  combined.forEach(function(r){
+    if(r.isTest){ r.dayRowIdx=-1; r.dayTotalSpan=1; return; }
+    if(_dayIdx[r.date]===undefined) _dayIdx[r.date]=0;
+    r.dayRowIdx = _dayIdx[r.date]++;
     _dayCnt[r.date] = (_dayCnt[r.date]||0)+1;
   });
-  combined.forEach(function(r){ r.dayTotalSpan = _dayCnt[r.date]||1; });
+  combined.forEach(function(r){
+    if(r.isTest) return;
+    r.dayTotalSpan = _dayCnt[r.date]||1;
+  });
   return combined;
 }
 
@@ -596,8 +600,7 @@ function _perfRenderTable(rows){
         rs=' rowspan="'+span+'"';
       }
       var vstyle = rs ? 'vertical-align:middle;' : '';
-      var align = i < 4 ? 'center' : 'right';
-      if(i===3) align='left';
+      var align = (i===3) ? 'left' : 'center';
       html+='<td'+rs+' style="text-align:'+align+';'+vstyle+'">'+(c==null?'':c)+'</td>';
     });
     html+='</tr>';
