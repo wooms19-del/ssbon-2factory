@@ -103,7 +103,7 @@ function _perfRenderShell(){
       '#p-performance table.perf-tbl thead th{background:#1F4E79;color:#fff;font-weight:600;text-align:center;padding:3px 2px;border:1px solid #999;white-space:nowrap;position:sticky;top:0;z-index:2;line-height:1.15}'+
       '#p-performance table.perf-tbl td{padding:2px 3px;border:1px solid #ddd;white-space:nowrap;line-height:1.25}'+
       '#p-performance table.perf-tbl tr.row-test td{background:#fff3cd;font-style:italic;color:#856404}'+
-      '#p-performance table.perf-tbl tr.row-pending td{background:#fef3c7;color:#92400e}'+
+      '#p-performance table.perf-tbl tr.row-pending td{background:#dbeafe;color:#1e40af}'+   /* 외포장 미완료: 연하늘 */
       '#p-performance table.perf-tbl tr.row-bg0 td{background:#ffffff}'+
       '#p-performance table.perf-tbl tr.row-bg1 td{background:#f8fafc}'+
       '#p-performance .perf-wrap{overflow-x:auto;max-width:100%}'+
@@ -118,7 +118,7 @@ function _perfRenderShell(){
         '<div style="flex:1"></div>'+
         '<span style="font-size:.78rem;color:var(--g4)">'+
           '<span style="display:inline-block;width:10px;height:10px;background:#fff3cd;border:1px solid #d4a017;vertical-align:middle"></span> 테스트 &nbsp; '+
-          '<span style="display:inline-block;width:10px;height:10px;background:#fef3c7;border:1px solid #f59e0b;vertical-align:middle"></span> 외포장 미완료'+
+          '<span style="display:inline-block;width:10px;height:10px;background:#dbeafe;border:1px solid #3b82f6;vertical-align:middle"></span> 외포장 미완료'+
         '</span>'+
         '<button class="btn p" onclick="perfDownloadXlsx()" style="padding:6px 14px">📥 엑셀 다운로드</button>'+
         '<button class="btn" onclick="_perfReload(true)" title="새로고침" style="padding:4px 10px">🔄</button>'+
@@ -371,6 +371,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
 
       // 첫 제품 + 부위 2개 이상 → 부위별 행 분리
       if(pi===0 && partList.length>1){
+        var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
         partList.forEach(function(pn, ppi){
           var isFR = ppi===0;  // 첫 분리 행
           rows.push({
@@ -399,13 +400,15 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
             qaiKg: isFR ? qaiKg : 0,
             pouch: isFR ? Math.round(pkr.pouch) : 0,
             boxUse: isFR ? boxUse : 0,
-            isTest: false
+            isTest: false,
+            isPending: isPending     // 모든 분리 행에 동일 적용
           });
         });
       } else {
         // 단일 부위 또는 같은 날 2번째 이후 제품
         var rmTypeStr = (pi===0 && partList.length===1) ? partList[0] : '';
         var rmKgVal = (pi===0 && partList.length===1) ? _perfR2(partKg[partList[0]]||0) : (pi===0 ? rmKg : 0);
+        var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
         rows.push({
           date: date, dayNo: dayNo, product: prod,
           productIndex: pi, subRowIdx: 0, totalSub: 1,
@@ -426,7 +429,8 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
           unitCnt: opR.unitCnt, outBoxes: opR.boxes,
           sauceFP: '', qaiKg: qaiKg,
           pouch: Math.round(pkr.pouch), boxUse: boxUse,
-          isTest: false
+          isTest: false,
+          isPending: isPending
         });
       }
     });
@@ -496,7 +500,7 @@ function _perfRenderTable(rows){
     var rowCls;
     if(r.isTest){
       rowCls='row-test';
-    } else if(!r.isTest && (r.outerBoxes||0)===0 && (r.boxDef||0)===0){
+    } else if(r.isPending){
       rowCls='row-pending';
     } else {
       rowCls='row-bg'+((r.dayNo)%2);
