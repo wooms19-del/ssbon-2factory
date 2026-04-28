@@ -380,6 +380,8 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       // 첫 제품 + 부위 2개 이상 → 부위별 행 분리
       if(pi===0 && partList.length>1){
         var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
+        var isKostco = prod.indexOf('코스트코')>=0||prod.indexOf('코코')>=0;
+        var outBoxVal = isKostco ? (opR.tray||0) : opR.boxes;
         partList.forEach(function(pn, ppi){
           var isFR = ppi===0;  // 첫 분리 행
           rows.push({
@@ -403,14 +405,14 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
             tray: isFR ? opR.tray : 0,
             trayDef: isFR ? opR.trayDef : 0,
             unitCnt: isFR ? opR.unitCnt : 0,
-            outBoxes: isFR ? opR.boxes : 0,
+            outBoxes: isFR ? outBoxVal : 0,
             sauceFP: isFR ? (scFP[date]||0) : 0,
             sauceFC: isFR ? (scFC[date]||0) : 0,
             qaiKg: isFR ? qaiKg : 0,
             pouch: isFR ? Math.round(pkr.pouch) : 0,
             boxUse: isFR ? boxUse : 0,
             isTest: false,
-            isPending: isPending     // 모든 분리 행에 동일 적용
+            isPending: isPending
           });
         });
       } else {
@@ -418,6 +420,8 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
         var rmTypeStr = (pi===0 && partList.length===1) ? partList[0] : '';
         var rmKgVal = (pi===0 && partList.length===1) ? _perfR2(partKg[partList[0]]||0) : (pi===0 ? rmKg : 0);
         var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
+        var isKostco2 = prod.indexOf('코스트코')>=0||prod.indexOf('코코')>=0;
+        var outBoxVal2 = isKostco2 ? (opR.tray||0) : opR.boxes;
         rows.push({
           date: date, dayNo: dayNo, product: prod,
           productIndex: pi, subRowIdx: 0, totalSub: 1,
@@ -435,7 +439,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
           innerEa: innerEa, defPouch: defPouch,
           outerBoxes: opR.boxes, boxDef: opR.boxDef,
           tray: opR.tray, trayDef: opR.trayDef,
-          unitCnt: opR.unitCnt, outBoxes: opR.boxes,
+          unitCnt: opR.unitCnt, outBoxes: pi===0 ? outBoxVal2 : 0,
           sauceFP: pi===0 ? (scFP[date]||0) : 0,
           sauceFC: pi===0 ? (scFC[date]||0) : 0,
           qaiKg: qaiKg,
@@ -543,12 +547,13 @@ function _perfRenderTable(rows){
     else { rowCls='row-bg'+((r.dayNo)%2); }
     var isSubRow = r.subRowIdx > 0;
     var span = (!isSubRow && r.totalSub > 1) ? r.totalSub : 1;
-    // 숫자 포맷 헬퍼: 0이면 빈칸, 소수점 1자리까지만 천단위 콤마
-    var fmt=function(v,dec){
-      if(!v && v!==0) return '';
+    // 숫자 포맷: 0이면 빈칸, 소수점 있으면 그대로, 천단위 콤마
+    var fmt=function(v,isInt){
+      if(v===null||v===undefined||v==='') return '';
       var n=parseFloat(v); if(!n) return '';
-      return dec===0 ? Math.round(n).toLocaleString('ko-KR')
-           : (Math.round(n*10)/10).toLocaleString('ko-KR',{minimumFractionDigits:0,maximumFractionDigits:1});
+      if(isInt) return Math.round(n).toLocaleString('ko-KR');
+      return n%1===0 ? n.toLocaleString('ko-KR')
+           : n.toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:4});
     };
     var cells=[
       (r.dayNo>0 && r.productIndex===0 && !isSubRow) ? r.dayNo : '',
@@ -556,13 +561,13 @@ function _perfRenderTable(rows){
       (r.productIndex===0 && !isSubRow && r.expDate) ? r.expDate.slice(2).replace(/-/g,'.') : '',
       !isSubRow ? r.product : '',
       r.rmType||'',
-      fmt(r.rmKg,1), r.boxSeoldo||'', r.boxHongdu||'', r.boxUdun||'',
-      fmt(r.ppKg,1), fmt(r.ckKg,1), fmt(r.shKg,1), fmt(r.sauceKg,0),
-      r.innerEa ? r.innerEa.toLocaleString('ko-KR') : '', fmt(r.defPouch,0),
-      fmt(r.outerBoxes,0), r.boxDef||'',
-      fmt(r.tray,0), r.trayDef||'', fmt(r.outBoxes,0),
-      fmt(r.sauceFP,0), fmt(r.sauceFC,0), fmt(r.qaiKg,1),
-      r.pouch ? r.pouch.toLocaleString('ko-KR') : '', fmt(r.boxUse,0)
+      fmt(r.rmKg), r.boxSeoldo||'', r.boxHongdu||'', r.boxUdun||'',
+      fmt(r.ppKg), fmt(r.ckKg), fmt(r.shKg), fmt(r.sauceKg,1),
+      r.innerEa ? r.innerEa.toLocaleString('ko-KR') : '', fmt(r.defPouch,1),
+      fmt(r.outerBoxes,1), r.boxDef||'',
+      fmt(r.tray,1), r.trayDef||'', fmt(r.outBoxes,1),
+      fmt(r.sauceFP,1), fmt(r.sauceFC,1), fmt(r.qaiKg),
+      r.pouch ? r.pouch.toLocaleString('ko-KR') : '', fmt(r.boxUse,1)
     ];
     html+='<tr class="'+rowCls+'">';
     cells.forEach(function(c, i){
