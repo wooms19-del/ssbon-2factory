@@ -135,8 +135,8 @@ function updateTwSummary(){
 }
 
 async function startThawing(){
-  const wagon=document.getElementById('tw_wagon').value.trim();
-  if(!wagon){toast('해동대차 번호 입력하세요','d');return;}
+  const cartNo=document.getElementById('tw_wagon').value.trim();
+  if(!cartNo){toast('해동대차 번호 입력하세요','d');return;}
   const startTime=document.getElementById('tw_start').value||nowHM();
 
   const inputs=[...document.querySelectorAll('.tw-box-cnt')];
@@ -173,7 +173,7 @@ async function startThawing(){
   document.getElementById('tw_summary').innerHTML='';
 
   const rec = {
-    id:gid(), date:addDays(tod(),1), cart:wagon, type,
+    id:gid(), date:addDays(tod(),1), cart:cartNo, type,
     start:startTime, end:'',
     boxes:totalBoxes, totalKg, remainKg:totalKg,
     importCodes
@@ -184,10 +184,10 @@ async function startThawing(){
   if(fbId){
     rec.fbId = fbId;
     L.thawing.push(rec); saveL();
-    gasRecord('saveThawing', {wagon, type, start:startTime, end:'', boxes:totalBoxes, totalKg, importCodes});
+    gasRecord('saveThawing', {cart:cartNo, type, start:startTime, end:'', boxes:totalBoxes, totalKg, importCodes});
     renderThawWaiting();
     renderThawList();
-    toast(`방혈 시작 — 해동대차 ${wagon} · ${totalKg.toFixed(2)}kg ✓`);
+    toast(`방혈 시작 — 해동대차 ${cartNo} · ${totalKg.toFixed(2)}kg ✓`);
   } else {
     toast('방혈 저장 실패','d');
   }
