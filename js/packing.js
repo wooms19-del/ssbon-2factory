@@ -11,12 +11,13 @@ function addPkMachRow(){
   const subOpts = '<option value="">없음</option>'+(L.submats||[]).map(s=>`<option>${s}</option>`).join('');
 
   // 파쇄 완료 와건 목록 생성 (kg 포함, wagonOutDist 우선)
+  // today만 봄 — 어제 파쇄된 건 위 "파쇄 완료 와건 현황"에도 안 보이므로 일관성 유지
   const today = tod();
   const yesterday = getYesterday_();
   const shWagonsMap = {}; // {와건번호: 총kg}
   L.shredding.filter(r=>{
     const d = String(r.date||'').slice(0,10);
-    return (d===today||d===yesterday) && r.wagonOut && r.end;
+    return d===today && r.wagonOut && r.end;
   }).forEach(sh=>{
     if(sh.wagonOutDist){
       Object.entries(sh.wagonOutDist).forEach(([w,kg])=>{
