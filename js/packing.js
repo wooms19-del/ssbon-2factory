@@ -32,9 +32,13 @@ function addPkMachRow(){
     }
   });
   const shWagons = Object.keys(shWagonsMap);
-  // 완료/사용중 판정 — 잔여 ≤ 0 이면 차단
+  // 완료/사용중 판정 - 잔여 ≤ 0 이면 차단
+  // (today + yesterday 둘 다 봐야 어제 포장된 건도 잡힘)
   const usedMap = {};
-  (L.packing||[]).filter(p => String(p.date||'').slice(0,10)===today).forEach(p => {
+  (L.packing||[]).filter(p => {
+    const d = String(p.date||'').slice(0,10);
+    return d===today || d===yesterday;
+  }).forEach(p => {
     if(p.wagonDist){
       Object.entries(p.wagonDist).forEach(([w,kg])=>{ usedMap[w]=(usedMap[w]||0)+(parseFloat(kg)||0); });
     } else {
@@ -44,7 +48,10 @@ function addPkMachRow(){
       });
     }
   });
-  (L.packing_pending||[]).filter(p => String(p.date||'').slice(0,10)===today).forEach(p => {
+  (L.packing_pending||[]).filter(p => {
+    const d = String(p.date||'').slice(0,10);
+    return d===today || d===yesterday;
+  }).forEach(p => {
     if(p.wagonDist){
       Object.entries(p.wagonDist).forEach(([w,kg])=>{ usedMap[w]=(usedMap[w]||0)+(parseFloat(kg)||0); });
     } else {
@@ -325,25 +332,39 @@ function getPkWagonDist(idx){
 // 모든 설비 카드 + pending에서 와건별 사용 kg 합산
 function pkGetWagonGlobalUsed(){
   const used = {};
+  const today = tod();
+  const yesterday = (typeof getYesterday_==='function') ? getYesterday_() : '';
   // 1) 현재 입력 중인 카드들 (모든 설비 카드)
   document.querySelectorAll('.pk-wd-row').forEach(r => {
     const wn = (r.querySelector('.pk-wd-num')||{}).value || '';
     const kg = parseFloat((r.querySelector('.pk-wd-kg')||{}).value) || 0;
     if(wn && kg) used[String(wn).trim()] = (used[String(wn).trim()]||0) + kg;
   });
-  // 2) pending (이미 시작된 다른 설비)
-  (L.packing_pending||[]).filter(r => String(r.date||'').slice(0,10) === tod()).forEach(p => {
+  // 2) pending (이미 시작된 다른 설비) - today+yesterday
+  (L.packing_pending||[]).filter(r => {
+    const d = String(r.date||'').slice(0,10);
+    return d===today || d===yesterday;
+  }).forEach(p => {
     if(p.wagonDist){
       Object.entries(p.wagonDist).forEach(([w,kg])=>{
         used[w] = (used[w]||0) + (parseFloat(kg)||0);
       });
     }
   });
-  // 3) 완료된 packing
-  (L.packing||[]).filter(r => String(r.date||'').slice(0,10) === tod()).forEach(p => {
+  // 3) 완료된 packing - today+yesterday
+  (L.packing||[]).filter(r => {
+    const d = String(r.date||'').slice(0,10);
+    return d===today || d===yesterday;
+  }).forEach(p => {
     if(p.wagonDist){
       Object.entries(p.wagonDist).forEach(([w,kg])=>{
         used[w] = (used[w]||0) + (parseFloat(kg)||0);
+      });
+    } else if(p.wagon){
+      // wagonDist 없으면 와건 전체 사용으로 간주
+      (p.wagon||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(w=>{
+        const total = pkGetWagonTotal(w);
+        if(total > 0) used[w] = (used[w]||0) + total;
       });
     }
   });
