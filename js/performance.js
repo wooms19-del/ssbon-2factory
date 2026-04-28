@@ -99,9 +99,9 @@ function _perfRenderShell(){
   pg.innerHTML =
     '<style>'+
       '#p-performance .pf-card{padding:8px;background:var(--c);border:var(--br);border-radius:6px;margin-bottom:6px}'+
-      '#p-performance table.perf-tbl{width:100%;border-collapse:collapse;font-size:.7rem;table-layout:auto}'+
-      '#p-performance table.perf-tbl thead th{background:#1F4E79;color:#fff;font-weight:600;text-align:center;padding:3px 2px;border:1px solid #999;white-space:nowrap;position:sticky;top:0;z-index:2;line-height:1.15}'+
-      '#p-performance table.perf-tbl td{padding:2px 3px;border:1px solid #ddd;white-space:nowrap;line-height:1.25}'+
+      '#p-performance table.perf-tbl{width:100%;border-collapse:collapse;font-size:.85rem;table-layout:auto}'+
+      '#p-performance table.perf-tbl thead th{background:#1F4E79;color:#fff;font-weight:600;text-align:center;padding:6px 4px;border:1px solid #999;white-space:nowrap;position:sticky;top:0;z-index:2;line-height:1.25}'+
+      '#p-performance table.perf-tbl td{padding:5px 5px;border:1px solid #ddd;white-space:nowrap;line-height:1.4}'+
       '#p-performance table.perf-tbl tr.row-test td{background:#fff3cd;font-style:italic;color:#856404}'+
       '#p-performance table.perf-tbl tr.row-pending td{background:#dbeafe;color:#1e40af}'+   /* 외포장 미완료: 연하늘 */
       '#p-performance table.perf-tbl tr.row-bg0 td{background:#ffffff}'+
@@ -600,8 +600,7 @@ function _perfRenderTable(rows){
         rs=' rowspan="'+span+'"';
       }
       var vstyle = rs ? 'vertical-align:middle;' : '';
-      var align = (i===3) ? 'left' : 'center';
-      html+='<td'+rs+' style="text-align:'+align+';'+vstyle+'">'+(c==null?'':c)+'</td>';
+      html+='<td'+rs+' style="text-align:center;'+vstyle+'">'+(c==null?'':c)+'</td>';
     });
     html+='</tr>';
   });
