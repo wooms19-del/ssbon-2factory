@@ -73,6 +73,8 @@ function onPpWagonChange(){
   const types=[...new Set(selected.map(t=>t.type||'-'))].join(', ');
   info.innerHTML=`<div class="al al-i">🧊 대차 ${wagons} · ${types}${totalDeduct>0?' · 투입 <b>'+totalDeduct.toFixed(2)+'kg</b>':''}</div>`;
   info.classList.remove('hid');
+  // 매트릭스 갱신
+  if(typeof updPpMatrix==='function') updPpMatrix();
 }
 
 function onPpStartBtn(){
@@ -145,6 +147,147 @@ function updateThawInfo(){
     </div>`;
   }).join('');
 }
+// ============================================================
+// 대차×케이지 분배 매트릭스
+// ============================================================
+function updPpMatrix(){
+  const wrap = document.getElementById('pp_matrixWrap');
+  const root = document.getElementById('pp_matrix');
+  if(!wrap || !root) return;
+
+  const selected = getSelectedWagons();
+  const cageStr = (document.getElementById('pp_cage')||{}).value || '';
+  const cages = cageStr.split(',').map(s=>s.trim()).filter(Boolean);
+
+  if(!selected.length || !cages.length){
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+
+  // 기존 입력값 보존
+  const prev = {};
+  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
+    prev[inp.dataset.cart+'|'+inp.dataset.cage] = inp.value;
+  });
+
+  let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--bg)">';
+  html += '<thead><tr style="background:var(--g2)"><th style="padding:6px;border:1px solid var(--g3);min-width:80px;text-align:left">대차 \\ 케이지</th>';
+  cages.forEach(cg => {
+    html += `<th style="padding:6px;border:1px solid var(--g3);min-width:70px">${cg}번</th>`;
+  });
+  html += '<th style="padding:6px;border:1px solid var(--g3);min-width:70px;background:#eef">합계</th>';
+  html += '<th style="padding:6px;border:1px solid var(--g3);min-width:70px;color:var(--g5)">잔여</th></tr></thead><tbody>';
+
+  selected.forEach(t => {
+    const remain = t.remainKg!==undefined?t.remainKg:t.totalKg;
+    const cart = t.cart || '-';
+    html += `<tr><td style="padding:6px;border:1px solid var(--g3);font-weight:600;background:var(--g1)">${cart}번</td>`;
+    cages.forEach(cg => {
+      const key = cart+'|'+cg;
+      const v = prev[key] || '';
+      html += `<td style="padding:2px;border:1px solid var(--g3)"><input type="number" step="0.01"
+        class="pp-mx-cell" data-cart="${cart}" data-cage="${cg}" data-id="${t.id}" data-remain="${remain}"
+        value="${v}" oninput="onPpMxInput()" placeholder="0"
+        style="width:100%;padding:4px;border:none;text-align:right;font-size:12px;background:transparent"></td>`;
+    });
+    html += `<td class="pp-mx-rowsum" data-cart="${cart}" style="padding:6px;border:1px solid var(--g3);text-align:right;background:#eef;font-weight:600">0</td>`;
+    html += `<td style="padding:6px;border:1px solid var(--g3);text-align:right;color:var(--g5)">${remain}</td></tr>`;
+  });
+
+  html += '<tr style="background:#fef"><td style="padding:6px;border:1px solid var(--g3);font-weight:600">케이지별 합</td>';
+  cages.forEach(cg => {
+    html += `<td class="pp-mx-colsum" data-cage="${cg}" style="padding:6px;border:1px solid var(--g3);text-align:right;font-weight:600">0</td>`;
+  });
+  html += `<td class="pp-mx-total" style="padding:6px;border:1px solid var(--g3);text-align:right;font-weight:700;background:#dfd">0</td>`;
+  html += `<td style="padding:6px;border:1px solid var(--g3)"></td></tr>`;
+  html += '</tbody></table></div>';
+
+  // 자동 분배 버튼
+  html += '<div style="display:flex;gap:6px;margin-top:6px"><button class="btn" onclick="ppMxAutoFill()" style="flex:1;padding:6px;font-size:12px">▦ 잔여중량 자동분배 (균등)</button><button class="btn" onclick="ppMxClear()" style="flex:1;padding:6px;font-size:12px;color:var(--d)">↺ 모두 지우기</button></div>';
+
+  root.innerHTML = html;
+  onPpMxInput();
+}
+
+function onPpMxInput(){
+  const root = document.getElementById('pp_matrix');
+  if(!root) return;
+  const rowSums = {};
+  const colSums = {};
+  let total = 0;
+  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
+    const v = parseFloat(inp.value) || 0;
+    rowSums[inp.dataset.cart] = (rowSums[inp.dataset.cart]||0) + v;
+    colSums[inp.dataset.cage] = (colSums[inp.dataset.cage]||0) + v;
+    total += v;
+  });
+  root.querySelectorAll('.pp-mx-rowsum').forEach(td => {
+    const cart = td.dataset.cart;
+    const sum = rowSums[cart] || 0;
+    // 잔여 초과 시 빨간색
+    const cell = root.querySelector('.pp-mx-cell[data-cart="'+cart+'"]');
+    const remain = cell ? parseFloat(cell.dataset.remain) || 0 : 0;
+    td.textContent = sum.toFixed(2);
+    td.style.color = sum > remain + 0.01 ? 'var(--d)' : '';
+  });
+  root.querySelectorAll('.pp-mx-colsum').forEach(td => {
+    td.textContent = (colSums[td.dataset.cage] || 0).toFixed(2);
+  });
+  const totalEl = root.querySelector('.pp-mx-total');
+  if(totalEl) totalEl.textContent = total.toFixed(2);
+
+  // 총합을 pp_kg에 반영
+  const kgInp = document.getElementById('pp_kg');
+  if(kgInp && total > 0) kgInp.value = total.toFixed(2);
+}
+
+function ppMxAutoFill(){
+  // 각 대차의 잔여중량을 케이지 수만큼 균등 분배
+  const root = document.getElementById('pp_matrix');
+  if(!root) return;
+  const cartRemains = {};
+  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
+    cartRemains[inp.dataset.cart] = parseFloat(inp.dataset.remain) || 0;
+  });
+  const cageCount = (document.getElementById('pp_cage').value||'').split(',').filter(s=>s.trim()).length;
+  if(!cageCount) return;
+  root.querySelectorAll('.pp-mx-cell').forEach(inp => {
+    const remain = parseFloat(inp.dataset.remain) || 0;
+    inp.value = (remain / cageCount).toFixed(2);
+  });
+  onPpMxInput();
+}
+
+function ppMxClear(){
+  document.querySelectorAll('.pp-mx-cell').forEach(inp => inp.value = '');
+  onPpMxInput();
+}
+
+// 매트릭스 입력값 → distribution 객체로 변환 (저장 시 사용)
+function getPpDistribution(){
+  const dist = {};
+  document.querySelectorAll('.pp-mx-cell').forEach(inp => {
+    const v = parseFloat(inp.value) || 0;
+    if(!v) return;
+    const cart = inp.dataset.cart, cage = inp.dataset.cage;
+    if(!dist[cart]) dist[cart] = {};
+    dist[cart][cage] = v;
+  });
+  return dist;
+}
+// 대차별 총 차감량 (잔여중량 차감용)
+function getPpDeductByCart(){
+  const m = {};
+  document.querySelectorAll('.pp-mx-cell').forEach(inp => {
+    const v = parseFloat(inp.value) || 0;
+    if(!v) return;
+    const id = inp.dataset.id;
+    m[id] = (m[id]||0) + v;
+  });
+  return m;
+}
+
 function savePpEdit(id, fbId) {
   const rec = L.preprocess.find(r=>r.id===id);
   if(!rec){ toast('기록 없음','d'); return; }
