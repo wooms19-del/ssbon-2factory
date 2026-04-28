@@ -510,6 +510,15 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     rows.filter(function(r){return r.date===dt;}).forEach(function(r){combined.push(r);});
     testRows.filter(function(r){return r.date===dt;}).forEach(function(r){combined.push(r);});
   });
+
+  // 날짜별 dayRowIdx / dayTotalSpan 계산
+  var _dayFirst={}, _dayCnt={};
+  combined.forEach(function(r,i){
+    if(_dayFirst[r.date]===undefined) _dayFirst[r.date]=i;
+    r.dayRowIdx = i - _dayFirst[r.date];
+    _dayCnt[r.date] = (_dayCnt[r.date]||0)+1;
+  });
+  combined.forEach(function(r){ r.dayTotalSpan = _dayCnt[r.date]||1; });
   return combined;
 }
 
@@ -528,6 +537,8 @@ function _perfRenderTable(rows){
   // 0~3: 일수·날짜·소비기한·제품명  4~8: 원육  9~11: 공정kg  12: 소스kg(비병합)
   // 13~20: 내포장~출고박스  21~22: FP·FC소스  23: 메추리알  24~25: 파우치·박스합계
   var MCOLS=new Set([0,1,2,3,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24]);
+  // 날짜별 공유 병합 대상 (일수·날짜·소비기한·전처리·자숙·파쇄)
+  var DAY_MCOLS=new Set([0,1,2,9,10,11]);
 
   var headers=[
     '일수','날짜','소비기한','제품명',
@@ -571,11 +582,22 @@ function _perfRenderTable(rows){
     ];
     html+='<tr class="'+rowCls+'">';
     cells.forEach(function(c, i){
-      if(isSubRow && MCOLS.has(i)) return; // 분리 행은 병합 컬럼 skip
+      // 부위 분리 행: MCOLS 컬럼 skip
+      if(isSubRow && MCOLS.has(i)) return;
+      // 날짜 2번째+ 행: DAY_MCOLS 컬럼 skip
+      if(r.dayRowIdx>0 && DAY_MCOLS.has(i)) return;
+      var rs='';
+      var dts = r.dayTotalSpan||1;
+      // 날짜 기반 병합 (일수·날짜·소비기한·전처리·자숙·파쇄)
+      if(DAY_MCOLS.has(i) && dts>1 && r.dayRowIdx===0 && !isSubRow){
+        rs=' rowspan="'+dts+'"';
+      // 부위 분리 기반 병합 (나머지 MCOLS, DAY_MCOLS 제외)
+      } else if(MCOLS.has(i) && span>1 && !isSubRow && !DAY_MCOLS.has(i)){
+        rs=' rowspan="'+span+'"';
+      }
+      var vstyle = rs ? 'vertical-align:middle;' : '';
       var align = i < 4 ? 'center' : 'right';
       if(i===3) align='left';
-      var rs = (span>1 && MCOLS.has(i)) ? ' rowspan="'+span+'"' : '';
-      var vstyle = (rs) ? 'vertical-align:middle;' : '';
       html+='<td'+rs+' style="text-align:'+align+';'+vstyle+'">'+(c==null?'':c)+'</td>';
     });
     html+='</tr>';
@@ -632,10 +654,21 @@ function perfDownloadXlsx(){
       (!isSubRow) ? (r.pouch||'') : '',
       (!isSubRow) ? (r.boxUse||'') : ''
     ]);
-    if(!isSubRow && span>1){
-      MCOLS_ARR.forEach(function(c){
-        merges.push({s:{r:rowIdx,c:c},e:{r:rowIdx+span-1,c:c}});
-      });
+    // 병합 추가
+    if(!isSubRow){
+      var dts2=r.dayTotalSpan||1;
+      // 날짜 기반 병합 (DAY_MCOLS: 일수·날짜·소비기한·전처리·자숙·파쇄)
+      if(r.dayRowIdx===0 && dts2>1){
+        [0,1,2,9,10,11].forEach(function(c){
+          merges.push({s:{r:rowIdx,c:c},e:{r:rowIdx+dts2-1,c:c}});
+        });
+      }
+      // 부위 분리 기반 병합 (DAY_MCOLS 제외 나머지 MCOLS)
+      if(span>1){
+        MCOLS_ARR.filter(function(c){return ![0,1,2,9,10,11].includes(c);}).forEach(function(c){
+          merges.push({s:{r:rowIdx,c:c},e:{r:rowIdx+span-1,c:c}});
+        });
+      }
     }
   });
 
