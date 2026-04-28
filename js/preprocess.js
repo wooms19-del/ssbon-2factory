@@ -141,7 +141,16 @@ function ppAddCage(wagonId){
       <input class="fc pp-w-ckg" type="number" step="0.01" placeholder="0" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
       <span style="font-size:11px;color:var(--g5)">kg</span>
     </div>
-    <input class="fc pp-w-tank" type="text" placeholder="탱크" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:center;background:#f0fff4">
+    <input class="fc pp-w-tank" type="text" placeholder="탱크" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:center;background:#f0fff4;display:none">
+    <select class="fc pp-w-tank-sel" onchange="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:center;background:#f0fff4">
+      <option value="">탱크</option>
+      <option value="1">1번</option>
+      <option value="2">2번</option>
+      <option value="3">3번</option>
+      <option value="4">4번</option>
+      <option value="5">5번</option>
+      <option value="6">6번</option>
+    </select>
     <button onclick="ppRemoveCage(this)" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
   list.appendChild(row);
   onPpDistChange();
@@ -168,7 +177,8 @@ function onPpDistChange(){
     wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
       const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
       const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
-      const tk = (row.querySelector('.pp-w-tank')||{}).value || '';
+      const tk = ((row.querySelector('.pp-w-tank-sel')||{}).value)
+              || ((row.querySelector('.pp-w-tank')||{}).value) || '';
       if(cn) cageNums.add(String(cn).trim());
       wSum += kg;
       if(tk && kg) wagonTanks[String(tk).trim()] = (wagonTanks[String(tk).trim()]||0) + kg;
@@ -246,7 +256,8 @@ function getPpDistribution(){
     wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
       const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
       const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
-      const tk = (row.querySelector('.pp-w-tank')||{}).value || '';
+      const tk = ((row.querySelector('.pp-w-tank-sel')||{}).value)
+              || ((row.querySelector('.pp-w-tank')||{}).value) || '';
       if(cn && kg){
         const key = String(cn).trim();
         cages[key] = (cages[key]||0) + kg;
@@ -273,7 +284,8 @@ function getPpCageTankMap(){
   const m = {};
   document.querySelectorAll('.pp-w-cagerow').forEach(row => {
     const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
-    const tk = (row.querySelector('.pp-w-tank')||{}).value || '';
+    const tk = ((row.querySelector('.pp-w-tank-sel')||{}).value)
+            || ((row.querySelector('.pp-w-tank')||{}).value) || '';
     if(cn && tk) m[String(cn).trim()] = String(tk).trim();
   });
   return m;
