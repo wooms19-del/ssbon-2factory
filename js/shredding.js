@@ -9,6 +9,24 @@ function renderShWagonList() {
     .flatMap(r=>(r.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean)));
   const el = document.getElementById('sh_wagonList');
   if(!el) return;
+
+  // 와건별 자숙 배출량 (wagonDist 우선)
+  const wagonOutKg = {};
+  ckList.forEach(ck => {
+    if(ck.wagonDist){
+      Object.entries(ck.wagonDist).forEach(([w,kg])=>{
+        wagonOutKg[w] = (wagonOutKg[w]||0) + (parseFloat(kg)||0);
+      });
+    } else {
+      // 호환: wagonDist 없으면 균등 분배
+      const ws = (ck.wagonOut||'').split(',').map(x=>x.trim()).filter(Boolean);
+      if(ws.length && ck.kg){
+        const each = parseFloat(ck.kg)/ws.length;
+        ws.forEach(w => { wagonOutKg[w] = (wagonOutKg[w]||0) + each; });
+      }
+    }
+  });
+
   const wagons = [];
   ckList.forEach(ck => {
     (ck.wagonOut||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wNum => {
@@ -21,13 +39,18 @@ function renderShWagonList() {
   const done    = wagons.filter(w=>w.used);
   el.innerHTML =
     (pending.length ? '<div style="font-size:12px;font-weight:600;color:var(--g6);margin-bottom:8px">와건 선택 → 자동 입력</div>' : '') +
-    pending.map(w => `
+    pending.map(w => {
+      const outKg = wagonOutKg[w.num] || 0;
+      const kgText = outKg ? `<span style="font-size:12px;color:#16a34a;font-weight:600;margin-left:8px">${outKg.toFixed(1)}kg</span>` : '';
+      return `
       <label style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;cursor:pointer">
-        <input type="checkbox" class="sh-wagon-cb" data-wagon="${w.num}" data-type="${w.type}"
+        <input type="checkbox" class="sh-wagon-cb" data-wagon="${w.num}" data-type="${w.type}" data-outkg="${outKg}"
           onchange="onShWagonChange()" style="width:18px;height:18px;accent-color:var(--p)">
         <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
         <span style="font-size:13px;color:var(--g5);margin-left:auto">${w.type||'-'} · 케이지 ${w.cage||'-'}</span>
-      </label>`).join('') +
+        ${kgText}
+      </label>`;
+    }).join('') +
     done.map(w => `
       <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#f3f4f6;border-radius:8px;margin-bottom:6px;opacity:0.55;cursor:not-allowed">
         <input type="checkbox" disabled style="width:18px;height:18px">
@@ -86,7 +109,7 @@ function onShWagonChange() {
   // 기존 행 입력값 보존
   const existingRows = [...c.querySelectorAll('.sh-row')].map(row => ({
     wagonIn: row.querySelector('.sh-wIn').value.trim(),
-    wagonOut: row.querySelector('.sh-wOut').value.trim(),
+    kgIn: (row.querySelector('.sh-in-kg')||{}).value || '',
     start: row.querySelector('.sh-start').value.trim(),
     end: row.querySelector('.sh-end').value.trim(),
     kg: row.querySelector('.sh-kg').value,
@@ -99,11 +122,17 @@ function onShWagonChange() {
     else shAddRow();
     return;
   }
-  // 체크된 와건마다 행 생성 (기존 입력 매칭하여 보존)
+  // 체크된 와건마다 행 생성 + 자숙배출량 자동 채움
   checked.forEach(cb => {
     const wNum = cb.dataset.wagon;
     const existing = existingRows.find(r => r.wagonIn === wNum);
-    shAddRow(existing || { wagonIn: wNum });
+    const data = existing || { wagonIn: wNum };
+    // 자숙배출량 자동 채움 (existing kgIn 없을 때만)
+    if(!data.kgIn){
+      const outKg = parseFloat(cb.dataset.outkg) || 0;
+      if(outKg) data.kgIn = outKg.toFixed(2);
+    }
+    shAddRow(data);
   });
 }
 
@@ -121,7 +150,11 @@ function _shRowHtml(idx, data){
       <div class="fg" style="margin-bottom:8px">
         <div class="fgrp">
           <label class="fl">투입 와건</label>
-          <input class="fc sh-wIn" type="text" value="${data.wagonIn||''}" placeholder="예: 22">
+          <input class="fc sh-wIn" type="text" value="${data.wagonIn||''}" placeholder="예: 22" oninput="shAutoFillIn(this)">
+        </div>
+        <div class="fgrp">
+          <label class="fl">투입 KG <span style="font-size:11px;color:var(--g4)">(자숙배출 자동)</span></label>
+          <input class="fc sh-in-kg" type="number" step="0.01" placeholder="0.00" value="${data.kgIn||''}">
         </div>
         <div class="fgrp">
           <label class="fl">시작</label>
@@ -138,7 +171,7 @@ function _shRowHtml(idx, data){
           </div>
         </div>
         <div class="fgrp">
-          <label class="fl">파쇄 KG <span style="font-size:11px;color:var(--g4)">(자동)</span></label>
+          <label class="fl">배출 KG <span style="font-size:11px;color:var(--g4)">(자동)</span></label>
           <input class="fc sh-kg" type="number" step="0.01" placeholder="0.00" value="${data.kg||''}" readonly style="background:#f8f8f8">
         </div>
         <div class="fgrp">
@@ -157,6 +190,27 @@ function _shRowHtml(idx, data){
         <span class="sh-out-sum" style="color:var(--g5);font-weight:500">배출 0kg</span>
       </div>
     </div>`;
+}
+
+// 투입 와건번호 입력 시 자숙 배출량 자동 채움
+function shAutoFillIn(inputEl){
+  const wn = String(inputEl.value||'').trim();
+  if(!wn) return;
+  const row = inputEl.closest('.sh-row');
+  if(!row) return;
+  const inKgInp = row.querySelector('.sh-in-kg');
+  if(!inKgInp || inKgInp.value) return; // 이미 값 있으면 덮지 않음
+  // 자숙에서 해당 와건 배출량 찾기
+  let kg = 0;
+  L.cooking.forEach(ck => {
+    if(ck.wagonDist && ck.wagonDist[wn]){
+      kg += parseFloat(ck.wagonDist[wn])||0;
+    } else if((ck.wagonOut||'').split(',').map(x=>x.trim()).includes(wn)){
+      const ws = (ck.wagonOut||'').split(',').map(x=>x.trim()).filter(Boolean);
+      if(ws.length) kg += (parseFloat(ck.kg)||0)/ws.length;
+    }
+  });
+  if(kg) inKgInp.value = kg.toFixed(2);
 }
 
 function shAddOutWagon(btnInRow){
@@ -242,7 +296,8 @@ async function saveShAll(){
       wagonOutDist: wagonOutDist,
       start: row.querySelector('.sh-start').value.trim(),
       end: row.querySelector('.sh-end').value.trim(),
-      kg: totalOutKg,
+      kg: totalOutKg,                                             // 배출 (다음 공정으로)
+      kgIn: parseFloat((row.querySelector('.sh-in-kg')||{}).value) || 0, // 투입 (자숙에서 빠짐)
       waste: parseFloat(row.querySelector('.sh-waste').value) || 0,
       workers: parseFloat(row.querySelector('.sh-workers').value) || 0
     };
