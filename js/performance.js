@@ -194,9 +194,9 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
 
   // 1) 외포장 testRun 키 (date|product) 셋
   var opTestKeys = new Set();
-  op.forEach(function(r){ if(r.testRun||r.isTest) opTestKeys.add(d(r)+'|'+(r.product||'')); });
+  op.forEach(function(r){ if(r.testRun===true||r.isTest===true) opTestKeys.add(d(r)+'|'+(r.product||'')); });
   var isTestPk = function(r){
-    if(r.testRun||r.isTest) return true;
+    if(r.testRun===true||r.isTest===true) return true;
     return opTestKeys.has(d(r)+'|'+(r.product||''));
   };
 
@@ -521,15 +521,16 @@ function _perfRenderTable(rows){
   if(st) st.style.display='none';
   wrap.style.display='';
 
-  // 병합 대상 컬럼: 일수·날짜·소비기한·제품명(0~3) + 전처리~박스합계(9~25) 중 소스(kg)=12 제외
-  var MCOLS=new Set([0,1,2,3,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25]);
+  // 0~3: 일수·날짜·소비기한·제품명  4~8: 원육  9~11: 공정kg  12: 소스kg(비병합)
+  // 13~20: 내포장~출고박스  21~22: FP·FC소스  23: 메추리알  24~25: 파우치·박스합계
+  var MCOLS=new Set([0,1,2,3,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24]);
 
   var headers=[
     '일수','날짜','소비기한','제품명',
     '원육종류','원육<br>(kg)','설도','홍두깨','우둔',
     '전처리<br>(kg)','자숙<br>(kg)','파쇄<br>(kg)','소스<br>(kg)',
     '내포장<br>(EA)','불량<br>파우치','완박스','불량<br>박스',
-    '트레이','트레이<br>불량','낱개','출고<br>박스',
+    '트레이','트레이<br>불량','출고<br>박스',
     'FP소스<br>(kg)','FC소스<br>(kg)','메추리<br>알(kg)','파우치<br>합계','박스<br>합계'
   ];
   var html='<table class="perf-tbl"><thead><tr>';
@@ -552,7 +553,7 @@ function _perfRenderTable(rows){
       r.ppKg||'', r.ckKg||'', r.shKg||'', r.sauceKg||'',
       r.innerEa ? r.innerEa.toLocaleString() : '', r.defPouch||'',
       r.outerBoxes||'', r.boxDef||'',
-      r.tray||'', r.trayDef||'', r.unitCnt||'', r.outBoxes||'',
+      r.tray||'', r.trayDef||'', r.outBoxes||'',
       r.sauceFP||'', r.sauceFC||'', r.qaiKg||'',
       r.pouch ? r.pouch.toLocaleString() : '', r.boxUse||''
     ];
@@ -583,17 +584,16 @@ function perfDownloadXlsx(){
     '원육종류','원육사용량(kg)','설도(박스)','홍두깨(박스)','우둔(박스)',
     '전처리(kg)','자숙(kg)','파쇄(kg)','소스사용량(kg)',
     '내포장수량(EA)','불량파우치(EA)','완박스','불량박스',
-    '트레이(EA)','트레이불량(EA)','낱개수량','출고박스',
+    '트레이(EA)','트레이불량(EA)','출고박스',
     'FP소스배합(kg)','FC소스배합(kg)','깐메추리알(kg)','파우치사용량','박스사용량'
   ];
-  // 병합 대상 컬럼 (0-based, 26컬럼)
-  var MCOLS_ARR=[0,1,2,3,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25];
+  var MCOLS_ARR=[0,1,2,3,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24];
   var MCOLS=new Set(MCOLS_ARR);
 
   var aoa=[headers];
   var merges=[];
   rows.forEach(function(r){
-    var rowIdx=aoa.length; // 헤더=0, 데이터 첫 행=1
+    var rowIdx=aoa.length;
     var isSubRow=r.subRowIdx>0;
     var span=(r.totalSub||1);
     aoa.push([
@@ -613,7 +613,6 @@ function perfDownloadXlsx(){
       (!isSubRow) ? (r.boxDef||'') : '',
       (!isSubRow) ? (r.tray||'') : '',
       (!isSubRow) ? (r.trayDef||'') : '',
-      (!isSubRow) ? (r.unitCnt||'') : '',
       (!isSubRow) ? (r.outBoxes||'') : '',
       (!isSubRow) ? (r.sauceFP||'') : '',
       (!isSubRow) ? (r.sauceFC||'') : '',
@@ -621,7 +620,6 @@ function perfDownloadXlsx(){
       (!isSubRow) ? (r.pouch||'') : '',
       (!isSubRow) ? (r.boxUse||'') : ''
     ]);
-    // 병합 추가 (첫 분리 행이고 span>1인 경우)
     if(!isSubRow && span>1){
       MCOLS_ARR.forEach(function(c){
         merges.push({s:{r:rowIdx,c:c},e:{r:rowIdx+span-1,c:c}});
@@ -636,7 +634,7 @@ function perfDownloadXlsx(){
     {wch:10},{wch:11},{wch:7},{wch:8},{wch:7},
     {wch:10},{wch:9},{wch:9},{wch:11},
     {wch:12},{wch:10},{wch:8},{wch:8},
-    {wch:9},{wch:11},{wch:8},{wch:9},
+    {wch:9},{wch:11},{wch:9},
     {wch:11},{wch:11},{wch:10},{wch:11},{wch:9}
   ];
   if(merges.length) ws['!merges']=merges;
