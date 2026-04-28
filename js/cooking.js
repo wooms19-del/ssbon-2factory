@@ -34,8 +34,9 @@ function renderCkCageList() {
         <span style="font-size:13px;color:var(--g5);margin-left:auto">${c.type||'-'}</span>
       </label>`).join('') +
     done.map(c => `
-      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;opacity:0.7">
-        <span style="font-size:14px;font-weight:700">${c.num}번 케이지</span>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#f3f4f6;border-radius:8px;margin-bottom:6px;opacity:0.55;cursor:not-allowed">
+        <input type="checkbox" disabled style="width:18px;height:18px">
+        <span style="font-size:14px;font-weight:700;text-decoration:line-through;color:var(--g5)">${c.num}번 케이지</span>
         <span style="font-size:13px;color:var(--g5);margin-left:auto">${c.type||'-'}</span>
         <span style="font-size:12px;color:#4caf50;font-weight:600">✅자숙완료</span>
       </div>`).join('');
