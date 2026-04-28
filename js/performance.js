@@ -34,6 +34,40 @@ function setModePerf(){
 }
 window.setModePerf = setModePerf;
 
+// ── inner 폭 원복 (다른 탭으로 빠져나갈 때) ────────────────────
+function _perfRestoreInner(){
+  var inner = document.querySelector('.main .inner') || document.querySelector('.inner');
+  if(inner){ inner.style.maxWidth=''; inner.style.padding=''; }
+  if(_perfTimer){ clearInterval(_perfTimer); _perfTimer=null; }
+}
+
+// 다른 setMode 함수 패치 (한 번만)
+(function patchOtherSetters(){
+  if(window._perfPatched) return;
+  window._perfPatched = true;
+  var origSetMode = window.setMode;
+  if(typeof origSetMode === 'function'){
+    window.setMode = function(m){
+      _perfRestoreInner();
+      return origSetMode.apply(this, arguments);
+    };
+  }
+  var origSetModeAtt = window.setModeAtt;
+  if(typeof origSetModeAtt === 'function'){
+    window.setModeAtt = function(){
+      _perfRestoreInner();
+      return origSetModeAtt.apply(this, arguments);
+    };
+  }
+  var origSetModeSchedule = window.setModeSchedule;
+  if(typeof origSetModeSchedule === 'function'){
+    window.setModeSchedule = function(){
+      _perfRestoreInner();
+      return origSetModeSchedule.apply(this, arguments);
+    };
+  }
+})();
+
 // ── 외부에서 부를 수 있게 ─────────────────────────────────────
 function _perfStartAutoRefresh(){
   if(_perfTimer) clearInterval(_perfTimer);
@@ -59,8 +93,22 @@ function _perfRenderShell(){
   var ym=_perfYm||_perfTodayYm();
   var y=ym.slice(0,4), mIdx=parseInt(ym.slice(5))-1;
   var lbl=y+'년 '+_perfMonths()[mIdx];
+  // 부모 .inner의 max-width 제거 (실적관리 활성 시) - 한페이지 꽉 차게
+  var inner = document.querySelector('.main .inner') || document.querySelector('.inner');
+  if(inner){ inner.style.maxWidth='none'; inner.style.padding='4px 6px'; }
   pg.innerHTML =
-    '<div class="card" style="margin-bottom:8px">'+
+    '<style>'+
+      '#p-performance .pf-card{padding:8px;background:var(--c);border:var(--br);border-radius:6px;margin-bottom:6px}'+
+      '#p-performance table.perf-tbl{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:auto}'+
+      '#p-performance table.perf-tbl thead th{background:#1F4E79;color:#fff;font-weight:600;text-align:center;padding:5px 3px;border:1px solid #999;white-space:nowrap;position:sticky;top:0;z-index:2}'+
+      '#p-performance table.perf-tbl td{padding:3px 4px;border:1px solid #ddd;white-space:nowrap}'+
+      '#p-performance table.perf-tbl tr.row-test td{background:#fff3cd;font-style:italic;color:#856404}'+
+      '#p-performance table.perf-tbl tr.row-pending td{background:#fef3c7;color:#92400e}'+   /* 외포장 미완료: 연주황 */
+      '#p-performance table.perf-tbl tr.row-bg0 td{background:#ffffff}'+
+      '#p-performance table.perf-tbl tr.row-bg1 td{background:#f8fafc}'+
+      '#p-performance .perf-wrap{overflow-x:auto;max-width:100%}'+
+    '</style>'+
+    '<div class="pf-card">'+
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
         '<button class="btn" onclick="perfPrevMonth()" style="padding:4px 10px">◀</button>'+
         '<div style="font-weight:700;font-size:1.05rem;min-width:130px;text-align:center" id="perfMonthLbl">'+lbl+'</div>'+
@@ -68,14 +116,18 @@ function _perfRenderShell(){
         '<input type="month" value="'+ym+'" onchange="perfPickMonth(this.value)" style="padding:4px 8px;border:var(--br);border-radius:4px;font-size:.9rem">'+
         '<button class="btn" onclick="perfThisMonth()" style="padding:4px 10px">이번달</button>'+
         '<div style="flex:1"></div>'+
+        '<span style="font-size:.78rem;color:var(--g4)">'+
+          '<span style="display:inline-block;width:10px;height:10px;background:#fff3cd;border:1px solid #d4a017;vertical-align:middle"></span> 테스트 &nbsp; '+
+          '<span style="display:inline-block;width:10px;height:10px;background:#fef3c7;border:1px solid #f59e0b;vertical-align:middle"></span> 외포장 미완료'+
+        '</span>'+
         '<button class="btn p" onclick="perfDownloadXlsx()" style="padding:6px 14px">📥 엑셀 다운로드</button>'+
         '<button class="btn" onclick="_perfReload(true)" title="새로고침" style="padding:4px 10px">🔄</button>'+
       '</div>'+
-      '<div style="margin-top:6px;color:var(--g4);font-size:.8rem">테스트 생산은 외포장 testRun 기준으로 자동 식별되어 노란색으로 표시됩니다. 30초마다 자동 새로고침.</div>'+
+      '<div style="margin-top:4px;color:var(--g4);font-size:.75rem">테스트 = 외포장 testRun 자동 식별 / 외포장 미완료 = 완박스 0건 / 30초마다 자동 갱신</div>'+
     '</div>'+
-    '<div class="card" style="padding:0;overflow:auto">'+
+    '<div class="pf-card" style="padding:0">'+
       '<div id="perfStatus" style="padding:1rem;text-align:center;color:var(--g4)">데이터 불러오는 중…</div>'+
-      '<div id="perfTblWrap" style="display:none"></div>'+
+      '<div id="perfTblWrap" class="perf-wrap" style="display:none"></div>'+
     '</div>';
 }
 
@@ -410,16 +462,20 @@ function _perfRenderTable(rows){
     '트레이','트레이불량','낱개','출고박스',
     'FP/FC소스','메추리알','파우치사용','박스사용'
   ];
-  var html='<table style="border-collapse:collapse;width:100%;font-size:.78rem;min-width:1700px">';
-  html+='<thead><tr style="background:#1F4E79;color:#fff">';
-  headers.forEach(function(h){
-    html+='<th style="padding:6px 4px;border:1px solid #999;font-weight:600;text-align:center;white-space:nowrap">'+h+'</th>';
-  });
+  var html='<table class="perf-tbl"><thead><tr>';
+  headers.forEach(function(h){ html+='<th>'+h+'</th>'; });
   html+='</tr></thead><tbody>';
-  var prevDate=''; var dayBg=['#ffffff','#f8fafc'];
   rows.forEach(function(r){
-    var bg = r.isTest ? '#fff3cd' : (dayBg[(r.dayNo)%2]);
-    var fontStyle = r.isTest ? 'font-style:italic;color:#856404' : '';
+    // 행 클래스: 테스트 > 외포장미완료 > 일자 zebra
+    var rowCls;
+    if(r.isTest){
+      rowCls='row-test';
+    } else if(!r.isTest && (r.outerBoxes||0)===0 && (r.boxDef||0)===0){
+      // 외포장 미완료: 완박스+불량박스 둘 다 0
+      rowCls='row-pending';
+    } else {
+      rowCls='row-bg'+((r.dayNo)%2);
+    }
     var cells=[
       r.dayNo>0 && r.productIndex===0 ? r.dayNo : '',
       r.productIndex===0 ? r.date.slice(5) : '',
@@ -435,14 +491,13 @@ function _perfRenderTable(rows){
       r.sauceFP||'', r.qaiKg||'',
       r.pouch.toLocaleString(), r.boxUse||''
     ];
-    html+='<tr style="background:'+bg+';'+fontStyle+'">';
+    html+='<tr class="'+rowCls+'">';
     cells.forEach(function(c, i){
       var align=i<6?'center':'right';
       if(i===3) align='left';
-      html+='<td style="padding:4px 6px;border:1px solid #ddd;text-align:'+align+';white-space:nowrap">'+(c==null?'':c)+'</td>';
+      html+='<td style="text-align:'+align+'">'+(c==null?'':c)+'</td>';
     });
     html+='</tr>';
-    prevDate=r.date;
   });
   html+='</tbody></table>';
   wrap.innerHTML=html;
