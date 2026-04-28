@@ -13,8 +13,11 @@ function updPpWagon(){
   const container=document.getElementById('pp_wagonChecks');
   if(!container) return;
   const _today=tod(), _yst=getYesterday_();
+  // 방혈 종료(end 채워짐) + 잔여중량 > 0 인 cart만 표시
   const wagons=L.thawing.filter(t=>{
-    if(t.end&&t.end!=='') return false;
+    if(!t.end || t.end==='') return false;  // 방혈 진행중이면 제외
+    const remain = t.remainKg!==undefined ? t.remainKg : t.totalKg;
+    if(remain <= 0.01) return false;        // 잔여 다 쓴 건 제외
     const d=String(t.date||'').slice(0,10);
     return d===_today||d===_yst;
   });
@@ -60,9 +63,10 @@ function updPpWagon(){
           </div>
         </div>
         <div style="font-size:11px;color:var(--g5);margin-bottom:4px">분배할 케이지</div>
-        <div style="display:grid;grid-template-columns:80px 1fr 70px 28px;gap:4px;margin-bottom:3px;padding:0 4px">
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr 60px 28px;gap:4px;margin-bottom:3px;padding:0 4px">
           <div style="font-size:10px;color:var(--g5);font-weight:500">케이지</div>
-          <div style="font-size:10px;color:var(--g5);font-weight:500;text-align:right">kg</div>
+          <div style="font-size:10px;color:#b91c1c;font-weight:500;text-align:right">투입(빠짐)</div>
+          <div style="font-size:10px;color:#16a34a;font-weight:500;text-align:right">배출(담김)</div>
           <div style="font-size:10px;color:var(--g5);font-weight:500;text-align:center">탱크</div>
           <div></div>
         </div>
@@ -146,15 +150,18 @@ function ppAddCage(wagonId){
   const list = wrap.querySelector('.pp-w-cages');
   const row = document.createElement('div');
   row.className = 'pp-w-cagerow';
-  row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 70px 28px;gap:4px;align-items:center';
+  row.style.cssText = 'display:grid;grid-template-columns:60px 1fr 1fr 60px 28px;gap:4px;align-items:center';
   row.innerHTML = `
     <input class="fc pp-w-cnum" type="text" placeholder="케이지" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
     <div style="display:flex;align-items:center;gap:2px">
-      <input class="fc pp-w-ckg" type="number" step="0.01" placeholder="0" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
-      <span style="font-size:11px;color:var(--g5)">kg</span>
+      <input class="fc pp-w-ckg" type="number" step="0.01" placeholder="투입" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right;background:#fff5f5">
+      <span style="font-size:10px;color:var(--g5)">kg</span>
     </div>
-    <input class="fc pp-w-tank" type="text" placeholder="탱크" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:center;background:#f0fff4;display:none">
-    <select class="fc pp-w-tank-sel" onchange="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:center;background:#f0fff4">
+    <div style="display:flex;align-items:center;gap:2px">
+      <input class="fc pp-w-cout" type="number" step="0.01" placeholder="배출" oninput="onPpDistChange()" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right;background:#f5fff5">
+      <span style="font-size:10px;color:var(--g5)">kg</span>
+    </div>
+    <select class="fc pp-w-tank-sel" onchange="onPpDistChange()" style="padding:5px 4px;font-size:12px;box-sizing:border-box;text-align:center;background:#f0fff4">
       <option value="">탱크</option>
       <option value="1">1번</option>
       <option value="2">2번</option>
@@ -175,7 +182,8 @@ function ppRemoveCage(btn){
 }
 
 function onPpDistChange(){
-  let totalKg = 0;
+  let totalInKg = 0;   // 대차에서 빠지는 총량
+  let totalOutKg = 0;  // 케이지로 들어가는 총량
   const cageNums = new Set();
   const carts = [];
   const types = new Set();
@@ -184,49 +192,51 @@ function onPpDistChange(){
   document.querySelectorAll('.pp-wagon-input').forEach(wrap => {
     if(wrap.style.display === 'none') return;
     const remain = parseFloat(wrap.dataset.remain) || 0;
-    let wSum = 0;
-    const wagonTanks = {}; // 탱크별 합계 (이 대차)
+    let wInSum = 0, wOutSum = 0;
+    const wagonTanks = {};
     wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
       const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
-      const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      const inKg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      const outKg = parseFloat((row.querySelector('.pp-w-cout')||{}).value) || 0;
       const tk = ((row.querySelector('.pp-w-tank-sel')||{}).value)
               || ((row.querySelector('.pp-w-tank')||{}).value) || '';
       if(cn) cageNums.add(String(cn).trim());
-      wSum += kg;
-      if(tk && kg) wagonTanks[String(tk).trim()] = (wagonTanks[String(tk).trim()]||0) + kg;
+      wInSum += inKg;
+      wOutSum += outKg;
+      // 탱크별 요약 - 배출량 기준
+      if(tk && outKg) wagonTanks[String(tk).trim()] = (wagonTanks[String(tk).trim()]||0) + outKg;
     });
-    totalKg += wSum;
+    totalInKg += wInSum;
+    totalOutKg += wOutSum;
     const sumEl = wrap.querySelector('.pp-w-sum');
     if(sumEl){
-      const willRemain = remain - wSum;
-      sumEl.innerHTML = `합계 <b>${wSum.toFixed(2)}kg</b> / ${remain}kg · 빠지면 잔여 <b style="color:${willRemain<-0.01?'var(--d)':willRemain<0.01?'var(--s)':'var(--p)'}">${willRemain.toFixed(2)}kg</b>`;
+      const willRemain = remain - wInSum;
+      sumEl.innerHTML = `투입 <b style="color:#b91c1c">${wInSum.toFixed(2)}kg</b> · 배출 <b style="color:#16a34a">${wOutSum.toFixed(2)}kg</b> · 잔여 <b style="color:${willRemain<-0.01?'var(--d)':willRemain<0.01?'var(--s)':'var(--p)'}">${willRemain.toFixed(2)}kg</b>`;
     }
-    // 탱크별 요약 표시
     const tankBox = wrap.querySelector('.pp-w-tank-summary');
     if(tankBox){
       const keys = Object.keys(wagonTanks);
       if(keys.length){
         tankBox.style.display = 'block';
-        tankBox.innerHTML = '<div style="color:var(--g5);font-weight:500;margin-bottom:2px">📦 탱크별</div>' +
+        tankBox.innerHTML = '<div style="color:var(--g5);font-weight:500;margin-bottom:2px">📦 탱크별 (배출 기준)</div>' +
           keys.map(k => `<div style="display:flex;justify-content:space-between"><span style="color:#27500A;font-weight:500">탱크 ${k}번</span><span>${wagonTanks[k].toFixed(2)}kg</span></div>`).join('');
       } else {
         tankBox.style.display = 'none';
       }
     }
-    if(wSum > 0){
+    if(wInSum > 0 || wOutSum > 0){
       if(wrap.dataset.cart) carts.push(wrap.dataset.cart);
       if(wrap.dataset.type) types.add(wrap.dataset.type);
     }
-    // 가장 이른 시작 / 가장 늦은 종료
     const ws = (wrap.querySelector('.pp-w-start')||{}).value || '';
     const we = (wrap.querySelector('.pp-w-end')||{}).value || '';
     if(ws){ if(!earliest || ws < earliest) earliest = ws; }
     if(we){ if(!latest || we > latest) latest = we; }
   });
 
-  // 외부 공통 필드에 자동 반영
+  // 외부 공통 필드 - 배출 기준 (kg = 케이지 들어간 양)
   const kgInp = document.getElementById('pp_kg');
-  if(kgInp) kgInp.value = totalKg ? totalKg.toFixed(2) : '';
+  if(kgInp) kgInp.value = totalOutKg ? totalOutKg.toFixed(2) : '';
   const cageInp = document.getElementById('pp_cage');
   if(cageInp) cageInp.value = [...cageNums].join(',');
   const typeInp = document.getElementById('pp_type');
@@ -240,14 +250,12 @@ function onPpDistChange(){
   const endInp = document.getElementById('pp_end');
   if(endInp) endInp.value = latest;
 
-  // 원육 2종 이상이면 비가식부 분리 입력 펼침
   refreshPpWasteByType([...types]);
 
-  // 알림 영역
   const info = document.getElementById('pp_wagonInfo');
   if(info){
     if(carts.length){
-      info.innerHTML = `<div class="al al-i">🧊 대차 ${carts.join(',')} · ${[...types].join(',')||'-'} · 투입 <b>${totalKg.toFixed(2)}kg</b></div>`;
+      info.innerHTML = `<div class="al al-i">🧊 대차 ${carts.join(',')} · ${[...types].join(',')||'-'} · 투입 <b style="color:#b91c1c">${totalInKg.toFixed(2)}kg</b> · 배출 <b style="color:#16a34a">${totalOutKg.toFixed(2)}kg</b></div>`;
       info.classList.remove('hid');
     } else {
       info.classList.add('hid');
@@ -262,36 +270,42 @@ function getPpDistribution(){
     if(wrap.style.display === 'none') return;
     const cart = wrap.dataset.cart;
     if(!cart) return;
-    const cages = {};       // {케이지번호: kg}
-    const cageTanks = {};   // {케이지번호: 탱크번호}
-    let total = 0;
+    const cages = {};       // 배출 kg (케이지에 들어간 양)
+    const cagesIn = {};     // 투입 kg (대차에서 빠진 양)
+    const cageTanks = {};
+    let totalIn = 0, totalOut = 0;
     wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
       const cn = (row.querySelector('.pp-w-cnum')||{}).value || '';
-      const kg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      const inKg = parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      const outKg = parseFloat((row.querySelector('.pp-w-cout')||{}).value) || 0;
       const tk = ((row.querySelector('.pp-w-tank-sel')||{}).value)
               || ((row.querySelector('.pp-w-tank')||{}).value) || '';
-      if(cn && kg){
+      if(cn && (inKg || outKg)){
         const key = String(cn).trim();
-        cages[key] = (cages[key]||0) + kg;
+        if(outKg) cages[key] = (cages[key]||0) + outKg;
+        if(inKg) cagesIn[key] = (cagesIn[key]||0) + inKg;
         if(tk) cageTanks[key] = String(tk).trim();
-        total += kg;
+        totalIn += inKg;
+        totalOut += outKg;
       }
     });
-    if(total > 0){
+    if(totalIn > 0 || totalOut > 0){
       dist[cart] = {
         type: wrap.dataset.type || '',
         start: (wrap.querySelector('.pp-w-start')||{}).value || '',
         end: (wrap.querySelector('.pp-w-end')||{}).value || '',
-        cages: cages,
+        cages: cages,        // 배출 (다음 공정으로)
+        cagesIn: cagesIn,    // 투입 (이 대차에서 빠짐)
         cageTanks: cageTanks,
-        total: total
+        totalIn: totalIn,
+        total: totalOut      // 기존 호환 - 배출 기준
       };
     }
   });
   return dist;
 }
 
-// 케이지 → 탱크 매핑 (전역, 저장용)
+// 케이지 → 탱크 매핑
 function getPpCageTankMap(){
   const m = {};
   document.querySelectorAll('.pp-w-cagerow').forEach(row => {
@@ -303,7 +317,7 @@ function getPpCageTankMap(){
   return m;
 }
 
-// 대차별 차감량 (잔여중량 차감용)
+// 대차별 차감량 (잔여중량 차감용) - 투입 kg 기준
 function getPpDeductByCart(){
   const m = {};
   document.querySelectorAll('.pp-wagon-input').forEach(wrap => {
