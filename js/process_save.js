@@ -62,7 +62,12 @@ async function saveP(type){
     const mxDeduct = (typeof getPpDeductByCart==='function') ? getPpDeductByCart() : {};
     const mxDist   = (typeof getPpDistribution==='function') ? getPpDistribution() : {};
     if(Object.keys(mxDist).length){
-      d.distribution = mxDist; // {"5":{"7":80,"8":40}, ...}
+      d.distribution = mxDist; // {"5":{type,start,end,cages:{"7":80,...},cageTanks:{"7":"1",...},total}}
+    }
+    // 케이지 → 탱크 매핑 (전역, 자숙 추적용)
+    if(typeof getPpCageTankMap==='function'){
+      const ctMap = getPpCageTankMap();
+      if(Object.keys(ctMap).length) d.cageTanks = ctMap;
     }
     // 원육별 비가식부 (2종 이상 섞일 때)
     if(typeof getPpWasteByType==='function'){
