@@ -1562,7 +1562,10 @@ function renderTL(pp,ck,sh,pk){
   const toMin=t=>{if(!t)return null;const p=t.slice(0,5).split(':');return+p[0]*60+(+p[1]||0);};
   const mins=all.flatMap(r=>[toMin(r.start),toMin(r.end)]).filter(v=>v!==null);
   const minT=Math.min(...mins), maxT=Math.max(...mins);
-  const range=maxT-minT||60;
+  // 헤더는 정시 단위로 그리니, 막대도 같은 범위(헤더 시작 정시 ~ 헤더 끝 정시)에 맞춤
+  const headStart=Math.floor(minT/60)*60;
+  const headEnd=Math.ceil(maxT/60)*60;
+  const range=Math.max(60, headEnd-headStart);
   const hours=[];
   for(let h=Math.floor(minT/60);h<=Math.ceil(maxT/60);h++) hours.push(h%24);
   el.innerHTML=`<div class="tlw"><div class="tlg">
@@ -1570,7 +1573,7 @@ function renderTL(pp,ck,sh,pk){
     ${all.map(r=>{
       const s=toMin(r.start),e=toMin(r.end);
       if(s===null||e===null) return '';
-      const left=r2((s-minT)/range*100), width=r2((e-s)/range*100);
+      const left=r2((s-headStart)/range*100), width=r2((e-s)/range*100);
       return `<div class="tlr"><div class="tll">${r.lbl}</div><div class="tlt"><div class="tlb" style="left:${left}%;width:${Math.max(width,2)}%;background:${r.col}">${r.start?r.start.slice(0,5):''}-${r.end?r.end.slice(0,5):''}</div></div></div>`;
     }).join('')}
   </div></div>`;
