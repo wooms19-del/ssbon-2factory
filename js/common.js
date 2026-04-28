@@ -395,9 +395,28 @@ function isUserEditing() {
   // 외포장 미완료 패널이 하나라도 열려있으면 입력 중
   const panels = document.querySelectorAll('[id^="op_panel_"]');
   if(Array.from(panels).some(p=>p.style.display!=='none')) return true;
-  // 수정 폼이 열려있으면 입력 중 (자동갱신으로 닫히지 않도록)
-  const editForms = document.querySelectorAll('[id^="ppEdit_"],[id^="pkEdit_"]');
+  // 수정 폼이 열려있으면 입력 중
+  const editForms = document.querySelectorAll('[id^="ppEdit_"],[id^="pkEdit_"],[id^="peEdit_"]');
   if(Array.from(editForms).some(p=>p.style.display!=='none')) return true;
+  // 전처리: 대차 카드(체크박스로 펼친 입력 폼)가 열려있으면 입력 중
+  const ppOpen = document.querySelectorAll('.pp-wagon-input');
+  if(Array.from(ppOpen).some(p=>p.style.display!=='none')) return true;
+  // 전처리: 비가식부 분리 입력 영역이 열려있으면 입력 중
+  const wasteArea = document.getElementById('pp_wasteByTypeBox');
+  if(wasteArea && wasteArea.style.display !== 'none') return true;
+  // 자숙: 종료 매트릭스 폼이 열려있으면 입력 중
+  const ckEnd = document.querySelectorAll('[id^="ckEndForm_"]');
+  if(Array.from(ckEnd).some(p=>p.style.display && p.style.display !== 'none')) return true;
+  // 자숙: 케이지가 1개라도 체크돼있으면 입력 중
+  if(document.querySelector('.ck-cage-cb:checked')) return true;
+  // 파쇄: 와건이 1개라도 체크돼있으면 입력 중
+  if(document.querySelector('.sh-wagon-cb:checked')) return true;
+  // 파쇄: 입력 행에 값이 하나라도 들어있으면 입력 중
+  const shInputs = document.querySelectorAll('#sh_rows input');
+  if(Array.from(shInputs).some(i => (i.value||'').trim() !== '')) return true;
+  // 포장: 설비 카드가 1개라도 펼쳐져 있으면 입력 중
+  const pkRows = document.querySelectorAll('[id^="pkRow_"]');
+  if(pkRows.length > 0) return true;
   return false;
 }
 
