@@ -343,7 +343,9 @@ async function loadOpenThawing() {
     L.thawing = [...closed, ...recs];
     const seen = new Set();
     L.thawing = L.thawing.filter(t => {
-      const k = (t.cart||'')+'|'+String(t.date||'').slice(0,10);
+      // 중복 제거 키: fbId 우선 (같은 cart+date여도 다른 레코드면 둘 다 살림)
+      // cart는 같은 날 세척 후 재사용 가능하므로 cart+date만으로 묶으면 안 됨
+      const k = t.fbId || t.id || ((t.cart||'')+'|'+String(t.date||'').slice(0,10)+'|'+(t.start||''));
       if(seen.has(k)) return false;
       seen.add(k); return true;
     });
