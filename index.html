@@ -558,6 +558,11 @@
         </div>
         <button class="btn bo bsm" onclick="downloadPackingChart()" style="font-size:11px">📥 저장</button>
       </div>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <button id="pkTab_ea" onclick="setPackingChartMode('ea')" style="padding:5px 12px;font-size:11px;border:1px solid var(--g3);background:#fff;color:var(--g6);border-radius:4px;cursor:pointer">EA</button>
+        <button id="pkTab_weight" onclick="setPackingChartMode('weight')" style="padding:5px 12px;font-size:11px;border:1px solid var(--g3);background:#fff;color:var(--g6);border-radius:4px;cursor:pointer">중량</button>
+        <button id="pkTab_detail" onclick="setPackingChartMode('detail')" style="padding:5px 12px;font-size:11px;border:1px solid #1a56db;background:#1a56db;color:#fff;border-radius:4px;cursor:pointer">상세</button>
+      </div>
       <div id="mo_packing_legend" style="margin-bottom:6px;line-height:2"></div>
       <div style="position:relative;height:220px"><canvas id="mo_bar_chart"></canvas></div>
     </div>
@@ -883,7 +888,7 @@
 <script src="js/packing.js?v=20"></script>
 <script src="js/csv_upload.js?v=2"></script>
 <script src="js/daily_report.js?v=20"></script>
-<script src="js/analysis.js?v=40"></script>
+<script src="js/analysis.js?v=41"></script>
 <script src="js/dashboard.js?v=2"></script>
 <script src="js/trace.js?v=3"></script>
 <script src="js/outerpacking.js?v=3"></script>
