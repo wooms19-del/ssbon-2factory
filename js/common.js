@@ -154,10 +154,11 @@ function makeDocId(colName) {
   // thawing은 종료일(다음날) 기준으로 ID 생성
   const dateStr = (colName === 'thawing') ? addDays(todayStr, 1) : todayStr;
   const d = dateStr.replace(/-/g,'');
-  // 시각은 실제 시작 시각(now) 그대로
+  // 시각은 실제 시작 시각(now) 그대로 + 밀리초까지 (docId 충돌 방지)
   const t = String(now.getHours()).padStart(2,'0') +
     String(now.getMinutes()).padStart(2,'0') +
-    String(now.getSeconds()).padStart(2,'0');
+    String(now.getSeconds()).padStart(2,'0') +
+    String(now.getMilliseconds()).padStart(3,'0');
   return `${prefix[colName]||colName}_${d}_${t}`;
 }
 
