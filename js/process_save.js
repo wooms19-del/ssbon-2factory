@@ -401,19 +401,23 @@ function renderPL(type){
     let editForm = '';
     let editToggle = '';
     if(type==='packing') {
+      // noMeat 제품 (메추리알 등): 와건/카트 입력 칸 + 와건/카트 매트릭스 숨김
+      const _prod = (L.products||[]).find(x => x.name === r.product);
+      const _isNoMeat = !!(_prod && _prod.noMeat);
+
       // 신규 매트릭스 영역
       let pkMatrix = '<div style="margin:8px 0;padding:8px;background:#fff;border-radius:6px;border:1px dashed var(--g3)">';
-      // 와건별 kg
+      // 와건별 kg (noMeat가 아닐 때만)
       const wd = r.wagonDist || {};
-      if(Object.keys(wd).length){
+      if(!_isNoMeat && Object.keys(wd).length){
         pkMatrix += '<div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">와건별 사용 kg</div>';
         Object.keys(wd).forEach(w => {
           pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#72243E">와건 ${w}</span><input class="fc pkEd-wd" data-w="${w}" data-kind="wagon" type="number" step="0.01" value="${wd[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
         });
       }
-      // 카트별 kg
+      // 카트별 kg (noMeat가 아닐 때만)
       const cd = r.cartDist || {};
-      if(Object.keys(cd).length){
+      if(!_isNoMeat && Object.keys(cd).length){
         pkMatrix += '<div style="font-size:11px;font-weight:600;color:#1a56db;margin:6px 0 4px">카트별 사용 kg</div>';
         Object.keys(cd).forEach(c => {
           pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#1a56db">카트 ${c}</span><input class="fc pkEd-wd" data-w="${c}" data-kind="cart" type="number" step="0.01" value="${cd[c]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
@@ -441,8 +445,8 @@ function renderPL(type){
     <div id="pkEdit_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
         <div><label style="font-size:11px;color:var(--g5);display:block">설비번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_machine_${r.id}" value="${r.machine||''}"></div>
-        <div><label style="font-size:11px;color:#72243E;display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}"></div>
-        <div><label style="font-size:11px;color:#1a56db;display:block">카트번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_cart_${r.id}" value="${r.cart||''}"></div>
+        ${_isNoMeat ? '' : `<div><label style="font-size:11px;color:#72243E;display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}"></div>`}
+        ${_isNoMeat ? '' : `<div><label style="font-size:11px;color:#1a56db;display:block">카트번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_cart_${r.id}" value="${r.cart||''}"></div>`}
         <div><label style="font-size:11px;color:var(--g5);display:block">생산 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_ea_${r.id}" value="${r.ea||0}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">불량 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_defect_${r.id}" value="${r.defect||0}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">시작</label><input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_start_${r.id}" value="${r.start||''}"></div>
@@ -478,8 +482,11 @@ function savePkEdit(id, fbId) {
   const rec = L.packing.find(r=>r.id===id);
   if(!rec){ toast('기록 없음','d'); return; }
   const machine = document.getElementById('pkEd_machine_'+id)?.value||'';
-  const wagon   = document.getElementById('pkEd_wagon_'+id)?.value||'';
-  const cart    = document.getElementById('pkEd_cart_'+id)?.value||'';
+  // noMeat 제품은 와건/카트 input이 없으므로 기존 값 유지
+  const wagonEl = document.getElementById('pkEd_wagon_'+id);
+  const wagon   = wagonEl ? wagonEl.value : (rec.wagon || '');
+  const cartEl  = document.getElementById('pkEd_cart_'+id);
+  const cart    = cartEl ? cartEl.value : (rec.cart || '');
   const ea      = parseFloat(document.getElementById('pkEd_ea_'+id)?.value)||0;
   const defect  = parseFloat(document.getElementById('pkEd_defect_'+id)?.value)||0;
   const start   = document.getElementById('pkEd_start_'+id)?.value||'';
