@@ -188,10 +188,15 @@ async function renderMonthly() {
     const ckD   = (ckMonth||[]).filter(r=>String(r.date||'').slice(0,10)===d);
     const ppD   = (ppMonth||[]).filter(r=>String(r.date||'').slice(0,10)===d);
 
-    // 포장 와건
+    // 포장 와건 / 카트
     const tPkW = new Set(tPkD.flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean)));
-    // 파쇄: 포장 와건으로 wagonOut → wagonIn 추출
-    const tSh  = shD.filter(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).some(w=>tPkW.has(w)));
+    const tPkC = new Set(tPkD.flatMap(r=>(r.cart ||'').split(',').map(w=>w.trim()).filter(Boolean)));
+    // 파쇄: 포장 와건으로 wagonOut 매칭 OR 포장 카트로 cartOut 매칭 → wagonIn 추출
+    const tSh  = shD.filter(r=>{
+      const woMatch = (r.wagonOut||'').split(',').map(w=>w.trim()).some(w=>tPkW.has(w));
+      const coMatch = (r.cartOut ||'').split(',').map(w=>w.trim()).some(w=>tPkC.has(w));
+      return woMatch || coMatch;
+    });
     const tShW = new Set(tSh.flatMap(r=>(r.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean)));
     // 자숙: 파쇄 wagonIn → wagonOut → cage 추출
     const tCk  = ckD.filter(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).some(w=>tShW.has(w)));
@@ -1191,12 +1196,17 @@ function renderDailyFromLocal_(d){
   const ckAll=L.cooking.filter(r=>String(r.date||'').slice(0,10)===d);
   const ppAll=L.preprocess.filter(r=>String(r.date||'').slice(0,10)===d);
 
-  // ① 내포장 중 테스트 레코드 와건 추출
+  // ① 내포장 중 테스트 레코드 와건 / 카트 추출
   const _testPk=pkAll.filter(r=>r.testRun||r.isTest);
   const _testPkW=new Set(_testPk.flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean)));
+  const _testPkC=new Set(_testPk.flatMap(r=>(r.cart ||'').split(',').map(w=>w.trim()).filter(Boolean)));
 
-  // ② 파쇄: 테스트 와건으로 나온(wagonOut) 레코드 → wagonIn 추출
-  const _testSh=shAll.filter(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).some(w=>_testPkW.has(w)));
+  // ② 파쇄: 테스트 와건/카트로 나온(wagonOut/cartOut) 레코드 → wagonIn 추출
+  const _testSh=shAll.filter(r=>{
+    const woMatch = (r.wagonOut||'').split(',').map(w=>w.trim()).some(w=>_testPkW.has(w));
+    const coMatch = (r.cartOut ||'').split(',').map(w=>w.trim()).some(w=>_testPkC.has(w));
+    return woMatch || coMatch;
+  });
   const _testShW=new Set(_testSh.flatMap(r=>(r.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean)));
 
   // ③ 자숙: 테스트 파쇄 wagonIn으로 나온(wagonOut) 레코드 → cage 추출
@@ -1334,12 +1344,24 @@ function renderDailyFromLocal_(d){
     return map;
   }
 
-  // 포장 와건→파쇄→자숙 체인으로 원육타입 추적
+  // 포장 와건/카트→파쇄→자숙 체인으로 원육타입 추적
   function getPkType(pkRec) {
     const wagons = (pkRec.wagon||'').split(',').map(w=>w.trim()).filter(Boolean);
+    const carts  = (pkRec.cart ||'').split(',').map(w=>w.trim()).filter(Boolean);
     const types = new Set();
+    // 와건 경로
     wagons.forEach(wNum => {
       const shRec = sh.find(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).includes(wNum));
+      if(shRec) {
+        (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wIn => {
+          const ckRec = ck.find(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
+          if(ckRec && ckRec.type) ckRec.type.split(',').forEach(t=>types.add(t.trim()));
+        });
+      }
+    });
+    // 카트 경로 (FC 3kg 라인: 파쇄→카트로 배출된 후 포장)
+    carts.forEach(cNum => {
+      const shRec = sh.find(r=>(r.cartOut||'').split(',').map(w=>w.trim()).includes(cNum));
       if(shRec) {
         (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wIn => {
           const ckRec = ck.find(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
