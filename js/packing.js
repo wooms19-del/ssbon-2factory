@@ -102,7 +102,7 @@ function addPkMachRow(){
           <option value="">선택</option><option>1호기</option><option>2호기</option><option>3호기</option><option>4호기</option>
         </select>
       </div>
-      <div class="fgrp cs2">
+      <div class="fgrp cs2 pk-wagon-section">
         <label class="fl">투입 와건/카트 <span style="font-size:11px;color:var(--g4)">(버튼 토글 → 카드별 kg 분배)</span></label>
         <div id="pkWagonBtns_${idx}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
           ${shWagons.map(w=>{
@@ -144,7 +144,7 @@ function addPkMachRow(){
           </div>
         </div>
       </div>
-      <div class="fgrp cs2">
+      <div class="fgrp cs2 pk-type-section">
         <label class="fl">원육 타입 <span style="font-size:11px;color:var(--g4)">(와건 선택 시 자동, 여러 종류면 자동 분리)</span></label>
         <!-- 단일 셀렉트 (호환용) -->
         <select class="fc pk-row-type" data-idx="${idx}" style="display:none">
@@ -595,6 +595,20 @@ function onPkRowProd(idx){
   if(!si) return;
   if(p){ si.textContent=`원료육 ${p.kgea}kg/EA · Capa ${p.capa}EA · 소스 ${p.sauce||'-'}`; si.style.color='var(--p)'; }
   else { si.textContent='제품 선택 후 원료육 자동 계산'; si.style.color='var(--g5)'; }
+
+  // noMeat 제품(메추리알 등): 와건/카트 영역 + 원육 타입 영역 숨김
+  const wagonSection = row.querySelector('.pk-wagon-section');
+  const typeSection  = row.querySelector('.pk-type-section');
+  const isNoMeat = !!(p && p.noMeat);
+  if(wagonSection) wagonSection.style.display = isNoMeat ? 'none' : '';
+  if(typeSection)  typeSection.style.display  = isNoMeat ? 'none' : '';
+  // 숨길 때 hidden 값 비우기 (저장 시 wagon 비어있게)
+  if(isNoMeat){
+    const hidden = row.querySelector('.pk-row-wagon');
+    if(hidden) hidden.value = '';
+    const distC = document.getElementById('pkWagonDist_'+idx);
+    if(distC) distC.querySelectorAll('.pk-wd-row').forEach(r=>r.remove());
+  }
 }
 
 // 지금 시간으로 자동 입력
