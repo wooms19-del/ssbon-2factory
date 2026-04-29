@@ -1346,6 +1346,10 @@ function renderDailyFromLocal_(d){
 
   // 포장 와건/카트→파쇄→자숙 체인으로 원육타입 추적
   function getPkType(pkRec) {
+    // noMeat 제품 (메추리알 등): 원육 추적 안 함 — 원육 칸 빈 값 처리
+    const prod = (L.products||[]).find(x => x.name === pkRec.product);
+    if(prod && prod.noMeat) return '';
+
     const wagons = (pkRec.wagon||'').split(',').map(w=>w.trim()).filter(Boolean);
     const carts  = (pkRec.cart ||'').split(',').map(w=>w.trim()).filter(Boolean);
     const types = new Set();
@@ -1488,11 +1492,17 @@ function renderDailyFromLocal_(d){
     });
   });
   Object.entries(pkMap).forEach(([key, v]) => {
-    const pkInKg = pkInKgMap[key] || r2(shKg / Object.keys(pkMap).length);
-    const pkOrig = pkOrigMap[key] || r2(rmKg / Object.keys(pkMap).length);
+    // noMeat 제품 판별: 첫 레코드의 제품으로 확인
+    const firstRec = (v._recs||[])[0] || {};
+    const prod = (L.products||[]).find(x => x.name === firstRec.product);
+    const isNoMeat = !!(prod && prod.noMeat);
+
+    // noMeat 제품: 원육 투입/배분 0 (메추리알 등은 원육 흐름 밖)
+    const pkInKg = isNoMeat ? 0 : (pkInKgMap[key] || r2(shKg / Object.keys(pkMap).length));
+    const pkOrig = isNoMeat ? 0 : (pkOrigMap[key] || r2(rmKg / Object.keys(pkMap).length));
     const label = v.type ? v.type+' · '+v.product : v.product;
     const pkWorkers = (v._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0);
-    procRows.push({name:'포장', type:label, origKg:pkOrig||rmKg, in:pkInKg, out:r2(v.kg), waste:0, ea:v.ea||0, mh:r2(v.mh), h:calcActualHours(v._recs||[])||r2(v.h), workers:pkWorkers});
+    procRows.push({name:'포장', type:label, origKg: isNoMeat ? 0 : (pkOrig||rmKg), in:pkInKg, out:r2(v.kg), waste:0, ea:v.ea||0, mh:r2(v.mh), h:calcActualHours(v._recs||[])||r2(v.h), workers:pkWorkers, noMeat:isNoMeat});
   });
 
   // 원육수율 색상 기준 (원육 투입 대비 각 공정 산출)
@@ -1530,10 +1540,10 @@ function renderDailyFromLocal_(d){
       <td style="text-align:left;font-weight:600">${showName?p.name:''}</td>
       <td style="text-align:center;color:var(--g6);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.type||'-'}">${p.type||'-'}</td>
       <td style="text-align:center">${p.in>0?p.in.toFixed(2):'-'}${p.boxes?'<br><span style="font-size:11px;color:var(--g5)">'+p.boxes+'박스</span>':''}</td>
-      <td style="text-align:center;font-weight:600">${p.out.toFixed(2)}</td>
+      <td style="text-align:center;font-weight:600">${p.noMeat?'-':p.out.toFixed(2)}</td>
       <td style="text-align:center;color:var(--d);font-size:12px">${p.waste>0?p.waste.toFixed(2)+'kg':'-'}</td>
-      <td style="text-align:center;font-weight:600">${oYld!==null?oYld.toFixed(1)+'%':'-'}</td>
-      <td style="text-align:center;font-weight:600">${pYld!==null?pYld.toFixed(1)+'%':'-'}</td>
+      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(oYld!==null?oYld.toFixed(1)+'%':'-')}</td>
+      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(pYld!==null?pYld.toFixed(1)+'%':'-')}</td>
       <td style="text-align:center">${p.h.toFixed(1)}h</td>
       <td style="text-align:center">${p.workers||'-'}명</td>
       <td style="text-align:center;font-size:12px;color:var(--g6)">${productivity}</td>
