@@ -64,43 +64,77 @@ function renderShWagonList() {
 
 function renderPkWagonList() {
   const today = tod();
-  const shList = L.shredding.filter(r => String(r.date||'').slice(0,10)===today && r.wagonOut && r.end);
-  const usedInPk = new Set([
+  const shList = L.shredding.filter(r => String(r.date||'').slice(0,10)===today && (r.wagonOut || r.cartOut) && r.end);
+  // 와건 사용 추적
+  const usedWagonInPk = new Set([
     ...L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean)),
     ...(L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
   ]);
-  const inPkDone = new Set(
+  const inPkWagonDone = new Set(
     L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
   );
-  const inPkPending = new Set(
+  const inPkWagonPending = new Set(
     (L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean))
+  );
+  // 카트 사용 추적
+  const usedCartInPk = new Set([
+    ...L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.cart||'').split(',').map(w=>w.trim()).filter(Boolean)),
+    ...(L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.cart||'').split(',').map(w=>w.trim()).filter(Boolean))
+  ]);
+  const inPkCartDone = new Set(
+    L.packing.filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.cart||'').split(',').map(w=>w.trim()).filter(Boolean))
+  );
+  const inPkCartPending = new Set(
+    (L.packing_pending||[]).filter(r=>String(r.date||'').slice(0,10)===today).flatMap(r=>(r.cart||'').split(',').map(w=>w.trim()).filter(Boolean))
   );
   const el = document.getElementById('pk_wagonList');
   if(!el) return;
-  const wagons = [];
+  const items = []; // {num, kind, kg, used}
   shList.forEach(sh => {
-    (sh.wagonOut||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wNum => {
-      if(!wagons.find(w=>w.num===wNum))
-        wagons.push({ num: wNum, kg: sh.kg||0, used: usedInPk.has(wNum) });
-    });
+    // 와건
+    if(sh.wagonOutDist){
+      Object.entries(sh.wagonOutDist).forEach(([wNum, kg])=>{
+        if(!items.find(x=>x.num===wNum && x.kind==='wagon'))
+          items.push({ num: wNum, kind:'wagon', kg: parseFloat(kg)||0, used: usedWagonInPk.has(wNum) });
+      });
+    } else {
+      (sh.wagonOut||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wNum => {
+        if(!items.find(x=>x.num===wNum && x.kind==='wagon'))
+          items.push({ num: wNum, kind:'wagon', kg: sh.kg||0, used: usedWagonInPk.has(wNum) });
+      });
+    }
+    // 카트
+    if(sh.cartOutDist){
+      Object.entries(sh.cartOutDist).forEach(([cNum, kg])=>{
+        if(!items.find(x=>x.num===cNum && x.kind==='cart'))
+          items.push({ num: cNum, kind:'cart', kg: parseFloat(kg)||0, used: usedCartInPk.has(cNum) });
+      });
+    }
   });
-  if(!wagons.length) { el.innerHTML='<div class="emp">파쇄 완료된 와건 없음</div>'; return; }
+  if(!items.length) { el.innerHTML='<div class="emp">파쇄 완료된 와건/카트 없음</div>'; return; }
 
-  const getBadge = (wNum) => {
+  const getBadge = (num, kind) => {
     let badge = '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#e0f2fe;color:#0369a1;font-weight:600">파쇄완료</span>';
-    if(inPkDone.has(wNum)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--sl);color:var(--s);font-weight:600">포장완료</span>';
-    else if(inPkPending.has(wNum)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--pl);color:var(--p);font-weight:600">포장중</span>';
+    const done = kind === 'cart' ? inPkCartDone : inPkWagonDone;
+    const pending = kind === 'cart' ? inPkCartPending : inPkWagonPending;
+    if(done.has(num)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--sl);color:var(--s);font-weight:600">포장완료</span>';
+    else if(pending.has(num)) badge += ' <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--pl);color:var(--p);font-weight:600">포장중</span>';
     return badge;
   };
 
-  el.innerHTML = wagons.map(w => `
+  el.innerHTML = items.map(w => {
+    const kindLabel = w.kind === 'cart'
+      ? '<span style="font-size:11px;font-weight:600;color:#1a56db;background:#e0f2fe;padding:2px 6px;border-radius:4px;margin-right:6px">카트</span>'
+      : '<span style="font-size:11px;font-weight:600;color:#72243E;background:#fde7ef;padding:2px 6px;border-radius:4px;margin-right:6px">와건</span>';
+    return `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;${w.used?'opacity:0.8':''}">
-      <span style="font-size:14px;font-weight:700">${w.num}번 와건</span>
+      <span style="font-size:14px;font-weight:700">${kindLabel}${w.num}번</span>
       <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-size:13px;color:var(--g5)">${w.kg}kg</span>
-        ${getBadge(w.num)}
+        <span style="font-size:13px;color:var(--g5)">${(parseFloat(w.kg)||0).toFixed(2)}kg</span>
+        ${getBadge(w.num, w.kind)}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function onShWagonChange() {
   const checked = [...document.querySelectorAll('.sh-wagon-cb:checked')];
@@ -183,10 +217,13 @@ function _shRowHtml(idx, data){
           <input class="fc sh-workers" type="number" placeholder="0" value="${data.workers||''}">
         </div>
       </div>
-      <div style="font-size:11px;color:var(--g5);margin-bottom:4px">배출 와건 (와건번호 + kg)</div>
+      <div style="font-size:11px;color:var(--g5);margin-bottom:4px">배출 (와건/카트 + kg)</div>
       <div class="sh-out-list" style="display:flex;flex-direction:column;gap:4px"></div>
-      <div style="display:flex;gap:4px;margin-top:6px;align-items:center;justify-content:space-between;font-size:11px">
-        <button onclick="shAddOutWagon(this)" style="padding:4px 8px;font-size:11px;border:1px dashed #72243E;background:#fff;color:#72243E;border-radius:4px;cursor:pointer">+ 배출 와건 추가</button>
+      <div style="display:flex;gap:4px;margin-top:6px;align-items:center;justify-content:space-between;font-size:11px;flex-wrap:wrap">
+        <div style="display:flex;gap:4px">
+          <button onclick="shAddOutWagon(this,'wagon')" style="padding:4px 8px;font-size:11px;border:1px dashed #72243E;background:#fff;color:#72243E;border-radius:4px;cursor:pointer">+ 배출 와건</button>
+          <button onclick="shAddOutWagon(this,'cart')" style="padding:4px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 배출 카트</button>
+        </div>
         <span class="sh-out-sum" style="color:var(--g5);font-weight:500">배출 0kg</span>
       </div>
     </div>`;
@@ -213,15 +250,22 @@ function shAutoFillIn(inputEl){
   if(kg) inKgInp.value = kg.toFixed(2);
 }
 
-function shAddOutWagon(btnInRow){
+function shAddOutWagon(btnInRow, kind){
+  kind = kind === 'cart' ? 'cart' : 'wagon';
   const row = btnInRow.closest('.sh-row');
   if(!row) return;
   const list = row.querySelector('.sh-out-list');
   const oRow = document.createElement('div');
   oRow.className = 'sh-out-row';
-  oRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  oRow.dataset.kind = kind;
+  oRow.style.cssText = 'display:grid;grid-template-columns:60px 1fr 1fr 28px;gap:4px;align-items:center';
+  const label = kind === 'cart'
+    ? '<span style="font-size:11px;font-weight:600;color:#1a56db;background:#e0f2fe;padding:3px 6px;border-radius:4px;text-align:center">카트</span>'
+    : '<span style="font-size:11px;font-weight:600;color:#72243E;background:#fde7ef;padding:3px 6px;border-radius:4px;text-align:center">와건</span>';
+  const placeholder = kind === 'cart' ? '배출 카트번호' : '배출 와건번호';
   oRow.innerHTML = `
-    <input class="fc sh-out-num" type="text" placeholder="배출 와건번호" oninput="shOutSumChange(this)" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
+    ${label}
+    <input class="fc sh-out-num" type="text" placeholder="${placeholder}" oninput="shOutSumChange(this)" style="padding:5px 7px;font-size:12px;box-sizing:border-box">
     <div style="display:flex;align-items:center;gap:2px">
       <input class="fc sh-out-kg" type="number" step="0.01" placeholder="0" oninput="shOutSumChange(this)" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
       <span style="font-size:11px;color:var(--g5)">kg</span>
@@ -250,12 +294,12 @@ function shAddRow(data){
   const wrap = document.createElement('div');
   wrap.innerHTML = _shRowHtml(idx, data).trim();
   c.appendChild(wrap.firstChild);
-  // 첫 배출 와건 행 자동 추가 — 'shAddOutWagon' 버튼만 정확히 찾기
+  // 첫 배출 와건 행 자동 추가 — '+ 배출 와건' 버튼만 정확히 찾기
   const newRow = c.lastElementChild;
   if(newRow && typeof shAddOutWagon === 'function'){
     const addBtn = [...newRow.querySelectorAll('button')]
-      .find(b => /onclick/.test(b.outerHTML) && /shAddOutWagon/.test(b.getAttribute('onclick')||''));
-    if(addBtn) shAddOutWagon(addBtn);
+      .find(b => /shAddOutWagon\(this,'wagon'\)/.test(b.getAttribute('onclick')||''));
+    if(addBtn) shAddOutWagon(addBtn, 'wagon');
   }
 }
 
@@ -276,20 +320,29 @@ async function saveShAll(){
 
   const recs = [];
   rows.forEach(row => {
-    // 배출 와건 분배 수집
+    // 배출 분배 수집 (와건 / 카트 분리)
     const wagonOutDist = {};
+    const cartOutDist  = {};
     const wagonOutList = [];
+    const cartOutList  = [];
     row.querySelectorAll('.sh-out-row').forEach(o => {
+      const kind = o.dataset.kind === 'cart' ? 'cart' : 'wagon';
       const wn = (o.querySelector('.sh-out-num')||{}).value || '';
       const kg = parseFloat((o.querySelector('.sh-out-kg')||{}).value) || 0;
       if(wn && kg){
         const key = String(wn).trim();
-        wagonOutDist[key] = (wagonOutDist[key]||0) + kg;
-        if(!wagonOutList.includes(key)) wagonOutList.push(key);
+        if(kind === 'cart'){
+          cartOutDist[key] = (cartOutDist[key]||0) + kg;
+          if(!cartOutList.includes(key)) cartOutList.push(key);
+        } else {
+          wagonOutDist[key] = (wagonOutDist[key]||0) + kg;
+          if(!wagonOutList.includes(key)) wagonOutList.push(key);
+        }
       }
     });
     let totalOutKg = 0;
     Object.values(wagonOutDist).forEach(v => totalOutKg += v);
+    Object.values(cartOutDist ).forEach(v => totalOutKg += v);
 
     const d = {
       id: gid(),
@@ -297,9 +350,11 @@ async function saveShAll(){
       wagonIn: row.querySelector('.sh-wIn').value.trim(),
       wagonOut: wagonOutList.join(','),
       wagonOutDist: wagonOutDist,
+      cartOut: cartOutList.join(','),
+      cartOutDist: cartOutDist,
       start: row.querySelector('.sh-start').value.trim(),
       end: row.querySelector('.sh-end').value.trim(),
-      kg: totalOutKg,                                             // 배출 (다음 공정으로)
+      kg: totalOutKg,                                             // 배출 (다음 공정으로) - 와건+카트 합산
       kgIn: parseFloat((row.querySelector('.sh-in-kg')||{}).value) || 0, // 투입 (자숙에서 빠짐)
       waste: parseFloat(row.querySelector('.sh-waste').value) || 0,
       workers: parseFloat(row.querySelector('.sh-workers').value) || 0
