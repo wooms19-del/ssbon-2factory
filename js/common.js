@@ -43,6 +43,14 @@ function loadL(){
     ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce',
      'packing_pending','cooking_pending'].forEach(k => { if(!Array.isArray(raw[k])) raw[k]=base[k]||[]; });
     if(!raw.products || !raw.products.length) raw.products = base.products;
+    else {
+      // 베이스에 추가된 신제품이 있으면 자동 병합 (사용자 localStorage에 누락된 것)
+      base.products.forEach(bp => {
+        if(!raw.products.find(p => p.name === bp.name)){
+          raw.products.push(bp);
+        }
+      });
+    }
     if(!raw.sauces)   raw.sauces   = base.sauces;
     if(!raw.submats)  raw.submats  = base.submats;
     if(!raw.gtinMap)  raw.gtinMap  = base.gtinMap;
@@ -66,6 +74,7 @@ function nL(){
       {name:'시그니처 장조림 130g 마트용', kgea:0.025, capa:800, sauce:'FC 장조림 소스'},
       {name:'FC 장조림 3KG',          kgea:1.3,   capa:500,  sauce:'FC 장조림 소스'},
       {name:'트레이더스 장조림 460g', kgea:0.147, capa:2100, sauce:'FC 장조림 소스'},
+      {name:'메추리알 장조림 180g',   kgea:0,     capa:2000, sauce:'FP 장조림 소스', noMeat:true},
     ],
     sauces:[{name:'FC 장조림 소스', memo:'기본 배합'},{name:'FP 장조림 소스', memo:'기본 배합'}],
     submats:['메추리알','버터'],
