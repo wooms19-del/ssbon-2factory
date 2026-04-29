@@ -702,14 +702,19 @@ function renderPkPending(){
   }
   card.style.display = '';
 
-  el.innerHTML = pending.map(r => `
+  el.innerHTML = pending.map(r => {
+    const parts = [];
+    if(r.wagon) parts.push(`와건 ${r.wagon}`);
+    if(r.cart)  parts.push(`카트 ${r.cart}`);
+    const wcText = parts.length ? parts.join(' · ') : '와건 -';
+    return `
     <div id="pkPend_${r.id}" style="border:1px solid var(--g2);border-radius:8px;margin-bottom:10px;overflow:hidden">
       <!-- 헤더 -->
       <div style="background:var(--pl);padding:12px;display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-size:14px;font-weight:700;color:var(--g8)">${r.machine||'설비미정'} · ${r.product}</div>
           <div style="font-size:12px;color:var(--g5);margin-top:3px">
-            와건 ${r.wagon||'-'} · 시작 ${r.start} · ${r.workers}명
+            ${wcText} · 시작 ${r.start} · ${r.workers}명
             ${r.sauceTank ? ' · 소스 '+r.sauceTank : ''}
           </div>
         </div>
@@ -754,7 +759,8 @@ function renderPkPending(){
           <button class="btn bo bsm" onclick="togglePkEndForm('${r.id}')">취소</button>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // 종료 폼 - 소스 탱크 다중 입력
