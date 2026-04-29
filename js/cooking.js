@@ -49,7 +49,7 @@ function renderCkCageList() {
     (pending.length ? '<div style="font-size:12px;font-weight:600;color:var(--g6);margin-bottom:8px">케이지 선택 → 자동 입력</div>' : '') +
     pending.map(c => {
       const outKg = cageOutKg[c.num] || 0;
-      const kgText = outKg ? `<span style="font-size:12px;color:#16a34a;font-weight:600;margin-right:8px">${outKg.toFixed(1)}kg</span>` : '';
+      const kgText = outKg ? `<span style="font-size:12px;color:#16a34a;font-weight:600;margin-right:8px">${outKg.toFixed(2)}kg</span>` : '';
       return `
       <label style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;cursor:pointer">
         <input type="checkbox" class="ck-cage-cb" data-cage="${c.num}" data-type="${c.type}" data-outkg="${outKg}"
