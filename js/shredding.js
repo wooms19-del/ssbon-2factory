@@ -94,20 +94,23 @@ function renderPkWagonList() {
     // 와건
     if(sh.wagonOutDist){
       Object.entries(sh.wagonOutDist).forEach(([wNum, kg])=>{
-        if(!items.find(x=>x.num===wNum && x.kind==='wagon'))
-          items.push({ num: wNum, kind:'wagon', kg: parseFloat(kg)||0, used: usedWagonInPk.has(wNum) });
+        const exist = items.find(x=>x.num===wNum && x.kind==='wagon');
+        if(exist) exist.kg += parseFloat(kg)||0;
+        else items.push({ num: wNum, kind:'wagon', kg: parseFloat(kg)||0, used: usedWagonInPk.has(wNum) });
       });
     } else {
       (sh.wagonOut||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wNum => {
-        if(!items.find(x=>x.num===wNum && x.kind==='wagon'))
-          items.push({ num: wNum, kind:'wagon', kg: sh.kg||0, used: usedWagonInPk.has(wNum) });
+        const exist = items.find(x=>x.num===wNum && x.kind==='wagon');
+        if(exist) exist.kg += parseFloat(sh.kg)||0;
+        else items.push({ num: wNum, kind:'wagon', kg: parseFloat(sh.kg)||0, used: usedWagonInPk.has(wNum) });
       });
     }
     // 카트
     if(sh.cartOutDist){
       Object.entries(sh.cartOutDist).forEach(([cNum, kg])=>{
-        if(!items.find(x=>x.num===cNum && x.kind==='cart'))
-          items.push({ num: cNum, kind:'cart', kg: parseFloat(kg)||0, used: usedCartInPk.has(cNum) });
+        const exist = items.find(x=>x.num===cNum && x.kind==='cart');
+        if(exist) exist.kg += parseFloat(kg)||0;
+        else items.push({ num: cNum, kind:'cart', kg: parseFloat(kg)||0, used: usedCartInPk.has(cNum) });
       });
     }
   });
