@@ -406,9 +406,17 @@ function renderPL(type){
       // 와건별 kg
       const wd = r.wagonDist || {};
       if(Object.keys(wd).length){
-        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#1a56db;margin-bottom:4px">와건별 사용 kg</div>';
+        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">와건별 사용 kg</div>';
         Object.keys(wd).forEach(w => {
-          pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${w}번</span><input class="fc pkEd-wd" data-w="${w}" type="number" step="0.01" value="${wd[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+          pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#72243E">와건 ${w}</span><input class="fc pkEd-wd" data-w="${w}" data-kind="wagon" type="number" step="0.01" value="${wd[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+        });
+      }
+      // 카트별 kg
+      const cd = r.cartDist || {};
+      if(Object.keys(cd).length){
+        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#1a56db;margin:6px 0 4px">카트별 사용 kg</div>';
+        Object.keys(cd).forEach(c => {
+          pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#1a56db">카트 ${c}</span><input class="fc pkEd-wd" data-w="${c}" data-kind="cart" type="number" step="0.01" value="${cd[c]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
         });
       }
       // 소스 탱크
@@ -433,7 +441,8 @@ function renderPL(type){
     <div id="pkEdit_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
         <div><label style="font-size:11px;color:var(--g5);display:block">설비번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_machine_${r.id}" value="${r.machine||''}"></div>
-        <div><label style="font-size:11px;color:var(--g5);display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}"></div>
+        <div><label style="font-size:11px;color:#72243E;display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}"></div>
+        <div><label style="font-size:11px;color:#1a56db;display:block">카트번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_cart_${r.id}" value="${r.cart||''}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">생산 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_ea_${r.id}" value="${r.ea||0}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">불량 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_defect_${r.id}" value="${r.defect||0}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">시작</label><input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_start_${r.id}" value="${r.start||''}"></div>
@@ -470,6 +479,7 @@ function savePkEdit(id, fbId) {
   if(!rec){ toast('기록 없음','d'); return; }
   const machine = document.getElementById('pkEd_machine_'+id)?.value||'';
   const wagon   = document.getElementById('pkEd_wagon_'+id)?.value||'';
+  const cart    = document.getElementById('pkEd_cart_'+id)?.value||'';
   const ea      = parseFloat(document.getElementById('pkEd_ea_'+id)?.value)||0;
   const defect  = parseFloat(document.getElementById('pkEd_defect_'+id)?.value)||0;
   const start   = document.getElementById('pkEd_start_'+id)?.value||'';
@@ -480,13 +490,18 @@ function savePkEdit(id, fbId) {
   const editRoot = document.getElementById('pkEdit_'+id);
   const matrixUpdates = {};
   if(editRoot){
-    // 와건별 kg
+    // 와건/카트별 kg (data-kind로 분리)
     const wd = {};
+    const cdMap = {};
     editRoot.querySelectorAll('.pkEd-wd').forEach(el => {
       const v = parseFloat(el.value) || 0;
-      if(v) wd[el.dataset.w] = v;
+      if(v){
+        if(el.dataset.kind === 'cart') cdMap[el.dataset.w] = v;
+        else wd[el.dataset.w] = v;
+      }
     });
-    if(Object.keys(wd).length) matrixUpdates.wagonDist = wd;
+    if(Object.keys(wd).length)    matrixUpdates.wagonDist = wd;
+    if(Object.keys(cdMap).length) matrixUpdates.cartDist  = cdMap;
     // 소스 탱크
     const st = [];
     editRoot.querySelectorAll('.pkEd-st').forEach(el => {
@@ -509,11 +524,11 @@ function savePkEdit(id, fbId) {
     if(Object.keys(tk).length) matrixUpdates.typeKgs = tk;
   }
 
-  Object.assign(rec, {machine, wagon, ea, defect, start, end:end_, workers}, matrixUpdates);
+  Object.assign(rec, {machine, wagon, cart, ea, defect, start, end:end_, workers}, matrixUpdates);
   saveL();
   renderPL('packing');
   renderDailyFromLocal_(tod());
-  const updates = Object.assign({machine, wagon, ea, defect, start, end:end_, workers}, matrixUpdates);
+  const updates = Object.assign({machine, wagon, cart, ea, defect, start, end:end_, workers}, matrixUpdates);
   if(fbId) {
     fbUpdate('packing', fbId, updates);
   } else {
