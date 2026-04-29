@@ -540,7 +540,7 @@ async function onPkStartBtn(){
     const machine = row.querySelector('.pk-row-mach').value;
     const wagonHidden = row.querySelector('.pk-row-wagon');
     const wagonDirect = row.querySelector('.pk-row-wagon-input');
-    const wagon = (wagonHidden ? wagonHidden.value : (wagonDirect ? wagonDirect.value : '')).trim();
+    let wagon = (wagonHidden ? wagonHidden.value : (wagonDirect ? wagonDirect.value : '')).trim();
     const workers = parseFloat(row.querySelector('.pk-row-workers').value)||0;
     const type = row.querySelector('.pk-row-type')?.value||'';
     const sauceTank = row.querySelector('.pk-row-stank').value;
@@ -550,6 +550,11 @@ async function onPkStartBtn(){
     const wagonDist = (typeof getPkWagonDist==='function') ? getPkWagonDist(idxAttr) : null;
     const sauceTanks = (typeof getPkSauceTanks==='function') ? getPkSauceTanks(idxAttr) : null;
     const typeKgs = (typeof getPkTypeKgs==='function') ? getPkTypeKgs(idxAttr) : null;
+
+    // wagon 비어있으면 wagonDist 키로 자동 채움 (토글 버그 fallback)
+    if(!wagon && wagonDist){
+      wagon = Object.keys(wagonDist).join(',');
+    }
 
     const rec = {
       id: gid(), date: DDATE||tod(),
