@@ -717,10 +717,18 @@ function renderPkPending(){
   card.style.display = '';
 
   el.innerHTML = pending.map(r => {
-    const parts = [];
-    if(r.wagon) parts.push(`와건 ${r.wagon}`);
-    if(r.cart)  parts.push(`카트 ${r.cart}`);
-    const wcText = parts.length ? parts.join(' · ') : '와건 -';
+    const prod = (L.products||[]).find(x => x.name === r.product);
+    const isNoMeat = !!(prod && prod.noMeat);
+    let wcText;
+    if(isNoMeat){
+      wcText = ''; // 메추리알 등 noMeat 제품: 와건/카트 표시 안 함
+    } else {
+      const parts = [];
+      if(r.wagon) parts.push(`와건 ${r.wagon}`);
+      if(r.cart)  parts.push(`카트 ${r.cart}`);
+      wcText = parts.length ? parts.join(' · ') : '와건 -';
+    }
+    const subText = `${wcText ? wcText+' · ' : ''}시작 ${r.start} · ${r.workers}명`;
     return `
     <div id="pkPend_${r.id}" style="border:1px solid var(--g2);border-radius:8px;margin-bottom:10px;overflow:hidden">
       <!-- 헤더 -->
@@ -728,7 +736,7 @@ function renderPkPending(){
         <div>
           <div style="font-size:14px;font-weight:700;color:var(--g8)">${r.machine||'설비미정'} · ${r.product}</div>
           <div style="font-size:12px;color:var(--g5);margin-top:3px">
-            ${wcText} · 시작 ${r.start} · ${r.workers}명
+            ${subText}
             ${r.sauceTank ? ' · 소스 '+r.sauceTank : ''}
           </div>
         </div>
