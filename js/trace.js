@@ -55,11 +55,16 @@ async function doTrace(){
     return;
   }
 
-  // ② 포장 → 파쇄 (포장 당일만, 배출와건 매칭)
+  // ② 포장 → 파쇄 (포장 당일만, 배출와건/배출카트 매칭)
   const pkWagons = [...new Set(pk.flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean)))];
+  const pkCarts  = [...new Set(pk.flatMap(r=>(r.cart ||'').split(',').map(w=>w.trim()).filter(Boolean)))];
   const _shRaw = await fbGetByDate('shredding', q);
   const shAll = dedupeRec(_shRaw, r=>r.wagonIn+'|'+String(r.date||'').slice(0,10)+'|'+r.start+'|'+r.kg);
-  const sh = shAll.filter(r => pkWagons.some(w=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(w)));
+  const sh = shAll.filter(r => {
+    const woMatch = pkWagons.some(w=>(r.wagonOut||'').split(',').map(x=>x.trim()).includes(w));
+    const coMatch = pkCarts .some(c=>(r.cartOut ||'').split(',').map(x=>x.trim()).includes(c));
+    return woMatch || coMatch;
+  });
 
   // ③ 파쇄 → 자숙 (파쇄 당일만)
   const shWagons = [...new Set(sh.flatMap(r=>(r.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean)))];
