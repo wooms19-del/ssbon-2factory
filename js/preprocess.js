@@ -290,15 +290,19 @@ function getPpDistribution(){
       }
     });
     if(totalIn > 0 || totalOut > 0){
+      // 투입 비어있으면 배출로 추정 (한쪽만 입력된 경우 안전망)
+      const finalTotalIn = totalIn > 0 ? totalIn : totalOut;
+      // 투입 매트릭스 비어있으면 배출 매트릭스를 그대로 사용
+      const finalCagesIn = Object.keys(cagesIn).length ? cagesIn : {...cages};
       dist[cart] = {
         type: wrap.dataset.type || '',
         start: (wrap.querySelector('.pp-w-start')||{}).value || '',
         end: (wrap.querySelector('.pp-w-end')||{}).value || '',
-        cages: cages,        // 배출 (다음 공정으로)
-        cagesIn: cagesIn,    // 투입 (이 대차에서 빠짐)
+        cages: cages,
+        cagesIn: finalCagesIn,
         cageTanks: cageTanks,
-        totalIn: totalIn,
-        total: totalOut      // 기존 호환 - 배출 기준
+        totalIn: finalTotalIn,
+        total: totalOut
       };
     }
   });
@@ -318,16 +322,20 @@ function getPpCageTankMap(){
 }
 
 // 대차별 차감량 (잔여중량 차감용) - 투입 kg 기준
+// 대차별 차감량 (잔여중량 차감용) - 투입 우선, 없으면 배출 사용
 function getPpDeductByCart(){
   const m = {};
   document.querySelectorAll('.pp-wagon-input').forEach(wrap => {
     if(wrap.style.display === 'none') return;
     const id = wrap.dataset.id;
-    let total = 0;
+    let totalIn = 0, totalOut = 0;
     wrap.querySelectorAll('.pp-w-cagerow').forEach(row => {
-      total += parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      totalIn  += parseFloat((row.querySelector('.pp-w-ckg')||{}).value) || 0;
+      totalOut += parseFloat((row.querySelector('.pp-w-cout')||{}).value) || 0;
     });
-    if(total > 0) m[id] = total;
+    // 투입 우선, 없으면 배출 (사용자가 한쪽만 적어도 차감되도록)
+    const deduct = totalIn > 0 ? totalIn : totalOut;
+    if(deduct > 0) m[id] = deduct;
   });
   return m;
 }
