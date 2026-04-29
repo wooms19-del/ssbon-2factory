@@ -155,10 +155,11 @@ async function exportDailyReport() {
   // ── 시트6: 포장 ────────────────────────────────
   const s6 = [
     [`포장 공정 점검표 - ${date}`], [],
-    ['설비','투입와건LOT','원육타입','제품명','시작시간','종료시간','생산EA','파우치','불량EA','불량률(%)','소스탱크','소스KG'],
+    ['설비','투입와건/카트LOT','원육타입','제품명','시작시간','종료시간','생산EA','파우치','불량EA','불량률(%)','소스탱크','소스KG'],
     ...pk.map(r=>{
       const defR=parseFloat(r.ea)>0?r2(parseFloat(r.defect)/parseFloat(r.ea)*100).toFixed(2)+'%':'-';
-      return [r.machine||'',r.wagon||'',r.type||'',r.product||'',r.start||'',r.end||'',r.ea||0,r.pouch||0,r.defect||0,defR,r.sauceTank||'',r.sauceKg||0];
+      const lot = [r.wagon?'와건 '+r.wagon:'', r.cart?'카트 '+r.cart:''].filter(Boolean).join(' / ');
+      return [r.machine||'',lot,r.type||'',r.product||'',r.start||'',r.end||'',r.ea||0,r.pouch||0,r.defect||0,defR,r.sauceTank||'',r.sauceKg||0];
     }),
     ['합계','','','','','',totalEA,'',defEA,totalEA>0?r2(defEA/totalEA*100).toFixed(2)+'%':'','',''],
   ];
