@@ -1418,7 +1418,7 @@ function renderDailyFromLocal_(d){
     if(ppGroup[t]) {
       const inKg = r2(rmByType[t]||thByType[t]||rmKg||0);
       const ppWaste = r2((ppGroup[t]._recs||[]).reduce((s,r)=>s+(parseFloat(r.waste)||0),0));
-      const ppWorkers = Math.round((ppGroup[t]._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0) / Math.max((ppGroup[t]._recs||[]).length,1));
+      const ppWorkers = (ppGroup[t]._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0);
       const ppBoxes = rmBoxByType[t]||0;
       procRows.push({name:'전처리', type:t, origKg:inKg, in:inKg, out:r2(ppGroup[t].kg), waste:ppWaste, mh:r2(ppGroup[t].mh), h:calcActualHours(ppGroup[t]._recs||[])||r2(ppGroup[t].h), workers:ppWorkers, boxes:ppBoxes});
     }
@@ -1491,7 +1491,7 @@ function renderDailyFromLocal_(d){
     const pkInKg = pkInKgMap[key] || r2(shKg / Object.keys(pkMap).length);
     const pkOrig = pkOrigMap[key] || r2(rmKg / Object.keys(pkMap).length);
     const label = v.type ? v.type+' · '+v.product : v.product;
-    const pkWorkers = Math.round((v._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0) / Math.max((v._recs||[]).length,1));
+    const pkWorkers = (v._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0);
     procRows.push({name:'포장', type:label, origKg:pkOrig||rmKg, in:pkInKg, out:r2(v.kg), waste:0, ea:v.ea||0, mh:r2(v.mh), h:calcActualHours(v._recs||[])||r2(v.h), workers:pkWorkers});
   });
 
