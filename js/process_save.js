@@ -77,6 +77,7 @@ async function saveP(type){
 
     // 잔여중량 차감 (매트릭스 사용 시 매트릭스 합계 기준, 아니면 기존 방식)
     // 방혈 종료(end 있음)된 cart도 차감해야 함 - 잔여중량 추적 위해
+    const skipped = []; // 차감 SKIP된 cart (저장 직전 검증)
     wagons.forEach(async rec=>{
       if(!rec) return;
       let deductKg = mxDeduct[rec.id] || 0;
@@ -84,7 +85,10 @@ async function saveP(type){
         const kgInp=document.querySelector('.pp-wagon-kg[data-id="'+rec.id+'"]');
         deductKg=parseFloat(kgInp&&kgInp.value)||0;
       }
-      if(!deductKg) return;
+      if(!deductKg){
+        skipped.push(rec.cart);
+        return;
+      }
       const cur=rec.remainKg!==undefined?rec.remainKg:rec.totalKg;
       const remain=r2(cur-deductKg);
       rec.remainKg=remain<0?0:remain;
@@ -102,6 +106,10 @@ async function saveP(type){
         fbUpdate('thawing', fbId, upd);
       }
     });
+    if(skipped.length){
+      toast(`⚠️ ${skipped.join(', ')}번 cart 차감 누락 (kg 입력 확인)`,'w');
+      console.warn('[preprocess] 차감 SKIP된 cart:', skipped);
+    }
   }
 
   L[type].push(d); saveL();
