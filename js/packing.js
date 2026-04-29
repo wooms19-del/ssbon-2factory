@@ -131,20 +131,10 @@ function addPkMachRow(){
       <div class="fgrp" style="display:flex;align-items:flex-end">
         <button type="button" class="btn bo bsm" onclick="setPkRowNow(${idx})">🕐 지금으로</button>
       </div>
-      <div class="fgrp">
-        <label class="fl">소스 탱크 <span style="font-size:11px;color:var(--g4)">(여러 탱크 가능)</span></label>
-        <!-- 호환용 hidden (콤마 구분 탱크번호 모음) -->
-        <select class="fc pk-row-stank" data-idx="${idx}" style="display:none">
-          <option value="">선택</option>
-          <option>1번탱크</option><option>2번탱크</option><option>3번탱크</option><option>4번탱크</option>
-          <option>5번탱크</option><option>6번탱크</option><option>7번탱크</option>
-        </select>
-        <div class="pk-stank-list" id="pkStank_${idx}" style="display:flex;flex-direction:column;gap:4px"></div>
-        <div style="display:flex;gap:4px;margin-top:4px;align-items:center;justify-content:space-between;font-size:11px">
-          <button onclick="pkAddStankRow(${idx})" style="padding:3px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 소스탱크 추가</button>
-          <span id="pkStankSum_${idx}" style="color:var(--g5);font-weight:500">합계 0kg</span>
-        </div>
-      </div>
+      <!-- 소스 탱크: 시작 시점에는 입력 안 함 → 종료 시 입력 -->
+      <select class="fc pk-row-stank" data-idx="${idx}" style="display:none">
+        <option value="">선택</option>
+      </select>
       <div class="fgrp">
         <label class="fl">부재료명</label>
         <select class="fc pk-row-subnm" data-idx="${idx}">${subOpts}</select>
@@ -548,7 +538,6 @@ async function onPkStartBtn(){
     // 와건별 kg 분배
     const idxAttr = parseInt(row.id.replace('pkRow_',''));
     const wagonDist = (typeof getPkWagonDist==='function') ? getPkWagonDist(idxAttr) : null;
-    const sauceTanks = (typeof getPkSauceTanks==='function') ? getPkSauceTanks(idxAttr) : null;
     const typeKgs = (typeof getPkTypeKgs==='function') ? getPkTypeKgs(idxAttr) : null;
 
     // wagon 비어있으면 wagonDist 키로 자동 채움 (토글 버그 fallback)
@@ -564,7 +553,6 @@ async function onPkStartBtn(){
       end:'', ea:0, pouch:0, defect:0, sauceKg:0, subKg:0
     };
     if(wagonDist) rec.wagonDist = wagonDist;
-    if(sauceTanks) rec.sauceTanks = sauceTanks;
     if(typeKgs) rec.typeKgs = typeKgs;
     L.packing_pending.push(rec);
     added++;
@@ -648,9 +636,15 @@ function renderPkPending(){
             <label class="fl">불량 수량(EA)</label>
             <input class="fc" type="number" id="pkEnd_defect_${r.id}" placeholder="0">
           </div>
-          <div class="fgrp">
-            <label class="fl">소스 사용량(KG)</label>
-            <input class="fc" type="number" step="0.01" id="pkEnd_skg_${r.id}" placeholder="0.00">
+          <div class="fgrp cs2">
+            <label class="fl">소스 탱크 <span style="font-size:11px;color:var(--g4)">(탱크 + kg, 도중에 바뀐 경우 여러 개 추가)</span></label>
+            <!-- 호환용 hidden 합계 -->
+            <input type="hidden" id="pkEnd_skg_${r.id}" value="0">
+            <div class="pk-end-stank-list" id="pkEndStank_${r.id}" style="display:flex;flex-direction:column;gap:4px"></div>
+            <div style="display:flex;gap:4px;margin-top:4px;align-items:center;justify-content:space-between;font-size:11px">
+              <button onclick="pkEndAddStankRow('${r.id}')" style="padding:3px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 소스탱크 추가</button>
+              <span id="pkEndStankSum_${r.id}" style="color:var(--g5);font-weight:500">합계 0kg</span>
+            </div>
           </div>
           <div class="fgrp">
             <label class="fl">부재료량</label>
@@ -665,11 +659,71 @@ function renderPkPending(){
     </div>`).join('');
 }
 
+// 종료 폼 - 소스 탱크 다중 입력
+function pkEndAddStankRow(pendId){
+  const c = document.getElementById('pkEndStank_'+pendId);
+  if(!c) return;
+  const row = document.createElement('div');
+  row.className = 'pk-end-stank-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 28px;gap:4px;align-items:center';
+  row.innerHTML = `
+    <select class="fc pk-end-stank-sel" onchange="pkEndStankSumChange('${pendId}')" style="padding:5px 7px;font-size:12px">
+      <option value="">탱크</option>
+      <option value="1번탱크">1번</option>
+      <option value="2번탱크">2번</option>
+      <option value="3번탱크">3번</option>
+      <option value="4번탱크">4번</option>
+      <option value="5번탱크">5번</option>
+      <option value="6번탱크">6번</option>
+      <option value="7번탱크">7번</option>
+    </select>
+    <div style="display:flex;align-items:center;gap:2px">
+      <input class="fc pk-end-stank-kg" type="number" step="0.01" placeholder="0" oninput="pkEndStankSumChange('${pendId}')" style="padding:5px 7px;font-size:12px;flex:1;text-align:right">
+      <span style="font-size:11px;color:var(--g5)">kg</span>
+    </div>
+    <button onclick="this.closest('.pk-end-stank-row').remove();pkEndStankSumChange('${pendId}')" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
+  c.appendChild(row);
+  pkEndStankSumChange(pendId);
+}
+
+function pkEndStankSumChange(pendId){
+  const c = document.getElementById('pkEndStank_'+pendId);
+  if(!c) return;
+  let sum = 0;
+  c.querySelectorAll('.pk-end-stank-row').forEach(r => {
+    sum += parseFloat((r.querySelector('.pk-end-stank-kg')||{}).value) || 0;
+  });
+  const sumEl = document.getElementById('pkEndStankSum_'+pendId);
+  if(sumEl) sumEl.textContent = `합계 ${sum.toFixed(2)}kg`;
+  // hidden에 합계 저장 (sauceKg 호환)
+  const skg = document.getElementById('pkEnd_skg_'+pendId);
+  if(skg) skg.value = sum.toFixed(2);
+}
+
+function getPkEndSauceTanks(pendId){
+  const c = document.getElementById('pkEndStank_'+pendId);
+  if(!c) return null;
+  const tanks = [];
+  c.querySelectorAll('.pk-end-stank-row').forEach(r => {
+    const t = (r.querySelector('.pk-end-stank-sel')||{}).value || '';
+    const kg = parseFloat((r.querySelector('.pk-end-stank-kg')||{}).value) || 0;
+    if(t) tanks.push({tank: t, kg: kg});
+  });
+  return tanks.length ? tanks : null;
+}
+
 function togglePkEndForm(id){
   const form = document.getElementById('pkEndForm_'+id);
   if(!form) return;
   const isOpen = form.style.display !== 'none';
   form.style.display = isOpen ? 'none' : '';
+  // 처음 펼치는 거면 첫 행 자동 추가
+  if(!isOpen){
+    const stankList = document.getElementById('pkEndStank_'+id);
+    if(stankList && stankList.children.length === 0){
+      pkEndAddStankRow(id);
+    }
+  }
 }
 
 async function savePkEnd(id){
@@ -683,12 +737,18 @@ async function savePkEnd(id){
   const defect = parseFloat(document.getElementById('pkEnd_defect_'+id).value)||0;
   const sauceKg = parseFloat(document.getElementById('pkEnd_skg_'+id).value)||0;
   const subKg = parseFloat(document.getElementById('pkEnd_subkg_'+id).value)||0;
+  const sauceTanks = (typeof getPkEndSauceTanks==='function') ? getPkEndSauceTanks(id) : null;
 
   if(!end){ toast('종료시간을 입력하세요','d'); return; }
   if(!ea){ toast('생산 EA를 입력하세요','d'); return; }
 
   // 완성된 레코드
   const completed = {...rec, end, ea, pouch, defect, sauceKg, subKg};
+  if(sauceTanks){
+    completed.sauceTanks = sauceTanks;
+    // sauceTank 호환 필드 (콤마 문자열)
+    completed.sauceTank = sauceTanks.map(s=>s.tank).join(',');
+  }
 
   // pending에서 제거 → packing에 추가
   L.packing_pending = L.packing_pending.filter(r=>r.id!==id);
