@@ -1705,8 +1705,35 @@ function setPd(pd, el){
 // 내포장 수량 차트 (월별현황 탭)
 // ============================================================
 var _moPackingChart = null;
+var _moPackingMode = 'detail'; // 'ea' / 'weight' / 'detail'
+var _moPackingArgs = null; // 마지막 렌더 인자 보관 (탭 전환 시 재사용)
+
+function setPackingChartMode(mode){
+  _moPackingMode = mode;
+  // 탭 active 상태 갱신
+  ['ea','weight','detail'].forEach(m => {
+    const btn = document.getElementById('pkTab_'+m);
+    if(!btn) return;
+    if(m === mode){
+      btn.style.background = '#1a56db';
+      btn.style.color = '#fff';
+      btn.style.borderColor = '#1a56db';
+    } else {
+      btn.style.background = '#fff';
+      btn.style.color = 'var(--g6)';
+      btn.style.borderColor = 'var(--g3)';
+    }
+  });
+  // 차트 다시 그리기
+  if(_moPackingArgs){
+    renderPackingChart(_moPackingArgs.dayEntries, _moPackingArgs.opMap, _moPackingArgs.ym);
+  }
+}
 
 function renderPackingChart(dayEntries, opMap, ym) {
+  // 인자 보관 (탭 전환 시 재사용)
+  _moPackingArgs = { dayEntries, opMap, ym };
+
   const canvas = document.getElementById('mo_bar_chart');
   if (!canvas) return;
 
@@ -1721,6 +1748,12 @@ function renderPackingChart(dayEntries, opMap, ym) {
     const m = (full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);
     if (!m) return full.slice(0,6);
     return m[2].toUpperCase()==='KG' ? m[1]+'KG' : m[1]+'g';
+  }
+  // 제품명에서 g 단위 추출 → kg 환산용
+  function prodGramPerEA(full) {
+    const m = (full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);
+    if (!m) return 0;
+    return m[2].toUpperCase()==='KG' ? parseFloat(m[1])*1000 : parseFloat(m[1]);
   }
 
   const COLORS = ['#1D9E75','#378ADD','#EF9F27','#D4537E','#8B5CF6','#64748B'];
@@ -1737,7 +1770,9 @@ function renderPackingChart(dayEntries, opMap, ym) {
     const items = dayRows.map(r => {
       const outerEa = opMap[date+'|'+r.product] || 0;
       const ea = outerEa > 0 ? outerEa : Math.round(r.ea || 0);
-      return { prod: r.product, short: prodShort(r.product), ea };
+      const gPerEA = prodGramPerEA(r.product);
+      const kg = Math.round(ea * gPerEA / 1000);
+      return { prod: r.product, short: prodShort(r.product), ea, kg };
     }).filter(x => x.ea > 0).sort((a,b) => b.ea - a.ea);
     if (!items.length) return;
     const si = rows.length;
@@ -1748,8 +1783,27 @@ function renderPackingChart(dayEntries, opMap, ym) {
   if (!rows.length) return;
 
   const labels   = rows.map(r => r.short);
-  const dataVals = rows.map(r => r.ea);
   const bgColors = rows.map(r => getColor(r.prod) + 'dd');
+
+  // 모드별 데이터·라벨·축
+  const mode = _moPackingMode || 'detail';
+  let dataVals, yUnit, mainLabelFn, subLabelFn;
+  if (mode === 'ea') {
+    dataVals = rows.map(r => r.ea);
+    yUnit = '';
+    mainLabelFn = (r) => r.ea.toLocaleString() + '봉';
+    subLabelFn = null;
+  } else if (mode === 'weight') {
+    dataVals = rows.map(r => r.kg);
+    yUnit = 'kg';
+    mainLabelFn = (r) => r.kg.toLocaleString() + 'kg';
+    subLabelFn = null;
+  } else { // detail
+    dataVals = rows.map(r => r.kg);
+    yUnit = 'kg';
+    mainLabelFn = (r) => r.ea.toLocaleString() + '봉';
+    subLabelFn = (r) => r.kg.toLocaleString() + 'kg';
+  }
 
   // 범례
   const legendEl = document.getElementById('mo_packing_legend');
@@ -1768,17 +1822,29 @@ function renderPackingChart(dayEntries, opMap, ym) {
     titleEl.textContent = '운영팀 ' + parseInt(tm) + '월 내포장 수량';
   }
 
+
   const topNumPlugin = {
     id: 'pkTopNum',
     afterDatasetsDraw(chart) {
       const { ctx } = chart;
       chart.getDatasetMeta(0).data.forEach((bar, i) => {
         const v = dataVals[i]; if (!v) return;
+        const r = rows[i];
         ctx.save();
-        ctx.font = 'bold 9px sans-serif';
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#333';
         ctx.textAlign = 'center';
-        ctx.fillText(v.toLocaleString(), bar.x, bar.y - 4);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#333';
+        if (subLabelFn) {
+          // 상세 모드: 봉수(검정 굵게) + kg(회색)
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 14);
+          ctx.font = '9px sans-serif';
+          ctx.fillStyle = '#888';
+          ctx.fillText(subLabelFn(r), bar.x, bar.y - 3);
+        } else {
+          // EA 또는 중량 단일 라벨
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 4);
+        }
         ctx.restore();
       });
     }
@@ -1832,13 +1898,16 @@ function renderPackingChart(dayEntries, opMap, ym) {
               const g = groups.find(g => g.barIndexes.includes(ctx[0].dataIndex));
               return (g ? g.day : '') + ' · ' + rows[ctx[0].dataIndex].prod;
             },
-            label: ctx => ' 생산량: ' + ctx.parsed.y.toLocaleString() + ' EA',
+            label: ctx => {
+              const r = rows[ctx.dataIndex];
+              return ' ' + r.ea.toLocaleString() + '봉 · ' + r.kg.toLocaleString() + 'kg';
+            },
           }
         }
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: 'var(--g5)', font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
-        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() }, beginAtZero: true }
+        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true }
       }
     }
   });
