@@ -41,7 +41,7 @@ function renderShWagonList() {
     (pending.length ? '<div style="font-size:12px;font-weight:600;color:var(--g6);margin-bottom:8px">와건 선택 → 자동 입력</div>' : '') +
     pending.map(w => {
       const outKg = wagonOutKg[w.num] || 0;
-      const kgText = outKg ? `<span style="font-size:12px;color:#16a34a;font-weight:600;margin-left:8px">${outKg.toFixed(2)}kg</span>` : '';
+      const kgText = outKg ? `<span style="font-size:12px;color:#16a34a;font-weight:600;margin-left:8px">${outKg.toFixed(3)}kg</span>` : '';
       return `
       <label style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g1);border-radius:8px;margin-bottom:6px;cursor:pointer">
         <input type="checkbox" class="sh-wagon-cb" data-wagon="${w.num}" data-type="${w.type}" data-outkg="${outKg}"
@@ -130,7 +130,7 @@ function onShWagonChange() {
     // 자숙배출량 자동 채움 (existing kgIn 없을 때만)
     if(!data.kgIn){
       const outKg = parseFloat(cb.dataset.outkg) || 0;
-      if(outKg) data.kgIn = outKg.toFixed(2);
+      if(outKg) data.kgIn = outKg.toFixed(3);
     }
     shAddRow(data);
   });
