@@ -158,7 +158,10 @@ async function saveP(type){
 var PH={
   preprocess:(r)=>`${r.type||'-'} · ${r.kg||0}kg`,
   cooking:   (r)=>`${r.type||'-'} · ${r.kg||0}kg · 탱크 ${r.tank||'-'}`,
-  shredding: (r)=>`${r.wagonIn||'-'} → ${r.wagonOut||'-'} · ${r.kg||0}kg`,
+  shredding: (r)=>{
+    const out = [r.wagonOut||'', (r.cartOut?'카트:'+r.cartOut:'')].filter(Boolean).join(' / ') || '-';
+    return `${r.wagonIn||'-'} → ${out} · ${r.kg||0}kg`;
+  },
   packing:   (r)=>`${r.product||'-'} · ${r.ea||0}EA`,
   sauce:     (r)=>`${r.name||'-'} · ${r.kg||0}kg`,
 };
@@ -192,6 +195,7 @@ var PE_FIELDS = {
   shredding: [
     {key:'wagonIn', label:'와건In', kind:'text'},
     {key:'wagonOut', label:'와건Out', kind:'text'},
+    {key:'cartOut', label:'카트Out', kind:'text'},
     {key:'start', label:'시작', kind:'time'},
     {key:'end', label:'종료', kind:'time'},
     {key:'kg', label:'KG', kind:'number'},
@@ -276,10 +280,14 @@ function buildMatrixEditForm(type, r){
   }
   if(type === 'shredding'){
     const wod = r.wagonOutDist || {};
-    if(!Object.keys(wod).length) return '';
-    let html = '<div style="margin-bottom:8px;padding:8px;background:#fff;border-radius:6px;border:1px dashed #72243E"><div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">배출 와건별 KG</div>';
+    const cod = r.cartOutDist  || {};
+    if(!Object.keys(wod).length && !Object.keys(cod).length) return '';
+    let html = '<div style="margin-bottom:8px;padding:8px;background:#fff;border-radius:6px;border:1px dashed #72243E"><div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">배출 와건/카트별 KG</div>';
     Object.keys(wod).forEach(w => {
-      html += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${w}번 와건</span><input class="fc pe-sh-wkg" data-w="${w}" type="number" step="0.01" value="${wod[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+      html += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#72243E">와건 ${w}</span><input class="fc pe-sh-wkg" data-w="${w}" data-kind="wagon" type="number" step="0.01" value="${wod[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+    });
+    Object.keys(cod).forEach(c => {
+      html += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#1a56db">카트 ${c}</span><input class="fc pe-sh-wkg" data-w="${c}" data-kind="cart" type="number" step="0.01" value="${cod[c]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
     });
     html += '</div>';
     return html;
@@ -351,13 +359,22 @@ async function savePEdit(type, id, fbId) {
       }
     } else if(type === 'shredding'){
       const wod = {};
+      const cod = {};
       editRoot.querySelectorAll('.pe-sh-wkg').forEach(el => {
         const v = parseFloat(el.value) || 0;
-        if(v) wod[el.dataset.w] = v;
+        if(v){
+          if(el.dataset.kind === 'cart') cod[el.dataset.w] = v;
+          else wod[el.dataset.w] = v;
+        }
       });
-      if(Object.keys(wod).length){
-        updates.wagonOutDist = wod;
-        let total = 0; Object.values(wod).forEach(v => total += parseFloat(v)||0);
+      if(Object.keys(wod).length || Object.keys(cod).length){
+        if(Object.keys(wod).length) updates.wagonOutDist = wod;
+        if(Object.keys(cod).length) updates.cartOutDist  = cod;
+        updates.wagonOut = Object.keys(wod).join(',');
+        updates.cartOut  = Object.keys(cod).join(',');
+        let total = 0;
+        Object.values(wod).forEach(v => total += parseFloat(v)||0);
+        Object.values(cod).forEach(v => total += parseFloat(v)||0);
         updates.kg = total;
       }
     }
