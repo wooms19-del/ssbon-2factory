@@ -1980,65 +1980,71 @@ async function downloadPackingChart() {
       ? '막대 = 생산 봉수(EA)'
       : '막대 = 생산 무게(kg)';
 
-  const PPT_W = 1280, PPT_H = 720, HEADER_H = 140;
+  const S = 2;  // 2x 고해상도
+  const W0 = 1280, H0 = 720, HD0 = 140;
+  const W = W0 * S, H = H0 * S, HD = HD0 * S;
 
-  // 1) 차트를 PPT 크기에 맞게 임시 확대
+  // 1) Chart.js devicePixelRatio를 2로 → 차트 캔버스가 2x 픽셀로 렌더링
+  const origDPR = _moPackingChart.options.devicePixelRatio;
+  _moPackingChart.options.devicePixelRatio = S;
+
   const chartWrapDiv = canvas.parentElement;
   const origWrapH = chartWrapDiv ? chartWrapDiv.style.height : '';
-  if (chartWrapDiv) chartWrapDiv.style.height = (PPT_H - HEADER_H) + 'px';
-  _moPackingChart.resize(PPT_W, PPT_H - HEADER_H);
-  await new Promise(r => setTimeout(r, 300));
+  if (chartWrapDiv) chartWrapDiv.style.height = (H0 - HD0) + 'px';
+  _moPackingChart.resize(W0, H0 - HD0);
+  await new Promise(r => setTimeout(r, 350));
 
-  // 2) offscreen 흰 배경
+  // 2) offscreen canvas (실제 픽셀 = W x H = 2560 x 1440)
   const off = document.createElement('canvas');
-  off.width  = PPT_W;
-  off.height = PPT_H;
+  off.width  = W;
+  off.height = H;
   const ctx = off.getContext('2d');
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, PPT_W, PPT_H);
+  ctx.fillRect(0, 0, W, H);
 
-  // 3) 제목
+  // 3) 제목 (모든 좌표/폰트 * S)
   ctx.textAlign = 'left';
   ctx.fillStyle = '#94A3B8';
-  ctx.font = '13px sans-serif';
-  ctx.fillText('순수본 2공장', 24, 28);
+  ctx.font = (13*S) + 'px sans-serif';
+  ctx.fillText('순수본 2공장', 24*S, 28*S);
   ctx.fillStyle = '#1E293B';
-  ctx.font = 'bold 24px sans-serif';
-  ctx.fillText('운영팀 ' + parseInt(m) + '월 내포장 수량', 24, 60);
+  ctx.font = 'bold ' + (24*S) + 'px sans-serif';
+  ctx.fillText('운영팀 ' + parseInt(m) + '월 내포장 수량', 24*S, 60*S);
 
-  // 3-2) 부제 (모드 + 설명)
+  // 부제
   ctx.fillStyle = '#475569';
-  ctx.font = '13px sans-serif';
-  ctx.fillText('[' + modeLbl + ']  ' + subText, 24, 84);
+  ctx.font = (13*S) + 'px sans-serif';
+  ctx.fillText('[' + modeLbl + ']  ' + subText, 24*S, 84*S);
 
-  // 4) 범례 — <span style="..."><span style="background:색상"></span>이름</span> 구조
+  // 4) 범례
   const legendEl = document.getElementById('mo_packing_legend');
   if (legendEl) {
-    let lx = 24;
+    let lx = 24*S;
     Array.from(legendEl.children).forEach(sp => {
       const colorEl = sp.querySelector('span');
       if (!colorEl) return;
       const bg = colorEl.style.background || colorEl.style.backgroundColor || '#888';
       const label = sp.textContent.trim();
       ctx.fillStyle = bg;
-      ctx.fillRect(lx, 108, 10, 10);
+      ctx.fillRect(lx, 108*S, 10*S, 10*S);
       ctx.fillStyle = '#444';
-      ctx.font = '12px sans-serif';
+      ctx.font = (12*S) + 'px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(label, lx + 14, 118);
-      lx += ctx.measureText(label).width + 32;
+      ctx.fillText(label, lx + 14*S, 118*S);
+      lx += ctx.measureText(label).width + 32*S;
     });
   }
 
-  // 5) 확대된 차트 그대로 붙이기
-  ctx.drawImage(canvas, 0, HEADER_H, PPT_W, PPT_H - HEADER_H);
+  // 5) 차트 (실제 픽셀이 이미 2x로 렌더링됨)
+  ctx.drawImage(canvas, 0, HD, W, H - HD);
 
   // 6) 원복
+  _moPackingChart.options.devicePixelRatio = origDPR;
   if (chartWrapDiv) chartWrapDiv.style.height = origWrapH;
   _moPackingChart.resize();
 
   const a = document.createElement('a');
-  a.download = ym + '_운영팀_내포장수량.png';
+  a.download = ym + '_운영팀_내포장수량_HD.png';
   a.href = off.toDataURL('image/png');
   a.click();
 }
