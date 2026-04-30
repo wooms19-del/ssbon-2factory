@@ -609,6 +609,15 @@ function onPkRowProd(idx){
     const distC = document.getElementById('pkWagonDist_'+idx);
     if(distC) distC.querySelectorAll('.pk-wd-row').forEach(r=>r.remove());
   }
+  // 제품에 기본 부재료(subName)가 박혀있으면 드롭다운 자동 선택
+  if(p && p.subName){
+    const subSel = row.querySelector('.pk-row-subnm');
+    if(subSel){
+      // 옵션 중에 일치하는 것 있으면 선택
+      const opt = [...subSel.options].find(o => o.value === p.subName || o.textContent === p.subName);
+      if(opt) subSel.value = opt.value;
+    }
+  }
 }
 
 // 지금 시간으로 자동 입력
