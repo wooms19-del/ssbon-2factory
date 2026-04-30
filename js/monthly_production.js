@@ -199,20 +199,22 @@
         if(st) st.textContent='Firebase에서 데이터 불러오는 중…';
 
         var R = await Promise.all([
-          fbGetRange('thawing',    from,  effTo),
-          fbGetRange('preprocess', from,  effTo),
-          fbGetRange('cooking',    from,  effTo),
-          fbGetRange('shredding',  from,  effTo),
-          fbGetRange('packing',    from,  effTo),
-          fbGetRange('thawing',    pFrom, pTo),
-          fbGetRange('preprocess', pFrom, pTo),
-          fbGetRange('cooking',    pFrom, pTo),
-          fbGetRange('shredding',  pFrom, pTo),
-          fbGetRange('packing',    pFrom, pTo)
+          fbGetRange('thawing',      from,  effTo),
+          fbGetRange('preprocess',   from,  effTo),
+          fbGetRange('cooking',      from,  effTo),
+          fbGetRange('shredding',    from,  effTo),
+          fbGetRange('packing',      from,  effTo),
+          fbGetRange('outerpacking', from,  effTo),
+          fbGetRange('thawing',      pFrom, pTo),
+          fbGetRange('preprocess',   pFrom, pTo),
+          fbGetRange('cooking',      pFrom, pTo),
+          fbGetRange('shredding',    pFrom, pTo),
+          fbGetRange('packing',      pFrom, pTo),
+          fbGetRange('outerpacking', pFrom, pTo)
         ]);
 
-        _mpRows     = _mpBuildRows(R[0],R[1],R[2],R[3],R[4]);
-        _mpPrevRows = _mpBuildRows(R[5],R[6],R[7],R[8],R[9]);
+        _mpRows     = _mpBuildRows(R[0],R[1],R[2],R[3],R[4],R[5]);
+        _mpPrevRows = _mpBuildRows(R[6],R[7],R[8],R[9],R[10],R[11]);
         _mpRender();
       } catch(e){
         console.error('[mp] reload error', e);
@@ -225,8 +227,21 @@
   }
 
   /* ===== 행 빌드: 일자×제품 단위 ===== */
-  function _mpBuildRows(th, pp, ck, sh, pk){
+  function _mpBuildRows(th, pp, ck, sh, pk, op){
     var d = function(r){ return String(r.date||'').slice(0,10); };
+
+    // 테스트 런 식별 (performance.js와 동일 로직)
+    // 외포장 testRun 키 (date|product) 셋
+    var opTestKeys = new Set();
+    (op||[]).forEach(function(r){
+      if(r.testRun===true || r.isTest===true){
+        opTestKeys.add(d(r)+'|'+(r.product||''));
+      }
+    });
+    function isTestPk(r){
+      if(r.testRun===true || r.isTest===true) return true;
+      return opTestKeys.has(d(r)+'|'+(r.product||''));
+    }
 
     // 1) 일자별 thawing 입고량 합산 (E열: 원육사용량)
     //    필드명: totalKg
@@ -237,9 +252,11 @@
       thKgByDate[dt] = (thKgByDate[dt]||0) + kg;
     });
 
-    // 2) 일자×제품 packing 그룹핑 — 인시 방식
+    // 2) 일자×제품 packing 그룹핑 — 인시 방식 + 테스트 제외
     var byDP = {};   // key 'date|product'
+    var testCnt = 0;
     (pk||[]).forEach(function(r){
+      if(isTestPk(r)){ testCnt++; return; }   // 테스트 제외
       var dt=d(r); var prod=r.product||''; if(!dt||!prod) return;
       var k = dt+'|'+prod;
       if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0, recs:0};
@@ -255,6 +272,12 @@
       var p = byDP[k];
       p.workers = p.hours>0 ? p.personHours/p.hours : 0;
     });
+    if(testCnt>0) {
+      window._mpTestCount = testCnt;
+      console.log('[mp] 테스트 packing '+testCnt+'건 제외됨');
+    } else {
+      window._mpTestCount = 0;
+    }
 
     // 3) 일자별 preprocess/cooking/shredding 합산
     //    인시(person-hour) 방식: 작업별로 시간×인원 계산해 합산
@@ -583,7 +606,15 @@
 
     tbl.innerHTML = '<thead>'+thHtml+'</thead><tbody>'+bodyHtml+sumHtml+avgHtml+prevHtml+diffHtml+'</tbody>';
     if(tw) tw.style.display='';
-    if(st) st.style.display='none';
+    if(st){
+      if(window._mpTestCount>0){
+        st.style.display='';
+        st.textContent='✓ 데이터 로드 완료 (테스트 런 '+window._mpTestCount+'건 제외됨)';
+        st.style.color='#1b8a3a';
+      } else {
+        st.style.display='none';
+      }
+    }
 
     // 비교 박스
     var ymThis=(_mpYm||_ymToday()), ymPrev=_prevYm(ymThis);
