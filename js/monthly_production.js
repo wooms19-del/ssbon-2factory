@@ -114,12 +114,22 @@
       + '#mpTbl{border-collapse:separate;border-spacing:0;font-size:12.5px;white-space:nowrap;min-width:100%;font-variant-numeric:tabular-nums}'
       + '#mpTbl th,#mpTbl td{border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;padding:7px 8px;text-align:center;vertical-align:middle}'
       + '#mpTbl thead th{background:#374151;color:#fff;font-weight:600;position:sticky;top:0;z-index:10;padding:9px 8px;line-height:1.35;font-size:12px;border-color:#1f2937;box-shadow:inset 0 -2px 0 #1f2937}'
+      // ── 왼쪽 3컬럼 sticky 고정 (생산일수 / 생산일자 / 제품명)
+      + '#mpTbl th:nth-child(1),#mpTbl td:nth-child(1){position:sticky;left:0;min-width:55px;width:55px;z-index:5;background:#fff}'
+      + '#mpTbl th:nth-child(2),#mpTbl td:nth-child(2){position:sticky;left:55px;min-width:90px;width:90px;z-index:5;background:#fff}'
+      + '#mpTbl th:nth-child(3),#mpTbl td:nth-child(3){position:sticky;left:145px;min-width:220px;width:220px;z-index:5;background:#fff;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
+      // 좌상단 모서리 (헤더 + 좌측 고정의 교차) z-index 가장 높게
+      + '#mpTbl thead th:nth-child(1),#mpTbl thead th:nth-child(2),#mpTbl thead th:nth-child(3){z-index:15;background:#374151}'
+      // 짝수 행 zebra: sticky 셀도 같은 색
       + '#mpTbl tbody tr:nth-child(even):not(.sumRow):not(.avgRow):not(.prevRow):not(.diffRow) td{background:#fafbfc}'
       + '#mpTbl tbody tr:hover:not(.sumRow):not(.avgRow):not(.prevRow):not(.diffRow) td{background:#fef9c3}'
+      // 합계/평균 등 sticky 셀 배경 일치
       + '#mpTbl tr.sumRow td{background:#fef3c7;font-weight:700;color:#78350f;border-top:2px solid #92400e;padding:9px 8px}'
       + '#mpTbl tr.avgRow td{background:#dcfce7;font-weight:600;color:#14532d;padding:9px 8px}'
       + '#mpTbl tr.prevRow td{background:#f1f5f9;color:#475569;padding:9px 8px}'
       + '#mpTbl tr.diffRow td{background:#fee2e2;font-style:normal;font-weight:600;padding:9px 8px;border-bottom:2px solid #b91c1c}'
+      // 합계/평균 행은 colspan="3" 한 셀이 3컬럼 차지 → 그 셀에 left:0 + 더 큰 너비 부여
+      + '#mpTbl tr.sumRow td:first-child,#mpTbl tr.avgRow td:first-child,#mpTbl tr.prevRow td:first-child,#mpTbl tr.diffRow td:first-child{position:sticky;left:0;z-index:5;width:auto;min-width:auto;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
       + '#mpTbl td.product{font-weight:500;color:#1e40af}'
       + '#mpTbl td.dateCell{font-weight:600;color:#1e293b}'
       + '#mpTbl td.dayNoCell{color:#6b7280;font-size:11.5px}'
