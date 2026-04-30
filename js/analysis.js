@@ -1594,14 +1594,24 @@ function renderTL(pp,ck,sh,pk){
   const toMin=t=>{if(!t)return null;const p=t.slice(0,5).split(':');return+p[0]*60+(+p[1]||0);};
   const mins=all.flatMap(r=>[toMin(r.start),toMin(r.end)]).filter(v=>v!==null);
   const minT=Math.min(...mins), maxT=Math.max(...mins);
-  // 헤더는 정시 단위로 그리니, 막대도 같은 범위(헤더 시작 정시 ~ 헤더 끝 정시)에 맞춤
+  // 헤더 정시 단위 - 시작 정시(headStart)부터 끝 정시(headEnd)까지
   const headStart=Math.floor(minT/60)*60;
   const headEnd=Math.ceil(maxT/60)*60;
   const range=Math.max(60, headEnd-headStart);
-  const hours=[];
-  for(let h=Math.floor(minT/60);h<=Math.ceil(maxT/60);h++) hours.push(h%24);
+  const hourCount=Math.ceil(maxT/60)-Math.floor(minT/60)+1;
+  // 헤더 라벨도 막대와 동일 좌표계(absolute %)로 배치 - 시간축과 정확히 정렬
+  const headHtml=[];
+  for(let i=0;i<hourCount;i++){
+    const h=(Math.floor(minT/60)+i)%24;
+    const hourMin=(Math.floor(minT/60)+i)*60;
+    const leftPct=((hourMin-headStart)/range*100);
+    let tx='translateX(-50%)';
+    if(i===0) tx='translateX(0)';
+    else if(i===hourCount-1) tx='translateX(-100%)';
+    headHtml.push(`<div class="tlhr" style="left:${leftPct}%;transform:${tx}">${String(h).padStart(2,'0')}:00</div>`);
+  }
   el.innerHTML=`<div class="tlw"><div class="tlg">
-    <div class="tlh">${hours.map(h=>`<div class="tlhr">${String(h).padStart(2,'0')}:00</div>`).join('')}</div>
+    <div class="tlh">${headHtml.join('')}</div>
     ${all.map(r=>{
       const s=toMin(r.start),e=toMin(r.end);
       if(s===null||e===null) return '';
