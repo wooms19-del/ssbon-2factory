@@ -412,11 +412,15 @@ function renderSettings(){
         const r = p.recipe||{};
         const innerSummary = (r.inner||[]).map(x=>`${x.item} ${x.qty}${x.unit}`).join(' · ');
         const outerSummary = (r.outer||[]).length ? (r.outer||[]).map(x=>`${x.item} ${x.qty}${x.unit}`).join(' · ') : '';
+        const noMeatBadge = p.noMeat ? '<span style="display:inline-block;padding:1px 6px;background:#fef3c7;color:#92400e;border-radius:3px;font-size:10px;margin-left:4px">원육X</span>' : '';
+        const sumLine = p.noMeat
+          ? `Capa ${p.capa}EA${p.sauce?' · '+p.sauce:''}${p.subName?' · 부재료 '+p.subName:''}`
+          : `${p.kgea}kg/EA · Capa ${p.capa}EA${p.sauce?' · '+p.sauce:''}${p.subName?' · 부재료 '+p.subName:''}`;
         return `
         <div class="si" id="pdItem_${i}">
           <div style="flex:1;min-width:0">
-            <div class="sn">${p.name}</div>
-            <div class="ss">${p.kgea}kg/EA · Capa ${p.capa}EA${p.sauce?' · '+p.sauce:''}</div>
+            <div class="sn">${p.name}${noMeatBadge}</div>
+            <div class="ss">${sumLine}</div>
             ${innerSummary?`<div class="ss" style="color:var(--p);margin-top:2px">📋 ${innerSummary}</div>`:''}
             ${outerSummary?`<div class="ss" style="color:var(--s);margin-top:1px">📦 ${outerSummary}</div>`:''}
           </div>
@@ -430,6 +434,9 @@ function renderSettings(){
     // 소스 선택지 업데이트 (신규 추가 폼)
     const npSc = document.getElementById('np_sc');
     if(npSc) npSc.innerHTML='<option value="">없음</option>'+(L.sauces||[]).map(s=>`<option>${s.name}</option>`).join('');
+    // 부재료 선택지 업데이트 (신규 추가 폼)
+    const npSub = document.getElementById('np_sub');
+    if(npSub) npSub.innerHTML='<option value="">없음</option>'+(L.submats||[]).map(s=>`<option>${s}</option>`).join('');
   }
 
   // 소스 목록
@@ -488,6 +495,10 @@ function startEditProd(i){
   document.getElementById('np_cp').value = p.capa||'';
   const npSc = document.getElementById('np_sc');
   if(npSc) npSc.value = p.sauce||'';
+  const npSub = document.getElementById('np_sub');
+  if(npSub) npSub.value = p.subName||'';
+  const npNm = document.getElementById('np_nomeat');
+  if(npNm){ npNm.checked = !!p.noMeat; if(typeof onNpNoMeatToggle==='function') onNpNoMeatToggle(); }
   fillRecipeForm(p.recipe||null);
   const addBtn = document.querySelector('#p-settings .btn.bs[onclick="addProd()"]');
   if(addBtn){ addBtn.textContent='✔ 수정 저장'; addBtn.style.background='var(--w)'; }
