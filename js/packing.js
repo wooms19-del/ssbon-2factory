@@ -593,7 +593,15 @@ function onPkRowProd(idx){
   const p = L.products.find(x=>x.name===row.querySelector('.pk-row-prod').value);
   const si = document.getElementById('pkRowSi_'+idx);
   if(!si) return;
-  if(p){ si.textContent=`원료육 ${p.kgea}kg/EA · Capa ${p.capa}EA · 소스 ${p.sauce||'-'}`; si.style.color='var(--p)'; }
+  if(p){
+    const subInfo = p.subName ? ` · 부재료 ${p.subName}${p.subKgea?' '+p.subKgea+'kg/EA':''}` : '';
+    if(p.noMeat){
+      si.textContent = `Capa ${p.capa}EA · 소스 ${p.sauce||'-'}${subInfo}`;
+    } else {
+      si.textContent = `원료육 ${p.kgea}kg/EA · Capa ${p.capa}EA · 소스 ${p.sauce||'-'}${subInfo}`;
+    }
+    si.style.color='var(--p)';
+  }
   else { si.textContent='제품 선택 후 원료육 자동 계산'; si.style.color='var(--g5)'; }
 
   // noMeat 제품(메추리알 등): 와건/카트 영역 + 원육 타입 영역 숨김
