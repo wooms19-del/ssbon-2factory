@@ -133,6 +133,8 @@
       + '#mpTbl td.product{font-weight:500;color:#1e40af}'
       + '#mpTbl td.dateCell{font-weight:600;color:#1e293b}'
       + '#mpTbl td.dayNoCell{color:#6b7280;font-size:11.5px}'
+      // 빈 dateCell·dayNoCell (그룹 두 번째 행)의 위쪽 border 제거 → 시각적 그룹화
+      + '#mpTbl td.dateCell:empty,#mpTbl td.dayNoCell:empty{border-top:1px dashed #f1f5f9}'
       + '#mpTbl td.eaSrc{font-size:10px;color:#9ca3af;margin-left:3px;font-weight:400}'
       + '#mpCmp{margin:14px;padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}'
       + '#mpCmp h3{margin:0 0 10px 0;font-size:14px;color:#1e293b;font-weight:700}'
@@ -805,20 +807,19 @@
     var bodyHtml = calcRows.map(function(r){
       return '<tr>'+visibleCols.map(function(c){
         var v = r[c[0]];
-        // dayNo, date는 그날 첫 행에만 rowspan으로 출력 (병합)
+        // dayNo, date: 모든 행마다 td 출력. 두 번째 부위 행은 빈 td (sticky 정렬 위해)
         if(c[0]==='dayNo'){
           if(r.dateRowIdx===0){
-            var cnt = dateCntMap[r.date] || 1;
-            return '<td class="dayNoCell"'+(cnt>1?' rowspan="'+cnt+'"':'')+'>'+(v||'')+'</td>';
+            return '<td class="dayNoCell">'+(v||'')+'</td>';
           }
-          return '';  // 두 번째 행부터는 셀 생략 (위 rowspan이 차지)
+          // 두 번째 행: 빈 td (위 셀의 border-bottom 없애서 시각적 그룹화)
+          return '<td class="dayNoCell" style="border-top:none"></td>';
         }
         if(c[0]==='date'){
           if(r.dateRowIdx===0){
-            var cnt2 = dateCntMap[r.date] || 1;
-            return '<td class="dateCell"'+(cnt2>1?' rowspan="'+cnt2+'"':'')+'>'+(v||'').slice(5)+'</td>';
+            return '<td class="dateCell">'+(v||'').slice(5)+'</td>';
           }
-          return '';
+          return '<td class="dateCell" style="border-top:none"></td>';
         }
         if(c[0]==='product') {
           // 부위별 색상 팔레트
