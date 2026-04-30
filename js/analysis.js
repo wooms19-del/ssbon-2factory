@@ -1854,6 +1854,14 @@ function renderPackingChart(dayEntries, opMap, ym) {
     titleEl.textContent = '운영팀 ' + parseInt(tm) + '월 내포장 수량';
   }
 
+  // 부제목 (모드별 안내 문구)
+  const subEl = document.getElementById('mo_packing_subtitle');
+  if (subEl) {
+    if (mode === 'ea')          subEl.textContent = '막대 = 생산 봉수(EA)';
+    else if (mode === 'weight') subEl.textContent = '막대 = 생산 무게(kg)';
+    else                        subEl.textContent = '막대 = 생산 무게(kg) · 막대 위 = 봉수(EA) / 무게(kg)';
+  }
+
 
   const topNumPlugin = {
     id: 'pkTopNum',
@@ -1864,18 +1872,18 @@ function renderPackingChart(dayEntries, opMap, ym) {
         const r = rows[i];
         ctx.save();
         ctx.textAlign = 'center';
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#333';
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#222';
         if (subLabelFn) {
           // 상세 모드: 봉수(검정 굵게) + kg(회색)
-          ctx.font = 'bold 9px sans-serif';
-          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 14);
-          ctx.font = '9px sans-serif';
-          ctx.fillStyle = '#888';
-          ctx.fillText(subLabelFn(r), bar.x, bar.y - 3);
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 16);
+          ctx.font = '10px sans-serif';
+          ctx.fillStyle = '#666';
+          ctx.fillText(subLabelFn(r), bar.x, bar.y - 4);
         } else {
           // EA 또는 중량 단일 라벨
-          ctx.font = 'bold 9px sans-serif';
-          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 4);
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 5);
         }
         ctx.restore();
       });
