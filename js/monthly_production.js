@@ -978,11 +978,27 @@
             thisV = v/dc;
             prevV = p/pdc;
           }
-          if(!prevV) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
-          var pct = (thisV - prevV)/prevV*100;
-          var color = pct>0?'#15803d':(pct<0?'#b91c1c':'#475569');
-          var arrow = pct>0?'▲':(pct<0?'▼':'');
-          return '<td class="'+_grpCls(c, _i_+3)+'" style="color:'+color+'">'+arrow+' '+Math.abs(pct).toFixed(1)+'%</td>';
+          if(prevV==null || (!isRatio(c) && !prevV)) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+
+          // 수율(yield)은 퍼센트포인트(%p) 차이, 그 외는 변화율(%)
+          var isYield = (c[1]==='yield');
+          var color, arrow, label;
+          if(isYield){
+            // %p 절대차 (thisV, prevV는 0~1 비율 → ×100)
+            var pp = (thisV - prevV) * 100;
+            if(Math.abs(pp) < 0.05) return '<td class="'+_grpCls(c, _i_+3)+'" style="color:#475569">— 0.0%p</td>';
+            color = pp>0?'#15803d':'#b91c1c';
+            arrow = pp>0?'▲':'▼';
+            label = arrow+' '+Math.abs(pp).toFixed(1)+'%p';
+          } else {
+            if(!prevV) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+            var pct = (thisV - prevV)/prevV*100;
+            if(Math.abs(pct) < 0.05) return '<td class="'+_grpCls(c, _i_+3)+'" style="color:#475569">— 0.0%</td>';
+            color = pct>0?'#15803d':'#b91c1c';
+            arrow = pct>0?'▲':'▼';
+            label = arrow+' '+Math.abs(pct).toFixed(1)+'%';
+          }
+          return '<td class="'+_grpCls(c, _i_+3)+'" style="color:'+color+'">'+label+'</td>';
         }).join('')
       + '</tr>';
 
