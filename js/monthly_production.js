@@ -586,11 +586,28 @@
       return v%1===0 ? v.toLocaleString() : v.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:2});
     }
 
+    // 같은 날짜 행 수 계산 (병합용)
+    var dateCntMap = {};
+    calcRows.forEach(function(r){ dateCntMap[r.date] = (dateCntMap[r.date]||0)+1; });
+
     var bodyHtml = calcRows.map(function(r){
       return '<tr>'+visibleCols.map(function(c){
         var v = r[c[0]];
-        if(c[0]==='date')    return '<td class="dateCell">'+(v||'').slice(5)+'</td>';
-        if(c[0]==='dayNo')   return '<td class="dayNoCell">'+(v||'')+'</td>';
+        // dayNo, date는 그날 첫 행에만 rowspan으로 출력 (병합)
+        if(c[0]==='dayNo'){
+          if(r.dateRowIdx===0){
+            var cnt = dateCntMap[r.date] || 1;
+            return '<td class="dayNoCell"'+(cnt>1?' rowspan="'+cnt+'"':'')+'>'+(v||'')+'</td>';
+          }
+          return '';  // 두 번째 행부터는 셀 생략 (위 rowspan이 차지)
+        }
+        if(c[0]==='date'){
+          if(r.dateRowIdx===0){
+            var cnt2 = dateCntMap[r.date] || 1;
+            return '<td class="dateCell"'+(cnt2>1?' rowspan="'+cnt2+'"':'')+'>'+(v||'').slice(5)+'</td>';
+          }
+          return '';
+        }
         if(c[0]==='product') return '<td class="product" style="text-align:center">'+(v||'')+'</td>';
         if(c[0]==='pkEa') {
           var s = v ? Math.round(v).toLocaleString() : '-';
