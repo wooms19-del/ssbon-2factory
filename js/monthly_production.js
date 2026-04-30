@@ -397,24 +397,28 @@
       var oe = opMap[k] || 0;
       p.eaDisp = oe>0 ? oe : p.ea;
       p.eaSrc  = oe>0 ? '외' : '내';
-      // 1) packing 자체의 type (가장 많이 나온 type)
+      // 1) packing 자체의 type (가장 많이 나온 type 우선)
+      var typeList = [];
       var bestT = null, bestCnt = 0;
       Object.keys(p.types).forEach(function(t){
         if(p.types[t]>bestCnt){ bestCnt = p.types[t]; bestT = t; }
       });
-      // 2) packing에 type 없으면 → 그날 thawing 부위 단일이면 자동 추론
-      if(!bestT){
+      if(bestT){
+        typeList = [bestT];
+      } else {
+        // 2) packing에 type 없으면 → 그날 thawing 부위들 자동 추론
         var thTypes = {};
         Object.keys(thByDateType).forEach(function(thk){
           var pp=thk.split('|');
-          if(pp[0]===p.date && pp[1]!=='_'){
+          if(pp[0]===p.date && pp[1]!=='_' && thByDateType[thk]>0){
             thTypes[pp[1]] = (thTypes[pp[1]]||0) + thByDateType[thk];
           }
         });
-        var thKeys = Object.keys(thTypes);
-        if(thKeys.length===1) bestT = thKeys[0];
+        // kg 큰 순으로 정렬
+        typeList = Object.keys(thTypes).sort(function(a,b){return thTypes[b]-thTypes[a];});
       }
-      p.type = bestT;
+      p.type = typeList[0] || null;       // 단일 (분배 로직용)
+      p.typeList = typeList;               // 배열 (표시용)
     });
 
     // 각 packing 행에 부위 매칭된 데이터 할당 (필요시 비율 분배)
@@ -577,6 +581,7 @@
         kgea: kgea,
         kgTot: kgTot,
         type: p.type || (noMeat ? '무육' : ''),
+        typeList: p.typeList || [],
         noMeat: noMeat
       });
     });
@@ -780,13 +785,25 @@
           return '';
         }
         if(c[0]==='product') {
-          var typeBadge = '';
+          // 부위별 색상 팔레트
+          var typeColors = {
+            '설도':   {bg:'#dbeafe', fg:'#1e40af'},  // 파랑
+            '우둔':   {bg:'#ede9fe', fg:'#6d28d9'},  // 보라
+            '홍두깨': {bg:'#ffedd5', fg:'#c2410c'},  // 주황
+            '무육':   {bg:'#fee2e2', fg:'#b91c1c'}   // 빨강
+          };
+          var typeBadges = '';
           if(r.noMeat){
-            typeBadge = '<span style="display:inline-block;background:#fee2e2;color:#b91c1c;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">무육</span>';
-          } else if(r.type){
-            typeBadge = '<span style="display:inline-block;background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">'+r.type+'</span>';
+            var c0 = typeColors['무육'];
+            typeBadges = '<span style="display:inline-block;background:'+c0.bg+';color:'+c0.fg+';border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:4px">무육</span>';
+          } else {
+            var list = (r.typeList && r.typeList.length) ? r.typeList : (r.type ? [r.type] : []);
+            typeBadges = list.map(function(t){
+              var col = typeColors[t] || {bg:'#e5e7eb', fg:'#374151'};
+              return '<span style="display:inline-block;background:'+col.bg+';color:'+col.fg+';border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:4px">'+t+'</span>';
+            }).join('');
           }
-          return '<td class="product" style="text-align:center">'+(v||'')+typeBadge+'</td>';
+          return '<td class="product" style="text-align:center">'+(v||'')+typeBadges+'</td>';
         }
         if(c[0]==='pkEa') {
           var s = v ? Math.round(v).toLocaleString() : '-';
