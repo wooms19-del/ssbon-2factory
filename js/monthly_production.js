@@ -302,19 +302,89 @@
       opMap[k] = (opMap[k]||0) + (parseInt(r.outerEa,10)||0);
     });
 
-    // packing 그룹핑 (인시 방식)
+    // 부위(type) 추출 헬퍼
+    function recType(r){ return (r.type||'').trim(); }
+
+    // shredding의 부위는 같은 날 cooking의 wagonOut과 매칭해서 결정
+    function buildShTypeMap(shArr, ckArr){
+      // 일자별 wagon→type 맵 (같은 wagon 번호가 다른 날 다른 부위로 쓰일 수 있어 일자별로 분리)
+      var dayWagonType = {};
+      ckArr.forEach(function(c){
+        var t = recType(c);
+        if(!t) return;
+        var d = String(c.date||'').slice(0,10);
+        if(!dayWagonType[d]) dayWagonType[d] = {};
+        (c.wagonOut||'').split(',').map(function(w){return w.trim();}).filter(Boolean).forEach(function(w){
+          dayWagonType[d][w] = t;
+        });
+      });
+      return shArr.map(function(s){
+        var t = recType(s);
+        if(!t){
+          var sd = String(s.date||'').slice(0,10);
+          var dayMap = dayWagonType[sd] || {};
+          var wIns = (s.wagonIn||'').split(',').map(function(w){return w.trim();}).filter(Boolean);
+          for(var i=0;i<wIns.length;i++){
+            if(dayMap[wIns[i]]){ t = dayMap[wIns[i]]; break; }
+          }
+        }
+        return Object.assign({}, s, {_type: t});
+      });
+    }
+
+    // 일자별, 부위별 합산 (인시 방식)
+    function sumByDateType(arr, getType){
+      // 키: date|type → {kg, hours, personHours, workers}
+      var m = {};
+      arr.forEach(function(r){
+        var dt = String(r.date||'').slice(0,10);
+        if(!dt) return;
+        var t = (getType ? getType(r) : recType(r)) || '_';
+        var k = dt+'|'+t;
+        if(!m[k]) m[k] = {kg:0,hours:0,personHours:0,workers:0,date:dt,type:t};
+        var h = _hoursFromSE(r.start, r.end);
+        var w = _num(r.workers);
+        m[k].kg += _num(r.kg);
+        m[k].hours += h;
+        m[k].personHours += h*w;
+      });
+      Object.keys(m).forEach(function(k){
+        m[k].workers = m[k].hours>0 ? m[k].personHours/m[k].hours : 0;
+      });
+      return m;
+    }
+
+    // thawing은 일자별·부위별 totalKg
+    var thByDateType = {};
+    thClean.forEach(function(r){
+      var dt = String(r.date||'').slice(0,10);
+      var t = recType(r) || '_';
+      if(!dt) return;
+      var k = dt+'|'+t;
+      thByDateType[k] = (thByDateType[k]||0) + _num(r.totalKg);
+    });
+
+    var ppByDT = sumByDateType(ppClean);
+    var ckByDT = sumByDateType(ckClean);
+    var shTagged = buildShTypeMap(shClean, ckClean);
+    var shByDT = sumByDateType(shTagged, function(r){ return r._type; });
+
+    // packing 그룹핑 (인시 방식) — type 정보 보존
     var byDP = {};
     pkClean.forEach(function(r){
       var dt = String(r.date||'').slice(0,10);
       var prod = r.product||'';
       if(!dt||!prod) return;
       var k = dt+'|'+prod;
-      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0};
+      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0, types:{}};
       byDP[k].ea += _num(r.ea);
       var h = _hoursFromSE(r.start, r.end);
       var w = _num(r.workers);
       byDP[k].hours += h;
       byDP[k].personHours += h*w;
+      // packing의 type 누적 (가장 많이 나온 type)
+      var t = recType(r);
+      if(t) byDP[k].types[t] = (byDP[k].types[t]||0) + _num(r.ea);
     });
     Object.keys(byDP).forEach(function(k){
       var p = byDP[k];
@@ -322,41 +392,113 @@
       var oe = opMap[k] || 0;
       p.eaDisp = oe>0 ? oe : p.ea;
       p.eaSrc  = oe>0 ? '외' : '내';
+      // 대표 부위: 가장 많이 등장한 type, 없으면 null
+      var bestT = null, bestCnt = 0;
+      Object.keys(p.types).forEach(function(t){
+        if(p.types[t]>bestCnt){ bestCnt = p.types[t]; bestT = t; }
+      });
+      p.type = bestT;
     });
 
-    // 일자별 원육 (getThKgByPP_)
-    var rmByDate = {};
-    var uniqueDates = Array.from(new Set(Object.values(byDP).map(function(r){return r.date;}))).sort();
-    uniqueDates.forEach(function(d){
-      var ppDay = ppClean.filter(function(r){return String(r.date||'').slice(0,10)===d;});
-      if(typeof getThKgByPP_==='function'){
-        rmByDate[d] = getThKgByPP_(ppDay, thClean, d);
-      } else {
-        rmByDate[d] = thClean.filter(function(r){return String(r.date||'').slice(0,10)===d;}).reduce(function(s,r){return s+_num(r.totalKg);},0);
-      }
-    });
-
-    // 일자별 pp/ck/sh
-    function sumByDate(arr){
-      var m={};
-      arr.forEach(function(r){
-        var dt = String(r.date||'').slice(0,10);
-        if(!dt) return;
-        if(!m[dt]) m[dt]={kg:0,hours:0,personHours:0,workers:0};
-        var h = _hoursFromSE(r.start, r.end);
-        var w = _num(r.workers);
-        m[dt].kg += _num(r.kg);
-        m[dt].hours += h;
-        m[dt].personHours += h*w;
-      });
-      Object.keys(m).forEach(function(d){
-        m[d].workers = m[d].hours>0 ? m[d].personHours/m[d].hours : 0;
-      });
-      return m;
+    // 각 packing 행에 부위 매칭된 데이터 할당 (필요시 비율 분배)
+    // 같은 (date,type) 그룹의 packing들 사이에서 EA*kgea 비율로 분배
+    function _allocByRatio(packs, totalKg){
+      // packs: [{p, kgea}], totalKg: 분배할 양
+      var totalMeat = packs.reduce(function(s,x){return s + x.p.eaDisp * (x.kgea||1);}, 0);
+      if(!totalMeat) return packs.map(function(){return 0;});
+      return packs.map(function(x){ return totalKg * (x.p.eaDisp * (x.kgea||1) / totalMeat); });
     }
-    var ppByDate = sumByDate(ppClean);
-    var ckByDate = sumByDate(ckClean);
-    var shByDate = sumByDate(shClean);
+
+    // 일자별 그룹핑
+    var byDate = {};
+    Object.keys(byDP).forEach(function(k){
+      var p = byDP[k];
+      if(!byDate[p.date]) byDate[p.date] = [];
+      byDate[p.date].push(p);
+    });
+
+    var allocMap = {};   // key 'date|product' → {rmKg, ppKg, ckKg, shKg, ppHours, ppPH, ppWorkers, ...}
+    Object.keys(byDate).forEach(function(d){
+      var packs = byDate[d];
+      // 같은 date의 모든 type 후보 (packing의 type + 데이터의 type)
+      var allTypes = new Set();
+      packs.forEach(function(p){ if(p.type) allTypes.add(p.type); });
+      Object.keys(thByDateType).forEach(function(k){
+        var pp=k.split('|'); if(pp[0]===d && pp[1]!=='_') allTypes.add(pp[1]);
+      });
+
+      // 각 부위(type)의 일자별 데이터 (없으면 _ 키)
+      function dataByType(t){
+        return {
+          rmKg: thByDateType[d+'|'+t] || 0,
+          pp:   ppByDT[d+'|'+t] || {kg:0,hours:0,personHours:0,workers:0},
+          ck:   ckByDT[d+'|'+t] || {kg:0,hours:0,personHours:0,workers:0},
+          sh:   shByDT[d+'|'+t] || {kg:0,hours:0,personHours:0,workers:0}
+        };
+      }
+      // 부위 정보가 전혀 없는 경우 (type='_') → 그날 모든 데이터
+      function dataAll(){
+        var rm=0, pp={kg:0,hours:0,personHours:0,workers:0}, ck={kg:0,hours:0,personHours:0,workers:0}, sh={kg:0,hours:0,personHours:0,workers:0};
+        Object.keys(thByDateType).forEach(function(k){
+          if(k.indexOf(d+'|')===0) rm += thByDateType[k];
+        });
+        function add(target, src){
+          target.kg+=src.kg; target.hours+=src.hours; target.personHours+=src.personHours;
+        }
+        Object.keys(ppByDT).forEach(function(k){ if(k.indexOf(d+'|')===0) add(pp, ppByDT[k]); });
+        Object.keys(ckByDT).forEach(function(k){ if(k.indexOf(d+'|')===0) add(ck, ckByDT[k]); });
+        Object.keys(shByDT).forEach(function(k){ if(k.indexOf(d+'|')===0) add(sh, shByDT[k]); });
+        pp.workers = pp.hours>0 ? pp.personHours/pp.hours : 0;
+        ck.workers = ck.hours>0 ? ck.personHours/ck.hours : 0;
+        sh.workers = sh.hours>0 ? sh.personHours/sh.hours : 0;
+        return {rmKg:rm, pp:pp, ck:ck, sh:sh};
+      }
+
+      // packing들을 부위별로 그룹핑
+      var byType = {};   // type or '_'
+      packs.forEach(function(p){
+        var t = p.type || '_';
+        if(!byType[t]) byType[t] = [];
+        byType[t].push(p);
+      });
+
+      Object.keys(byType).forEach(function(t){
+        var group = byType[t];
+        // 부위 데이터
+        var src = (t==='_') ? dataAll() : dataByType(t);
+        // 부위 데이터가 비어있으면 (type 명시했으나 그 부위 thawing 0) → 그날 전체 사용
+        if(t!=='_' && src.rmKg===0 && src.pp.kg===0){
+          src = dataAll();
+        }
+        // 같은 부위에 여러 packing이면 EA*kgea 비율로 분배
+        var packsK = group.map(function(p){ return {p:p, kgea: _prodKgea(p.product)}; });
+        var totalMeat = packsK.reduce(function(s,x){return s + x.p.eaDisp * (x.kgea||0.05);}, 0);
+
+        group.forEach(function(p){
+          var kgea = _prodKgea(p.product);
+          var ratio;
+          if(group.length===1) ratio = 1;
+          else if(totalMeat>0) ratio = (p.eaDisp * (kgea||0.05)) / totalMeat;
+          else ratio = 1/group.length;
+
+          allocMap[d+'|'+p.product] = {
+            rmKg: src.rmKg * ratio,
+            ppKg: src.pp.kg * ratio,
+            ppHours: src.pp.hours * ratio,
+            ppPersonHours: src.pp.personHours * ratio,
+            ppWorkers: src.pp.workers,    // 평균은 비율 무관
+            ckKg: src.ck.kg * ratio,
+            ckHours: src.ck.hours * ratio,
+            ckPersonHours: src.ck.personHours * ratio,
+            ckWorkers: src.ck.workers,
+            shKg: src.sh.kg * ratio,
+            shHours: src.sh.hours * ratio,
+            shPersonHours: src.sh.personHours * ratio,
+            shWorkers: src.sh.workers
+          };
+        });
+      });
+    });
 
     var keys = Object.keys(byDP).sort();
     var dates = Array.from(new Set(keys.map(function(k){return k.split('|')[0];}))).sort();
@@ -374,10 +516,12 @@
       var idx = prodCnt[dt];
       prodCnt[dt] += 1;
 
-      var ppr = ppByDate[dt] || {kg:0,hours:0,personHours:0,workers:0};
-      var ckr = ckByDate[dt] || {kg:0,hours:0,personHours:0,workers:0};
-      var shr = shByDate[dt] || {kg:0,hours:0,personHours:0,workers:0};
-      var rmKg = rmByDate[dt] || 0;
+      // 부위별로 분배된 값 사용
+      var alloc = allocMap[dt+'|'+p.product] || {
+        rmKg:0, ppKg:0, ppHours:0, ppPersonHours:0, ppWorkers:0,
+        ckKg:0, ckHours:0, ckPersonHours:0, ckWorkers:0,
+        shKg:0, shHours:0, shPersonHours:0, shWorkers:0
+      };
       var kgea = _prodKgea(p.product);
       var kgTot = _prodKgUnit(p.product);
 
@@ -386,19 +530,19 @@
         dayNo: dayNo[dt],
         dateRowIdx: idx,
         product: p.product,
-        rmKg: _r2(rmKg),
-        ppKg: _r2(ppr.kg),
-        ppHours: _r2(ppr.hours),
-        ppWorkers: r1(ppr.workers),
-        ppPersonHours: _r2(ppr.personHours),
-        ckKg: _r2(ckr.kg),
-        ckHours: _r2(ckr.hours),
-        ckWorkers: r1(ckr.workers),
-        ckPersonHours: _r2(ckr.personHours),
-        shKg: _r2(shr.kg),
-        shHours: _r2(shr.hours),
-        shWorkers: r1(shr.workers),
-        shPersonHours: _r2(shr.personHours),
+        rmKg: _r2(alloc.rmKg),
+        ppKg: _r2(alloc.ppKg),
+        ppHours: _r2(alloc.ppHours),
+        ppWorkers: r1(alloc.ppWorkers),
+        ppPersonHours: _r2(alloc.ppPersonHours),
+        ckKg: _r2(alloc.ckKg),
+        ckHours: _r2(alloc.ckHours),
+        ckWorkers: r1(alloc.ckWorkers),
+        ckPersonHours: _r2(alloc.ckPersonHours),
+        shKg: _r2(alloc.shKg),
+        shHours: _r2(alloc.shHours),
+        shWorkers: r1(alloc.shWorkers),
+        shPersonHours: _r2(alloc.shPersonHours),
         pkEa: p.eaDisp,
         pkEaSrc: p.eaSrc,
         pkEaInner: p.ea,
@@ -406,7 +550,8 @@
         pkWorkers: r1(p.workers),
         pkPersonHours: _r2(p.personHours),
         kgea: kgea,
-        kgTot: kgTot
+        kgTot: kgTot,
+        type: p.type || ''   // 부위 정보 (없으면 빈 문자열)
       });
     });
 
@@ -608,7 +753,10 @@
           }
           return '';
         }
-        if(c[0]==='product') return '<td class="product" style="text-align:center">'+(v||'')+'</td>';
+        if(c[0]==='product') {
+          var typeBadge = r.type ? '<span style="display:inline-block;background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">'+r.type+'</span>' : '';
+          return '<td class="product" style="text-align:center">'+(v||'')+typeBadge+'</td>';
+        }
         if(c[0]==='pkEa') {
           var s = v ? Math.round(v).toLocaleString() : '-';
           return '<td>'+s+'<span class="eaSrc">('+(r.pkEaSrc||'')+')</span></td>';
