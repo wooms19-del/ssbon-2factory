@@ -905,9 +905,37 @@
     }
     function isRatio(c){ return c[1]==='yield'||c[1]==='prod'; }
 
+    // 합계 행에서 비율 재계산 (행별 평균이 아니라 합계끼리 나눔 — 가중평균)
+    function _calcRatio(c, agg){
+      if(!agg) return 0;
+      var rm = agg.rmKg||0;
+      var ppKg = agg.ppKg||0, ckKg = agg.ckKg||0, shKg = agg.shKg||0;
+      var meatKg = agg.meatKg||0;
+      var ppT = agg.ppTotal||0, ckT = agg.ckTotal||0, shT = agg.shTotal||0, pkT = agg.pkTotal||0;
+      switch(c[0]){
+        case 'prodPp':  return rm&&ppT?rm/ppT:0;
+        case 'prodCk':  return rm&&ckT?rm/ckT:0;
+        case 'prodSh':  return rm&&shT?rm/shT:0;
+        case 'prodPk':  return rm&&pkT?rm/pkT:0;
+        case 'prodAll': return rm&&(ppT+ckT+shT+pkT)?rm/(ppT+ckT+shT+pkT):0;
+        case 'yieldRmPp': return rm?ppKg/rm:0;
+        case 'yieldRmCk': return rm?ckKg/rm:0;
+        case 'yieldRmSh': return rm?shKg/rm:0;
+        case 'yieldRmPk': return rm?meatKg/rm:0;
+        case 'yieldPp': return rm?ppKg/rm:0;
+        case 'yieldCk': return ppKg?ckKg/ppKg:0;
+        case 'yieldSh': return ckKg?shKg/ckKg:0;
+        case 'yieldPk': return shKg?meatKg/shKg:0;
+      }
+      return 0;
+    }
+
     var sumHtml = '<tr class="sumRow"><td colspan="3" class="sum-label">합 계</td>'
       + visibleCols.slice(3).map(function(c,_i_){
-          if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+          if(isRatio(c)){
+            var v = _calcRatio(c, sum);
+            return '<td class="'+_grpCls(c, _i_+3)+'">'+(v>0?fmtNum(v, c):'—')+'</td>';
+          }
           return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(sum[c[0]], c)+'</td>';
         }).join('')
       + '</tr>';
@@ -915,28 +943,41 @@
     var dc = sum.dayCount||1;
     var avgHtml = '<tr class="avgRow"><td colspan="3" class="sum-label">일 평 균</td>'
       + visibleCols.slice(3).map(function(c,_i_){
-          var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
-          if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v, c)+'</td>';
-          return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v/dc, c)+'</td>';
+          if(isRatio(c)){
+            // 비율은 합계끼리 나누는 게 정확 (가중평균)
+            var v = _calcRatio(c, sum);
+            return '<td class="'+_grpCls(c, _i_+3)+'">'+(v>0?fmtNum(v, c):'—')+'</td>';
+          }
+          var v2 = sum[c[0]]; if(v2==null||typeof v2!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+          return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v2/dc, c)+'</td>';
         }).join('')
       + '</tr>';
 
     var pdc = prevSum.dayCount||1;
     var prevHtml = '<tr class="prevRow"><td colspan="3" class="sum-label">전월 평균</td>'
       + visibleCols.slice(3).map(function(c,_i_){
-          var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
-          if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v, c)+'</td>';
-          return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v/pdc, c)+'</td>';
+          if(isRatio(c)){
+            var v = _calcRatio(c, prevSum);
+            return '<td class="'+_grpCls(c, _i_+3)+'">'+(v>0?fmtNum(v, c):'—')+'</td>';
+          }
+          var v2 = prevSum[c[0]]; if(v2==null||typeof v2!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+          return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v2/pdc, c)+'</td>';
         }).join('')
       + '</tr>';
 
     var diffHtml = '<tr class="diffRow"><td colspan="3" class="sum-label">전월 대비 증감</td>'
       + visibleCols.slice(3).map(function(c,_i_){
-          var v = sum[c[0]]||0;
-          var p = prevSum[c[0]]||0;
-          if(!p) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
-          var thisV = isRatio(c) ? v : v/dc;
-          var prevV = isRatio(c) ? p : p/pdc;
+          var thisV, prevV;
+          if(isRatio(c)){
+            thisV = _calcRatio(c, sum);
+            prevV = _calcRatio(c, prevSum);
+          } else {
+            var v = sum[c[0]]||0;
+            var p = prevSum[c[0]]||0;
+            if(!p) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+            thisV = v/dc;
+            prevV = p/pdc;
+          }
           if(!prevV) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
           var pct = (thisV - prevV)/prevV*100;
           var color = pct>0?'#15803d':(pct<0?'#b91c1c':'#475569');
