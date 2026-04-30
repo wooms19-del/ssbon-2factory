@@ -48,7 +48,7 @@
     <button class="mb" id="schHdBtn" onclick="setModeSchedule()" style="margin-right:4px">📅 일정표</button><button class="mb" id="attHdBtn" onclick="setModeAtt()" style="margin-right:10px">출퇴근</button>
     <button class="mb on" id="modeI" onclick="setMode('i')">입력</button>
     <button class="mb" id="modeD" onclick="setMode('d')">분석</button>
-    <button class="mb" id="modeP" onclick="setModePerf()">실적관리</button>
+    <button class="mb" id="modeP" onclick="showPerf()">실적관리</button>
   </div>
 </div>
 <!-- 입력 탭 -->
@@ -77,12 +77,21 @@
   </div>
 </div>
 
+<!-- 실적관리 서브탭 -->
+<div class="tnav hid" id="pnav">
+  <div class="tlist">
+    <div class="ti on" onclick="showPerfSub('daily')">일별실적</div>
+    <div class="ti" onclick="showPerfSub('monthly')">월단위생산량</div>
+  </div>
+</div>
+
 <div class="main" id="mscroll">
 <div class="inner">
 
 <!-- ===== 해동기 (바코드 스캔) ===== -->
 <div class="pg" id="p-schedule" style="padding:0"></div>
 <div class="pg" id="p-performance" style="padding:0"></div>
+<div class="pg" id="p-monthly-prod" style="padding:0"></div>
   <div class="pg on" id="p-barcode">
   <div class="card">
     <div class="ct">해동기 투입 <span class="bdg" id="bcCnt">0건</span></div>
@@ -903,5 +912,6 @@
 <script src="js/timepicker.js?v=2"></script>
 <script src="js/globals.js?v=4"></script>
 <script src="js/performance.js?v=10"></script>
+<script src="js/monthly_production.js?v=1"></script>
 </body>
 </html>
