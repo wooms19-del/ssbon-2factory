@@ -989,77 +989,123 @@
     var y=ym.slice(0,4), mIdx=parseInt(ym.slice(5),10);
     var sheetName = y+'년 '+String(mIdx).padStart(2,'0')+'월';
 
-    var aoa = [];
-    aoa.push([y+'년 '+mIdx+'월 운영팀 월단위 생산량']);
-    aoa.push([]); aoa.push([]);
-    aoa.push(['','생산\n일수','생산일자','제품명','원육 사용량\n(KG)',
-              '전처리(KG)','전처리\n작업시간','전처리\n작업인원','전처리\n총 작업시간',
-              '자숙(KG)','자숙\n작업시간','자숙\n작업인원','자숙\n총 작업시간',
-              '파쇄(KG)','파쇄\n작업시간','파쇄\n작업인원','파쇄\n총 작업시간',
-              '내포장(EA)','내포장\n작업시간','내포장\n작업인원','내포장\n총 작업시간',
-              '완제품 고기\n중량(KG)','완제품 중량\n(KG)',
-              '생산성','','','','','원료육수율','','','','공정수율','','','']);
-    aoa.push(['','','','','','','','','','','','','','','','','','','','','','','',
-              '전처리(KG)','자숙(KG)','파쇄(KG)','포장(KG)','전체 생산성',
-              '전처리','자숙','파쇄','포장','전처리','자숙','파쇄','포장']);
+    // 정렬 (화면과 동일)
+    rows.sort(function(a,b){
+      if(a.date!==b.date) return a.date<b.date?-1:1;
+      return (a.dateRowIdx||0) - (b.dateRowIdx||0);
+    });
 
-    var startRow = 6;
-    rows.forEach(function(r,i){
-      var rowN = startRow+i;
-      var isFirst = (r.dateRowIdx===0 || r.dateRowIdx==null);
-      var meatPerEa = r.kgea||0;
-      var totalPerEa = r.kgTot||0;
+    var aoa = [];
+
+    // 1행: 메인 제목
+    aoa.push([y+'년 '+mIdx+'월 운영팀 월단위 생산량']);
+    // 2행: 헤더
+    aoa.push([
+      '생산\n일수','생산일자','제품명','원육 사용량\n(KG)',
+      '전처리\n(KG)','전처리\n작업시간','전처리\n작업인원','전처리\n총작업(인시)',
+      '자숙\n(KG)','자숙\n작업시간','자숙\n작업인원','자숙\n총작업(인시)',
+      '파쇄\n(KG)','파쇄\n작업시간','파쇄\n작업인원','파쇄\n총작업(인시)',
+      '내포장\n(EA)','내포장\n작업시간','내포장\n작업인원','내포장\n총작업(인시)',
+      '완제품 고기\n중량(KG)','완제품 중량\n(KG)',
+      '생산성\n전처리','생산성\n자숙','생산성\n파쇄','생산성\n포장','생산성\n전체',
+      '원료육수율\n전처리','원료육수율\n자숙','원료육수율\n파쇄','원료육수율\n포장',
+      '공정수율\n전처리','공정수율\n자숙','공정수율\n파쇄','공정수율\n포장'
+    ]);
+
+    var startDataRow = 3;  // 1-indexed: 제목 1행 + 헤더 2행, 데이터는 3행부터
+
+    // 데이터 행
+    rows.forEach(function(r, i){
+      var rowN = startDataRow + i;
+      var isFirst = (r.dateRowIdx===0);
+      var meatPerEa = r.kgea || 0;
+      var totalPerEa = r.kgTot || 0;
+
+      // 제품명 + 부위 표시
+      var prodLabel = r.product;
+      if(r.noMeat){
+        prodLabel += ' [무육]';
+      } else if(r.typeList && r.typeList.length){
+        prodLabel += ' [' + r.typeList.join(',') + ']';
+      }
+
       aoa.push([
-        i+1, r.dayNo, r.date, r.product,
-        isFirst ? (r.rmKg||'') : '',
-        isFirst ? (r.ppKg||'') : '',
-        isFirst ? (r.ppHours||'') : '',
-        isFirst ? (r.ppWorkers||'') : '',
-        isFirst ? {f:'IFERROR(G'+rowN+'*H'+rowN+',"")'} : '',
-        isFirst ? (r.ckKg||'') : '',
-        isFirst ? (r.ckHours||'') : '',
-        isFirst ? (r.ckWorkers||'') : '',
-        isFirst ? {f:'IFERROR(K'+rowN+'*L'+rowN+',"")'} : '',
-        isFirst ? (r.shKg||'') : '',
-        isFirst ? (r.shHours||'') : '',
-        isFirst ? (r.shWorkers||'') : '',
-        isFirst ? {f:'IFERROR(O'+rowN+'*P'+rowN+',"")'} : '',
-        r.pkEa||'', r.pkHours||'', r.pkWorkers||'',
-        {f:'IFERROR(S'+rowN+'*T'+rowN+',"")'},
-        meatPerEa?{f:'R'+rowN+'*'+meatPerEa}:'',
-        totalPerEa?{f:'R'+rowN+'*'+totalPerEa}:'',
-        {f:'IFERROR(E'+rowN+'/I'+rowN+',"")'},
-        {f:'IFERROR(E'+rowN+'/M'+rowN+',"")'},
-        {f:'IFERROR(E'+rowN+'/Q'+rowN+',"")'},
-        {f:'IFERROR(E'+rowN+'/U'+rowN+',"")'},
-        {f:'IFERROR(E'+rowN+'/SUM(I'+rowN+',M'+rowN+',Q'+rowN+',U'+rowN+'),"")'},
-        {f:'IFERROR(F'+rowN+'/E'+rowN+',"")'},
-        {f:'IFERROR(J'+rowN+'/E'+rowN+',"")'},
-        {f:'IFERROR(N'+rowN+'/E'+rowN+',"")'},
-        {f:'IFERROR(V'+rowN+'/E'+rowN+',"")'},
-        {f:'IFERROR(AC'+rowN+',"")'},
-        {f:'IFERROR(J'+rowN+'/F'+rowN+',"")'},
-        {f:'IFERROR(N'+rowN+'/J'+rowN+',"")'},
-        {f:'IFERROR(V'+rowN+'/N'+rowN+',"")'}
+        isFirst ? r.dayNo : '',
+        isFirst ? r.date : '',
+        prodLabel,
+        r.rmKg || '',
+        r.ppKg || '',
+        r.ppHours || '',
+        r.ppWorkers || '',
+        {f:'IFERROR(F'+rowN+'*G'+rowN+',"")'},
+        r.ckKg || '',
+        r.ckHours || '',
+        r.ckWorkers || '',
+        {f:'IFERROR(J'+rowN+'*K'+rowN+',"")'},
+        r.shKg || '',
+        r.shHours || '',
+        r.shWorkers || '',
+        {f:'IFERROR(N'+rowN+'*O'+rowN+',"")'},
+        r.pkEa || '',
+        r.pkHours || '',
+        r.pkWorkers || '',
+        {f:'IFERROR(R'+rowN+'*S'+rowN+',"")'},
+        meatPerEa ? {f:'IFERROR(Q'+rowN+'*'+meatPerEa+',"")'} : '',
+        totalPerEa ? {f:'IFERROR(Q'+rowN+'*'+totalPerEa+',"")'} : '',
+        {f:'IFERROR(D'+rowN+'/H'+rowN+',"")'},
+        {f:'IFERROR(D'+rowN+'/L'+rowN+',"")'},
+        {f:'IFERROR(D'+rowN+'/P'+rowN+',"")'},
+        {f:'IFERROR(D'+rowN+'/T'+rowN+',"")'},
+        {f:'IFERROR(D'+rowN+'/SUM(H'+rowN+',L'+rowN+',P'+rowN+',T'+rowN+'),"")'},
+        {f:'IFERROR(E'+rowN+'/D'+rowN+',"")'},
+        {f:'IFERROR(I'+rowN+'/D'+rowN+',"")'},
+        {f:'IFERROR(M'+rowN+'/D'+rowN+',"")'},
+        {f:'IFERROR(U'+rowN+'/D'+rowN+',"")'},
+        {f:'IFERROR(I'+rowN+'/E'+rowN+',"")'},
+        {f:'IFERROR(M'+rowN+'/I'+rowN+',"")'},
+        {f:'IFERROR(U'+rowN+'/M'+rowN+',"")'},
+        ''
       ]);
     });
 
-    var lastDataRow = startRow + rows.length - 1;
-    function subSum(col){ return {f:'SUBTOTAL(9,'+col+startRow+':'+col+lastDataRow+')'}; }
-    function subAvg(col){ return {f:'SUBTOTAL(1,'+col+startRow+':'+col+lastDataRow+')'}; }
-    aoa.push(['','월 합계','','',subSum('E'),subSum('F'),subSum('G'),subSum('H'),subSum('I'),
-              subSum('J'),subSum('K'),subSum('L'),subSum('M'),subSum('N'),subSum('O'),subSum('P'),subSum('Q'),
-              subSum('R'),subSum('S'),subSum('T'),subSum('U'),subSum('V'),subSum('W')]);
-    aoa.push(['','월 평균','','',subAvg('E'),subAvg('F'),subAvg('G'),subAvg('H'),subAvg('I'),
-              subAvg('J'),subAvg('K'),subAvg('L'),subAvg('M'),subAvg('N'),subAvg('O'),subAvg('P'),subAvg('Q'),
-              subAvg('R'),subAvg('S'),subAvg('T'),subAvg('U'),subAvg('V'),subAvg('W')]);
+    var lastDataRow = startDataRow + rows.length - 1;
+    function subSum(col){ return {f:'SUBTOTAL(9,'+col+startDataRow+':'+col+lastDataRow+')'}; }
+    function subAvg(col){ return {f:'SUBTOTAL(1,'+col+startDataRow+':'+col+lastDataRow+')'}; }
 
+    // 합계 행
+    aoa.push([
+      '', '', '월 합계',
+      subSum('D'),subSum('E'),'','',subSum('H'),
+      subSum('I'),'','',subSum('L'),
+      subSum('M'),'','',subSum('P'),
+      subSum('Q'),'','',subSum('T'),
+      subSum('U'),subSum('V'),
+      '','','','','',
+      '','','','',
+      '','','',''
+    ]);
+    // 평균 행
+    aoa.push([
+      '', '', '월 평균',
+      subAvg('D'),subAvg('E'),subAvg('F'),subAvg('G'),subAvg('H'),
+      subAvg('I'),subAvg('J'),subAvg('K'),subAvg('L'),
+      subAvg('M'),subAvg('N'),subAvg('O'),subAvg('P'),
+      subAvg('Q'),subAvg('R'),subAvg('S'),subAvg('T'),
+      subAvg('U'),subAvg('V'),
+      subAvg('W'),subAvg('X'),subAvg('Y'),subAvg('Z'),subAvg('AA'),
+      subAvg('AB'),subAvg('AC'),subAvg('AD'),subAvg('AE'),
+      subAvg('AF'),subAvg('AG'),subAvg('AH'),subAvg('AI')
+    ]);
+
+    // 수식 -> null 처리 (값만 저장)
     var aoaClean = aoa.map(function(row){
       return row.map(function(v){
         return (v && typeof v==='object' && v.f) ? null : v;
       });
     });
     var ws = XLSX.utils.aoa_to_sheet(aoaClean);
+
+    // 수식 셀 적용
     for(var R=0;R<aoa.length;R++){
       for(var C=0;C<aoa[R].length;C++){
         var v = aoa[R][C];
@@ -1069,24 +1115,61 @@
         }
       }
     }
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:aoa.length-1, c:35}});
-    ws['!autofilter'] = { ref: 'A5:AJ'+lastDataRow };
+
+    var totalCols = 35;  // A~AI
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:aoa.length-1, c:totalCols-1}});
+
+    // 컬럼 너비
     ws['!cols'] = [
-      {wch:5},{wch:6},{wch:11},{wch:18},{wch:11},
-      {wch:9},{wch:9},{wch:9},{wch:11},
-      {wch:9},{wch:9},{wch:9},{wch:11},
-      {wch:9},{wch:9},{wch:9},{wch:11},
-      {wch:9},{wch:9},{wch:9},{wch:11},
-      {wch:11},{wch:11},
-      {wch:9},{wch:9},{wch:9},{wch:9},{wch:9},
-      {wch:9},{wch:9},{wch:9},{wch:9},
-      {wch:9},{wch:9},{wch:9},{wch:9}
+      {wch:7},                                     // 생산일수
+      {wch:12},                                    // 생산일자
+      {wch:32},                                    // 제품명+부위
+      {wch:13},                                    // 원육 사용량
+      {wch:11},{wch:11},{wch:11},{wch:14},        // 전처리 4
+      {wch:11},{wch:11},{wch:11},{wch:14},        // 자숙 4
+      {wch:11},{wch:11},{wch:11},{wch:14},        // 파쇄 4
+      {wch:11},{wch:11},{wch:11},{wch:14},        // 내포장 4
+      {wch:13},{wch:13},                          // 완제품 2
+      {wch:11},{wch:11},{wch:11},{wch:11},{wch:11},  // 생산성 5
+      {wch:13},{wch:11},{wch:11},{wch:11},        // 원료육수율 4
+      {wch:13},{wch:11},{wch:11},{wch:11}         // 공정수율 4
     ];
+
+    // 메인 제목(1행) 전체 병합
     ws['!merges'] = [
-      {s:{r:3,c:23},e:{r:3,c:27}},
-      {s:{r:3,c:28},e:{r:3,c:31}},
-      {s:{r:3,c:32},e:{r:3,c:35}}
+      {s:{r:0,c:0}, e:{r:0,c:totalCols-1}}
     ];
+
+    // 행 높이
+    ws['!rows'] = [
+      {hpt: 28},  // 제목
+      {hpt: 36}   // 헤더
+    ];
+
+    // 자동 필터 (헤더 ~ 데이터 끝까지)
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:1,c:0}, e:{r:lastDataRow-1, c:totalCols-1}}) };
+
+    // 셀 정렬·줄바꿈 (헤더)
+    var headerRow = 1;
+    for(var c=0; c<totalCols; c++){
+      var addr = XLSX.utils.encode_cell({r:headerRow, c:c});
+      if(ws[addr]){
+        ws[addr].s = {
+          alignment: { horizontal:'center', vertical:'center', wrapText:true },
+          font: { bold:true, sz:11 },
+          fill: { fgColor:{rgb:'374151'} }
+        };
+      }
+    }
+    // 메인 제목 정렬
+    var titleAddr = 'A1';
+    if(ws[titleAddr]){
+      ws[titleAddr].s = {
+        alignment: { horizontal:'center', vertical:'center' },
+        font: { bold:true, sz:16 }
+      };
+    }
+
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
     XLSX.writeFile(wb, ym+'_운영팀_월단위_생산량.xlsx');
