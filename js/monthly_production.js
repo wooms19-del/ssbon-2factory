@@ -289,37 +289,49 @@
     var dayCnt = {}; // dayNo
     datesOrdered.forEach(function(dt,i){ dayCnt[dt]=i+1; });
 
+    // 일자별 제품 메인 고기 무게 합산 (KG 분배용 비율)
+    var dailyMainTotal = {};
+    keys.forEach(function(k){
+      var p = byDP[k];
+      dailyMainTotal[p.date] = (dailyMainTotal[p.date]||0) + p.ea*_gramPerEa(p.product);
+    });
+
     var prodCntPerDate = {}; // 그날 몇번째 제품인지
     keys.forEach(function(k){
       var p = byDP[k];
       var dt = p.date;
       prodCntPerDate[dt] = (prodCntPerDate[dt]||0);
-      var dateRowIdx = prodCntPerDate[dt];   // 그날 몇 번째 제품인지 (0=첫 행)
+      var dateRowIdx = prodCntPerDate[dt];
       prodCntPerDate[dt] += 1;
 
-      var ppr = ppByDate[dt] || {kg:0,hours:0,workers:0};
-      var ckr = ckByDate[dt] || {kg:0,hours:0,workers:0};
-      var shr = shByDate[dt] || {kg:0,hours:0,workers:0};
+      var ppr = ppByDate[dt] || {kg:0,hours:0,personHours:0,workers:0};
+      var ckr = ckByDate[dt] || {kg:0,hours:0,personHours:0,workers:0};
+      var shr = shByDate[dt] || {kg:0,hours:0,personHours:0,workers:0};
       var thKg = thKgByDate[dt] || 0;
 
-      // 모든 행에 일자별 값 동일하게 표시 (합계 계산은 unique date 기준)
-      // 인원은 시간가중평균(소수1), 인시는 별도 필드
+      // 제품별 분배 비율 (메인 고기 무게 기준)
+      var myMain = p.ea * _gramPerEa(p.product);
+      var totalMain = dailyMainTotal[dt] || 0;
+      var ratio = totalMain > 0 ? (myMain/totalMain) : 1;
+
+      // KG는 비율 분배, 시간/인원/인시는 그날 합 (라인 공유)
       function r1(x){ return Math.round(x*10)/10; }
       rows.push({
         date: dt,
         dayNo: dayCnt[dt],
         dateRowIdx: dateRowIdx,
         product: p.product,
-        rmKg: _r2(thKg),
-        ppKg: _r2(ppr.kg),
+        ratio: ratio,
+        rmKg: _r2(thKg * ratio),
+        ppKg: _r2(ppr.kg * ratio),
         ppHours: _r2(ppr.hours),
         ppWorkers: r1(ppr.workers),
         ppPersonHours: _r2(ppr.personHours),
-        ckKg: _r2(ckr.kg),
+        ckKg: _r2(ckr.kg * ratio),
         ckHours: _r2(ckr.hours),
         ckWorkers: r1(ckr.workers),
         ckPersonHours: _r2(ckr.personHours),
-        shKg: _r2(shr.kg),
+        shKg: _r2(shr.kg * ratio),
         shHours: _r2(shr.hours),
         shWorkers: r1(shr.workers),
         shPersonHours: _r2(shr.personHours),
@@ -349,14 +361,18 @@
 
     var dates = {};
     rows.forEach(function(r){
-      // 일자별 데이터(원육·전처리·자숙·파쇄)는 unique date(그날 첫 행)만 카운트
+      // KG는 모든 행 합산 (분배되어 있어 합치면 그날 전체값 = 정확)
+      sum.rmKg+=r.rmKg;
+      sum.ppKg+=r.ppKg;
+      sum.ckKg+=r.ckKg;
+      sum.shKg+=r.shKg;
+      // 시간·인원·인시는 그날 첫 행만 (라인 공유 → 중복 카운트 방지)
       if(r.dateRowIdx===0 || r.dateRowIdx==null){
-        sum.rmKg+=r.rmKg;
-        sum.ppKg+=r.ppKg; sum.ppHours+=r.ppHours; sum.ppWorkers+=r.ppWorkers;
-        sum.ppTotal += r.ppPersonHours;   // 인시 합 (정확)
-        sum.ckKg+=r.ckKg; sum.ckHours+=r.ckHours; sum.ckWorkers+=r.ckWorkers;
+        sum.ppHours+=r.ppHours; sum.ppWorkers+=r.ppWorkers;
+        sum.ppTotal += r.ppPersonHours;
+        sum.ckHours+=r.ckHours; sum.ckWorkers+=r.ckWorkers;
         sum.ckTotal += r.ckPersonHours;
-        sum.shKg+=r.shKg; sum.shHours+=r.shHours; sum.shWorkers+=r.shWorkers;
+        sum.shHours+=r.shHours; sum.shWorkers+=r.shWorkers;
         sum.shTotal += r.shPersonHours;
       }
       // 제품별 데이터(내포장·완제품)는 모든 행 합산
@@ -627,16 +643,16 @@
         r.dayNo,                                            // B 생산일수
         r.date,                                             // C 생산일자
         r.product,                                          // D 제품명
-        isFirst ? (r.rmKg||'') : '',                        // E 원육사용량
-        isFirst ? (r.ppKg||'') : '',                        // F 전처리KG
-        isFirst ? (r.ppHours||'') : '',                     // G 전처리시간 (합)
-        isFirst ? (r.ppWorkers||'') : '',                   // H 전처리 평균인원 (인시/시간)
-        isFirst ? {f:'IFERROR(G'+rowN+'*H'+rowN+',"")'} : '', // I 인시 (G×H = 정확)
-        isFirst ? (r.ckKg||'') : '',                        // J 자숙KG
+        r.rmKg||'',                                         // E 원육사용량 (분배됨)
+        r.ppKg||'',                                         // F 전처리KG (분배됨)
+        isFirst ? (r.ppHours||'') : '',                     // G 시간 (첫 행에만)
+        isFirst ? (r.ppWorkers||'') : '',                   // H 인원 (첫 행에만)
+        isFirst ? {f:'IFERROR(G'+rowN+'*H'+rowN+',"")'} : '', // I 인시
+        r.ckKg||'',                                         // J 자숙KG (분배됨)
         isFirst ? (r.ckHours||'') : '',                     // K
         isFirst ? (r.ckWorkers||'') : '',                   // L
         isFirst ? {f:'IFERROR(K'+rowN+'*L'+rowN+',"")'} : '', // M
-        isFirst ? (r.shKg||'') : '',                        // N 파쇄KG
+        r.shKg||'',                                         // N 파쇄KG (분배됨)
         isFirst ? (r.shHours||'') : '',                     // O
         isFirst ? (r.shWorkers||'') : '',                   // P
         isFirst ? {f:'IFERROR(O'+rowN+'*P'+rowN+',"")'} : '', // Q
@@ -646,7 +662,7 @@
         {f:'IFERROR(S'+rowN+'*T'+rowN+',"")'},              // U
         meatPerEa?{f:'R'+rowN+'*'+meatPerEa}:'',           // V 완제품고기중량
         totalPerEa?{f:'R'+rowN+'*'+totalPerEa}:'',         // W 완제품중량
-        {f:'IFERROR(E'+rowN+'/I'+rowN+',"")'},              // X 생산성 전처리 (kg/인시)
+        {f:'IFERROR(E'+rowN+'/I'+rowN+',"")'},              // X 생산성 전처리
         {f:'IFERROR(E'+rowN+'/M'+rowN+',"")'},              // Y
         {f:'IFERROR(E'+rowN+'/Q'+rowN+',"")'},              // Z
         {f:'IFERROR(E'+rowN+'/U'+rowN+',"")'},              // AA
