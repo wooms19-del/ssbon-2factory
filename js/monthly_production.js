@@ -1154,6 +1154,9 @@
       subAvg('AF'),subAvg('AG'),subAvg('AH'),subAvg('AI')
     ]);
 
+    var sumRowIdx = aoa.length - 2;  // 0-indexed
+    var avgRowIdx = aoa.length - 1;
+
     // 수식 -> null 처리 (값만 저장)
     var aoaClean = aoa.map(function(row){
       return row.map(function(v){
@@ -1162,18 +1165,146 @@
     });
     var ws = XLSX.utils.aoa_to_sheet(aoaClean);
 
-    // 수식 셀 적용
+    var totalCols = 35;  // A~AI
+
+    // 수식 셀 + 숫자 포맷 적용
+    // 컬럼별 숫자 포맷: 0=정수콤마, 1=소수1콤마, 2=소수2, 3=백분율
+    // [생산일수, 생산일자, 제품명, 원육KG, 전처리(KG/시간/인원/인시), 자숙, 파쇄, 내포장(EA/시간/인원/인시), 완제품, 생산성×5, 원료육수율×4, 공정수율×4]
+    var colFormat = [
+      'general','general','general',                // 0~2: 일수/일자/제품명
+      '#,##0.0',                                    // 3: 원육
+      '#,##0.0','0.00','0.0','0.0',                // 4~7: 전처리 KG/시간/인원/인시
+      '#,##0.0','0.00','0.0','0.0',                // 8~11: 자숙
+      '#,##0.0','0.00','0.0','0.0',                // 12~15: 파쇄
+      '#,##0','0.00','0.0','0.0',                  // 16~19: 내포장 (EA는 정수)
+      '#,##0.0','#,##0.0',                          // 20~21: 완제품
+      '0.00','0.00','0.00','0.00','0.00',          // 22~26: 생산성 (kg/인시)
+      '0.0%','0.0%','0.0%','0.0%',                 // 27~30: 원료육수율
+      '0.0%','0.0%','0.0%','0.0%'                  // 31~34: 공정수율
+    ];
+
     for(var R=0;R<aoa.length;R++){
       for(var C=0;C<aoa[R].length;C++){
         var v = aoa[R][C];
+        var addr = XLSX.utils.encode_cell({r:R, c:C});
         if(v && typeof v==='object' && v.f){
-          var addr = XLSX.utils.encode_cell({r:R, c:C});
           ws[addr] = {t:'n', f:v.f};
+        }
+        // 숫자 포맷 적용 (데이터 행 + 합계/평균 행)
+        if(R >= 2 && ws[addr] && (ws[addr].t==='n' || typeof aoa[R][C]==='number')){
+          ws[addr].z = colFormat[C] || 'general';
         }
       }
     }
 
-    var totalCols = 35;  // A~AI
+    // === 셀 스타일 적용 (xlsx-js-style) ===
+    function setStyle(addr, st){
+      if(!ws[addr]){ ws[addr] = {t:'s', v:''}; }
+      ws[addr].s = st;
+    }
+
+    // 메인 제목 (A1)
+    setStyle('A1', {
+      font: { bold:true, sz:18, color:{rgb:'1E293B'} },
+      alignment: { horizontal:'center', vertical:'center' }
+    });
+
+    // 헤더 (2행) - 그룹별 색상
+    function colGroup(c){
+      if(c<=2) return 'base';
+      if(c===3) return 'base';
+      if(c>=4 && c<=19) return 'inout';   // 공정 KG/시간/인원/인시
+      if(c===20 || c===21) return 'base';
+      if(c>=22 && c<=26) return 'prod';
+      if(c>=27 && c<=30) return 'rm';
+      if(c>=31 && c<=34) return 'pr';
+      return 'base';
+    }
+    var groupBg = {
+      base: '1E293B',
+      inout: '475569',
+      prod: '0E7490',
+      rm: '7E22CE',
+      pr: 'BE185D'
+    };
+    for(var c=0; c<totalCols; c++){
+      var addr = XLSX.utils.encode_cell({r:1, c:c});
+      var bg = groupBg[colGroup(c)];
+      setStyle(addr, {
+        font: { bold:true, sz:11, color:{rgb:'FFFFFF'} },
+        fill: { fgColor:{rgb:bg}, patternType:'solid' },
+        alignment: { horizontal:'center', vertical:'center', wrapText:true },
+        border: {
+          top:    { style:'thin', color:{rgb:'1F2937'} },
+          bottom: { style:'medium', color:{rgb:'1F2937'} },
+          left:   { style:'thin', color:{rgb:'1F2937'} },
+          right:  { style:'thin', color:{rgb:'1F2937'} }
+        }
+      });
+    }
+
+    // 데이터 행: 가는 회색 border + 정렬
+    var dataStartR = 2;
+    var dataEndR = dataStartR + rows.length - 1;
+    for(var rr=dataStartR; rr<=dataEndR; rr++){
+      for(var cc=0; cc<totalCols; cc++){
+        var a = XLSX.utils.encode_cell({r:rr, c:cc});
+        if(!ws[a]) ws[a] = {t:'s', v:''};
+        var halign = (cc===2) ? 'left' : (cc<=2 ? 'center' : 'right');
+        ws[a].s = {
+          font: { sz:10, color:{rgb:'1F2937'} },
+          alignment: { horizontal:halign, vertical:'center' },
+          border: {
+            top:    { style:'thin', color:{rgb:'E5E7EB'} },
+            bottom: { style:'thin', color:{rgb:'E5E7EB'} },
+            left:   { style:'thin', color:{rgb:'E5E7EB'} },
+            right:  { style:'thin', color:{rgb:'E5E7EB'} }
+          }
+        };
+        // 짝수 행 zebra
+        if((rr-dataStartR) % 2 === 1){
+          ws[a].s.fill = { fgColor:{rgb:'F9FAFB'}, patternType:'solid' };
+        }
+      }
+    }
+
+    // 합계 행: 진한 주황
+    for(var c2=0; c2<totalCols; c2++){
+      var a2 = XLSX.utils.encode_cell({r:sumRowIdx, c:c2});
+      if(!ws[a2]) ws[a2] = {t:'s', v:''};
+      var ha = (c2===2) ? 'center' : 'right';
+      ws[a2].s = {
+        font: { bold:true, sz:11, color:{rgb:'78350F'} },
+        fill: { fgColor:{rgb:'FEF3C7'}, patternType:'solid' },
+        alignment: { horizontal:ha, vertical:'center' },
+        border: {
+          top:    { style:'medium', color:{rgb:'92400E'} },
+          bottom: { style:'thin', color:{rgb:'92400E'} },
+          left:   { style:'thin', color:{rgb:'F3F4F6'} },
+          right:  { style:'thin', color:{rgb:'F3F4F6'} }
+        }
+      };
+      if(ws[a2].z===undefined) ws[a2].z = colFormat[c2] || 'general';
+    }
+    // 평균 행: 연녹색
+    for(var c3=0; c3<totalCols; c3++){
+      var a3 = XLSX.utils.encode_cell({r:avgRowIdx, c:c3});
+      if(!ws[a3]) ws[a3] = {t:'s', v:''};
+      var ha2 = (c3===2) ? 'center' : 'right';
+      ws[a3].s = {
+        font: { bold:true, sz:11, color:{rgb:'14532D'} },
+        fill: { fgColor:{rgb:'DCFCE7'}, patternType:'solid' },
+        alignment: { horizontal:ha2, vertical:'center' },
+        border: {
+          top:    { style:'thin', color:{rgb:'14532D'} },
+          bottom: { style:'medium', color:{rgb:'14532D'} },
+          left:   { style:'thin', color:{rgb:'F3F4F6'} },
+          right:  { style:'thin', color:{rgb:'F3F4F6'} }
+        }
+      };
+      if(ws[a3].z===undefined) ws[a3].z = colFormat[c3] || 'general';
+    }
+
     ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:aoa.length-1, c:totalCols-1}});
 
     // 컬럼 너비
@@ -1199,33 +1330,15 @@
 
     // 행 높이
     ws['!rows'] = [
-      {hpt: 28},  // 제목
-      {hpt: 36}   // 헤더
+      {hpt: 32},  // 제목
+      {hpt: 40}   // 헤더
     ];
 
     // 자동 필터 (헤더 ~ 데이터 끝까지)
     ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:1,c:0}, e:{r:lastDataRow-1, c:totalCols-1}}) };
 
-    // 셀 정렬·줄바꿈 (헤더)
-    var headerRow = 1;
-    for(var c=0; c<totalCols; c++){
-      var addr = XLSX.utils.encode_cell({r:headerRow, c:c});
-      if(ws[addr]){
-        ws[addr].s = {
-          alignment: { horizontal:'center', vertical:'center', wrapText:true },
-          font: { bold:true, sz:11 },
-          fill: { fgColor:{rgb:'374151'} }
-        };
-      }
-    }
-    // 메인 제목 정렬
-    var titleAddr = 'A1';
-    if(ws[titleAddr]){
-      ws[titleAddr].s = {
-        alignment: { horizontal:'center', vertical:'center' },
-        font: { bold:true, sz:16 }
-      };
-    }
+    // 첫 행(고정 영역) 잠금
+    ws['!freeze'] = { xSplit:3, ySplit:2 };
 
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
