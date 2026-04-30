@@ -114,6 +114,21 @@
       + '#mpTbl{border-collapse:separate;border-spacing:0;font-size:12.5px;white-space:nowrap;min-width:100%;font-variant-numeric:tabular-nums}'
       + '#mpTbl th,#mpTbl td{border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;padding:7px 8px;text-align:center;vertical-align:middle}'
       + '#mpTbl thead th{background:#374151;color:#fff;font-weight:600;position:sticky;top:0;z-index:10;padding:9px 8px;line-height:1.35;font-size:12px;border-color:#1f2937;box-shadow:inset 0 -2px 0 #1f2937}'
+      // ── 그룹별 헤더 색상
+      + '#mpTbl thead th.grp-base{background:#374151}'                    // 기본: 진회색
+      + '#mpTbl thead th.grp-inout{background:#475569}'                   // 투입/배출(KG): 슬레이트
+      + '#mpTbl thead th.grp-workers{background:#9a3412}'                 // 작업인원: 적갈색
+      + '#mpTbl thead th.grp-hours{background:#3f6212}'                   // 작업시간: 올리브
+      + '#mpTbl thead th.grp-prod{background:#0f766e}'                    // 생산성: 청록
+      + '#mpTbl thead th.grp-yield{background:#7c3aed}'                   // 수율: 보라
+      // ── 본문도 그룹별로 미묘한 배경 색상
+      + '#mpTbl tbody td.grp-prod{background:#ecfeff}'                    // 생산성: 매우 연한 청록
+      + '#mpTbl tbody td.grp-yield{background:#faf5ff}'                   // 수율: 매우 연한 보라
+      // 그룹 경계: 첫 컬럼 좌측에 굵은 세로선
+      + '#mpTbl thead th.grp-first.grp-prod,#mpTbl tbody td.grp-first.grp-prod{border-left:2px solid #0f766e}'
+      + '#mpTbl thead th.grp-first.grp-yield,#mpTbl tbody td.grp-first.grp-yield{border-left:2px solid #7c3aed}'
+      + '#mpTbl thead th.grp-first.grp-workers,#mpTbl tbody td.grp-first.grp-workers{border-left:1px solid #9a3412}'
+      + '#mpTbl thead th.grp-first.grp-hours,#mpTbl tbody td.grp-first.grp-hours{border-left:1px solid #3f6212}'
       // ── 왼쪽 3컬럼 sticky 고정 (생산일수 / 생산일자 / 제품명)
       + '#mpTbl th:nth-child(1),#mpTbl td:nth-child(1){position:sticky;left:0;min-width:55px;width:55px;z-index:5;background:#fff}'
       + '#mpTbl th:nth-child(2),#mpTbl td:nth-child(2){position:sticky;left:55px;min-width:90px;width:90px;z-index:5;background:#fff}'
@@ -778,8 +793,17 @@
       });
     }));
 
-    var thHtml = '<tr>'+visibleCols.map(function(c){
-      return '<th>'+c[2].replace(/\n/g,'<br>')+'</th>';
+    // 그룹 첫 컬럼 판정 (좌측 경계선)
+    function _isFirstOfGroup(c, idx){
+      if(idx===0) return true;
+      return visibleCols[idx-1][1] !== c[1];
+    }
+    function _grpCls(c, idx){
+      return 'grp-'+c[1] + (_isFirstOfGroup(c, idx) ? ' grp-first' : '');
+    }
+
+    var thHtml = '<tr>'+visibleCols.map(function(c, i){
+      return '<th class="'+_grpCls(c, i)+'">'+c[2].replace(/\n/g,'<br>')+'</th>';
     }).join('')+'</tr>';
 
     // 숫자 포맷터: 천단위 콤마 + 자리수
@@ -805,7 +829,7 @@
     calcRows.forEach(function(r){ dateCntMap[r.date] = (dateCntMap[r.date]||0)+1; });
 
     var bodyHtml = calcRows.map(function(r){
-      return '<tr>'+visibleCols.map(function(c){
+      return '<tr>'+visibleCols.map(function(c,_i_){
         var v = r[c[0]];
         // dayNo, date: 모든 행마다 td 출력. 두 번째 부위 행은 빈 td (sticky 정렬 위해)
         if(c[0]==='dayNo'){
@@ -844,12 +868,12 @@
         }
         if(c[0]==='pkEa') {
           var s = v ? Math.round(v).toLocaleString() : '-';
-          return '<td>'+s+'<span class="eaSrc">('+(r.pkEaSrc||'')+')</span></td>';
+          return '<td class="'+_grpCls(c, _i_)+'">'+s+'<span class="eaSrc">('+(r.pkEaSrc||'')+')</span></td>';
         }
         if(typeof v==='number'){
-          return '<td>'+fmtCell(v, c)+'</td>';
+          return '<td class="'+_grpCls(c, _i_)+'">'+fmtCell(v, c)+'</td>';
         }
-        return '<td>'+(v==null?'-':v)+'</td>';
+        return '<td class="'+_grpCls(c, _i_)+'">'+(v==null?'-':v)+'</td>';
       }).join('')+'</tr>';
     }).join('');
 
@@ -870,42 +894,42 @@
     function isRatio(c){ return c[1]==='yield'||c[1]==='prod'; }
 
     var sumHtml = '<tr class="sumRow"><td colspan="3">합 계</td>'
-      + visibleCols.slice(3).map(function(c){
-          if(isRatio(c)) return '<td>—</td>';
-          return '<td>'+fmtNum(sum[c[0]], c)+'</td>';
+      + visibleCols.slice(3).map(function(c,_i_){
+          if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+          return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(sum[c[0]], c)+'</td>';
         }).join('')
       + '</tr>';
 
     var dc = sum.dayCount||1;
     var avgHtml = '<tr class="avgRow"><td colspan="3">일 평 균</td>'
-      + visibleCols.slice(3).map(function(c){
-          var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td>—</td>';
-          if(isRatio(c)) return '<td>'+fmtNum(v, c)+'</td>';
-          return '<td>'+fmtNum(v/dc, c)+'</td>';
+      + visibleCols.slice(3).map(function(c,_i_){
+          var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+          if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v, c)+'</td>';
+          return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v/dc, c)+'</td>';
         }).join('')
       + '</tr>';
 
     var pdc = prevSum.dayCount||1;
     var prevHtml = '<tr class="prevRow"><td colspan="3">전월 평균</td>'
-      + visibleCols.slice(3).map(function(c){
-          var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td>—</td>';
-          if(isRatio(c)) return '<td>'+fmtNum(v, c)+'</td>';
-          return '<td>'+fmtNum(v/pdc, c)+'</td>';
+      + visibleCols.slice(3).map(function(c,_i_){
+          var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
+          if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v, c)+'</td>';
+          return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v/pdc, c)+'</td>';
         }).join('')
       + '</tr>';
 
     var diffHtml = '<tr class="diffRow"><td colspan="3">전월 대비 증감</td>'
-      + visibleCols.slice(3).map(function(c){
+      + visibleCols.slice(3).map(function(c,_i_){
           var v = sum[c[0]]||0;
           var p = prevSum[c[0]]||0;
-          if(!p) return '<td>—</td>';
+          if(!p) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
           var thisV = isRatio(c) ? v : v/dc;
           var prevV = isRatio(c) ? p : p/pdc;
-          if(!prevV) return '<td>—</td>';
+          if(!prevV) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
           var pct = (thisV - prevV)/prevV*100;
           var color = pct>0?'#15803d':(pct<0?'#b91c1c':'#475569');
           var arrow = pct>0?'▲':(pct<0?'▼':'');
-          return '<td style="color:'+color+'">'+arrow+' '+Math.abs(pct).toFixed(1)+'%</td>';
+          return '<td class="'+_grpCls(c, _i_+3)+'" style="color:'+color+'">'+arrow+' '+Math.abs(pct).toFixed(1)+'%</td>';
         }).join('')
       + '</tr>';
 
