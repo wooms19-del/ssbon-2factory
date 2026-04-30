@@ -415,8 +415,8 @@ function renderSettings(){
         const noMeatBadge = p.noMeat ? '<span style="display:inline-block;padding:1px 6px;background:#fef3c7;color:#92400e;border-radius:3px;font-size:10px;margin-left:4px">원육X</span>' : '';
         const subPart = p.subName ? ` · 부재료 ${p.subName}${p.subKgea?' '+p.subKgea+'kg/EA':''}` : '';
         const sumLine = p.noMeat
-          ? `Capa ${p.capa}EA${p.sauce?' · '+p.sauce:''}${subPart}`
-          : `${p.kgea}kg/EA · Capa ${p.capa}EA${p.sauce?' · '+p.sauce:''}${subPart}`;
+          ? `Capa ${p.capa}kg${p.sauce?' · '+p.sauce:''}${subPart}`
+          : `${p.kgea}kg/EA · Capa ${p.capa}kg${p.sauce?' · '+p.sauce:''}${subPart}`;
         return `
         <div class="si" id="pdItem_${i}">
           <div style="flex:1;min-width:0">
