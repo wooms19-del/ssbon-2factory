@@ -38,6 +38,16 @@
   function _num(v){ var n=parseFloat(v); return isFinite(n)?n:0; }
   function _today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
+  // "07:30" 형식 → 분 단위
+  function _t2m(t){ if(!t||typeof t!=='string') return 0; var p=t.split(':'); return (parseInt(p[0],10)||0)*60+(parseInt(p[1],10)||0); }
+  // start/end → 시간(소수) (자정 넘기면 +24h)
+  function _hoursFromSE(start, end){
+    var s=_t2m(start), e=_t2m(end);
+    if(!s&&!e) return 0;
+    if(e<s) e += 24*60;
+    return Math.round((e-s)/60*100)/100;  // 시간 단위 소수 2자리
+  }
+
   // 제품명 → 1봉 g  (엑셀 키워드 매핑 그대로)
   function _gramPerEa(name){
     if(!name) return 0;
@@ -217,39 +227,37 @@
     var d = function(r){ return String(r.date||'').slice(0,10); };
 
     // 1) 일자별 thawing 입고량 합산 (E열: 원육사용량)
+    //    필드명: totalKg
     var thKgByDate = {};
     (th||[]).forEach(function(r){
       var dt=d(r); if(!dt) return;
-      // thawing 레코드의 무게 필드: importCodes 합산? 또는 inKg/kg?
-      var kg = _num(r.totalKg) || _num(r.kg) || _num(r.inKg) || 0;
-      // importCodes 합산 fallback
-      if(!kg && Array.isArray(r.importCodes)){
-        r.importCodes.forEach(function(ic){ kg += _num(ic.kg||ic.weight||0); });
-      }
+      var kg = _num(r.totalKg);
       thKgByDate[dt] = (thKgByDate[dt]||0) + kg;
     });
 
     // 2) 일자×제품 packing 그룹핑 (R/S/T열의 키)
     //    같은 날 같은 제품의 여러 packing 레코드는 합산
+    //    DB에 hours 필드 없음 → start/end로 계산
     var byDP = {};   // key 'date|product'
     (pk||[]).forEach(function(r){
       var dt=d(r); var prod=r.product||''; if(!dt||!prod) return;
       var k = dt+'|'+prod;
       if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, workers:0, recs:0};
       byDP[k].ea      += _num(r.ea);
-      byDP[k].hours   += _num(r.hours);
+      byDP[k].hours   += _hoursFromSE(r.start, r.end);
       byDP[k].workers  = Math.max(byDP[k].workers, _num(r.workers));
       byDP[k].recs    += 1;
     });
 
     // 3) 일자별 preprocess/cooking/shredding 합산
+    //    DB에 hours 필드 없음 → start/end로 계산
     function sumByDate(arr){
       var m={};
       (arr||[]).forEach(function(r){
         var dt=d(r); if(!dt) return;
         if(!m[dt]) m[dt]={kg:0,hours:0,workers:0};
-        m[dt].kg      += _num(r.outKg) || _num(r.kg);
-        m[dt].hours   += _num(r.hours);
+        m[dt].kg      += _num(r.kg);  // preprocess/cooking/shredding 모두 'kg' 필드
+        m[dt].hours   += _hoursFromSE(r.start, r.end);
         m[dt].workers  = Math.max(m[dt].workers, _num(r.workers));
       });
       return m;
