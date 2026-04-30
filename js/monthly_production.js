@@ -43,6 +43,11 @@
     return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
   }
 
+  // 무육 제품 판별 (메추리알 장조림 등)
+  function _isNoMeat(name){
+    return /메추리알/.test(name||'');
+  }
+
   // 제품명에서 1봉당 전체 kg 파싱 (월별현황 _prodKgUnit 동일)
   function _prodKgUnit(name){
     var m = (name||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);
@@ -392,11 +397,23 @@
       var oe = opMap[k] || 0;
       p.eaDisp = oe>0 ? oe : p.ea;
       p.eaSrc  = oe>0 ? '외' : '내';
-      // 대표 부위: 가장 많이 등장한 type, 없으면 null
+      // 1) packing 자체의 type (가장 많이 나온 type)
       var bestT = null, bestCnt = 0;
       Object.keys(p.types).forEach(function(t){
         if(p.types[t]>bestCnt){ bestCnt = p.types[t]; bestT = t; }
       });
+      // 2) packing에 type 없으면 → 그날 thawing 부위 단일이면 자동 추론
+      if(!bestT){
+        var thTypes = {};
+        Object.keys(thByDateType).forEach(function(thk){
+          var pp=thk.split('|');
+          if(pp[0]===p.date && pp[1]!=='_'){
+            thTypes[pp[1]] = (thTypes[pp[1]]||0) + thByDateType[thk];
+          }
+        });
+        var thKeys = Object.keys(thTypes);
+        if(thKeys.length===1) bestT = thKeys[0];
+      }
       p.type = bestT;
     });
 
@@ -516,12 +533,20 @@
       var idx = prodCnt[dt];
       prodCnt[dt] += 1;
 
-      // 부위별로 분배된 값 사용
-      var alloc = allocMap[dt+'|'+p.product] || {
-        rmKg:0, ppKg:0, ppHours:0, ppPersonHours:0, ppWorkers:0,
-        ckKg:0, ckHours:0, ckPersonHours:0, ckWorkers:0,
-        shKg:0, shHours:0, shPersonHours:0, shWorkers:0
-      };
+      // 무육 제품(메추리알 등): 모든 공정 데이터 0
+      var noMeat = _isNoMeat(p.product);
+      var alloc;
+      if(noMeat){
+        alloc = {rmKg:0, ppKg:0, ppHours:0, ppPersonHours:0, ppWorkers:0,
+                 ckKg:0, ckHours:0, ckPersonHours:0, ckWorkers:0,
+                 shKg:0, shHours:0, shPersonHours:0, shWorkers:0};
+      } else {
+        alloc = allocMap[dt+'|'+p.product] || {
+          rmKg:0, ppKg:0, ppHours:0, ppPersonHours:0, ppWorkers:0,
+          ckKg:0, ckHours:0, ckPersonHours:0, ckWorkers:0,
+          shKg:0, shHours:0, shPersonHours:0, shWorkers:0
+        };
+      }
       var kgea = _prodKgea(p.product);
       var kgTot = _prodKgUnit(p.product);
 
@@ -551,7 +576,8 @@
         pkPersonHours: _r2(p.personHours),
         kgea: kgea,
         kgTot: kgTot,
-        type: p.type || ''   // 부위 정보 (없으면 빈 문자열)
+        type: p.type || (noMeat ? '무육' : ''),
+        noMeat: noMeat
       });
     });
 
@@ -754,7 +780,12 @@
           return '';
         }
         if(c[0]==='product') {
-          var typeBadge = r.type ? '<span style="display:inline-block;background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">'+r.type+'</span>' : '';
+          var typeBadge = '';
+          if(r.noMeat){
+            typeBadge = '<span style="display:inline-block;background:#fee2e2;color:#b91c1c;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">무육</span>';
+          } else if(r.type){
+            typeBadge = '<span style="display:inline-block;background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">'+r.type+'</span>';
+          }
           return '<td class="product" style="text-align:center">'+(v||'')+typeBadge+'</td>';
         }
         if(c[0]==='pkEa') {
