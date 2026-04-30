@@ -596,9 +596,9 @@ function onPkRowProd(idx){
   if(p){
     const subInfo = p.subName ? ` · 부재료 ${p.subName}${p.subKgea?' '+p.subKgea+'kg/EA':''}` : '';
     if(p.noMeat){
-      si.textContent = `Capa ${p.capa}EA · 소스 ${p.sauce||'-'}${subInfo}`;
+      si.textContent = `Capa ${p.capa}kg · 소스 ${p.sauce||'-'}${subInfo}`;
     } else {
-      si.textContent = `원료육 ${p.kgea}kg/EA · Capa ${p.capa}EA · 소스 ${p.sauce||'-'}${subInfo}`;
+      si.textContent = `원료육 ${p.kgea}kg/EA · Capa ${p.capa}kg · 소스 ${p.sauce||'-'}${subInfo}`;
     }
     si.style.color='var(--p)';
   }
@@ -936,6 +936,6 @@ function onProd(){
   const p = L.products.find(x=>x.name===nm);
   const siEl = document.getElementById('pkSi');
   if(!p||!siEl){ if(siEl) siEl.classList.add('hid'); return; }
-  siEl.innerHTML=`<div class="al al-i">원료육 ${p.kgea}kg/EA · FullCapa ${p.capa}EA · 소스 ${p.sauce||'-'}</div>`;
+  siEl.innerHTML=`<div class="al al-i">원료육 ${p.kgea}kg/EA · FullCapa ${p.capa}kg · 소스 ${p.sauce||'-'}</div>`;
   siEl.classList.remove('hid');
 }
