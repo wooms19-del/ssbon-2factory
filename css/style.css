@@ -133,7 +133,8 @@ select.fc{cursor:pointer;padding-right:32px;background-image:url("data:image/svg
 .tlr{display:flex;align-items:center;gap:6px;margin-bottom:6px}
 .tll{width:50px;font-size:11px;font-weight:600;color:var(--g6);text-align:right;flex-shrink:0}
 .tlt{flex:1;height:26px;background:var(--g1);border-radius:4px;position:relative;overflow:hidden}
-.tlb{position:absolute;height:100%;border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden}
+.tlb{position:absolute;height:100%;border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;cursor:pointer;transition:filter .15s,transform .15s}
+.tlb:hover{filter:brightness(1.15);box-shadow:0 0 0 2px rgba(0,0,0,.18);z-index:2}
 
 /* 이력추적 */
 .trstep{display:flex;gap:12px;margin-bottom:12px}
