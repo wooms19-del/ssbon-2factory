@@ -94,26 +94,47 @@ function fillRecipeForm(recipe){
   (recipe.outer||[]).forEach(r=>addProdRecipeRow('outer',r.item,r.qty,r.unit));
 }
 
+function onNpNoMeatToggle(){
+  const cb = document.getElementById('np_nomeat');
+  const ke = document.getElementById('np_ke');
+  if(!cb || !ke) return;
+  if(cb.checked){
+    ke.value = '0';
+    ke.disabled = true;
+    ke.style.background = '#f0f0f0';
+  } else {
+    ke.disabled = false;
+    ke.style.background = '';
+  }
+}
+
 function addProd(){
   try {
   const n=document.getElementById('np_nm').value.trim();
-  const k=parseFloat(document.getElementById('np_ke').value)||0;
+  const noMeat = !!document.getElementById('np_nomeat')?.checked;
+  const k = noMeat ? 0 : (parseFloat(document.getElementById('np_ke').value)||0);
   const c=parseInt(document.getElementById('np_cp').value)||0;
   const s=document.getElementById('np_sc').value;
+  const sub=document.getElementById('np_sub')?.value||'';
   if(!n){toast('제품명 입력','d');return;}
   const recipe={inner:[],outer:[]};
+  const prodObj = {name:n, kgea:k, capa:c, sauce:s, recipe};
+  if(noMeat) prodObj.noMeat = true;
+  if(sub) prodObj.subName = sub;
 
   if(_editProdIdx >= 0){
-    L.products[_editProdIdx] = {name:n, kgea:k, capa:c, sauce:s, recipe};
+    L.products[_editProdIdx] = prodObj;
     toast('제품 수정됨 ✓');
     cancelEditProd();
   } else {
-    L.products.push({name:n,kgea:k,capa:c,sauce:s,recipe});
+    L.products.push(prodObj);
     toast('제품 추가됨 ✓');
     document.getElementById('np_nm').value='';
     document.getElementById('np_ke').value='';
     document.getElementById('np_cp').value='';
     const npSc=document.getElementById('np_sc'); if(npSc) npSc.value='';
+    const npSub=document.getElementById('np_sub'); if(npSub) npSub.value='';
+    const npNm=document.getElementById('np_nomeat'); if(npNm){ npNm.checked=false; onNpNoMeatToggle(); }
     clearRecipeForm();
   }
   saveL(); updDD(); renderSettings(); saveSettings();
@@ -126,6 +147,8 @@ function cancelEditProd(){
   document.getElementById('np_ke').value='';
   document.getElementById('np_cp').value='';
   const npSc=document.getElementById('np_sc'); if(npSc) npSc.value='';
+  const npSub=document.getElementById('np_sub'); if(npSub) npSub.value='';
+  const npNm=document.getElementById('np_nomeat'); if(npNm){ npNm.checked=false; onNpNoMeatToggle(); }
   clearRecipeForm();
   const addBtn = document.querySelector('#p-settings .btn.bs[onclick="addProd()"]');
   if(addBtn){ addBtn.textContent='+ 제품 추가'; addBtn.style.background=''; }
