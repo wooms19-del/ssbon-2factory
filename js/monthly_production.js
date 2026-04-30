@@ -121,12 +121,18 @@
       + '#mpTbl thead th.grp-hours{background:#475569}'                   // 시간: 슬레이트
       + '#mpTbl thead th.grp-prod{background:#0e7490}'                    // 생산성: 청록 (강조)
       + '#mpTbl thead th.grp-yield{background:#7e22ce}'                   // 수율: 보라 (강조)
-      // 본문 배경 색상 미니멀하게
+      // 수율 서브그룹: 원료육수율(보라) vs 공정수율(자홍)
+      + '#mpTbl thead th.yield-rm{background:#7e22ce}'                    // 원료육수율: 보라
+      + '#mpTbl thead th.yield-pr{background:#be185d}'                    // 공정수율: 자홍
+      // 본문도 그룹별로 미묘한 배경 색상
       + '#mpTbl tbody td.grp-prod{background:#f0fdfa}'                    // 매우 연한 청록
-      + '#mpTbl tbody td.grp-yield{background:#faf5ff}'                   // 매우 연한 보라
+      + '#mpTbl tbody td.yield-rm{background:#faf5ff}'                    // 매우 연한 보라
+      + '#mpTbl tbody td.yield-pr{background:#fdf2f8}'                    // 매우 연한 핑크
       // 그룹 경계: 첫 컬럼 좌측에 굵은 세로선 (생산성 / 수율만)
       + '#mpTbl thead th.grp-first.grp-prod,#mpTbl tbody td.grp-first.grp-prod{border-left:2px solid #0e7490}'
       + '#mpTbl thead th.grp-first.grp-yield,#mpTbl tbody td.grp-first.grp-yield{border-left:2px solid #7e22ce}'
+      // 공정수율 시작 컬럼 좌측에 분리선 (원료육 ↔ 공정)
+      + '#mpTbl thead th.first-pr,#mpTbl tbody td.first-pr{border-left:2px solid #be185d}'
       // ── 왼쪽 3컬럼 sticky 고정 (class 기반: rowspan과 호환)
       + '#mpTbl th.col-dayno,#mpTbl td.col-dayno{position:sticky;left:0;min-width:55px;width:55px;z-index:5;background:#fff}'
       + '#mpTbl th.col-date,#mpTbl td.col-date{position:sticky;left:55px;min-width:90px;width:90px;z-index:5;background:#fff}'
@@ -795,7 +801,13 @@
       return visibleCols[idx-1][1] !== c[1];
     }
     function _grpCls(c, idx){
-      return 'grp-'+c[1] + (_isFirstOfGroup(c, idx) ? ' grp-first' : '');
+      var sub = '';
+      // 수율 서브그룹: 원료육수율(yield-rm) vs 공정수율(yield-pr)
+      if(c[0] && c[0].indexOf('yieldRm')===0) sub = ' yield-rm';
+      else if(c[1]==='yield') sub = ' yield-pr';
+      // 공정수율 시작 컬럼 (yieldPp) → 좌측 경계선
+      if(c[0]==='yieldPp') sub += ' first-pr';
+      return 'grp-'+c[1] + (_isFirstOfGroup(c, idx) ? ' grp-first' : '') + sub;
     }
 
     var thHtml = '<tr>'+visibleCols.map(function(c, i){
