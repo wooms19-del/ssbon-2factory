@@ -1616,7 +1616,7 @@ function renderTL(pp,ck,sh,pk){
       const s=toMin(r.start),e=toMin(r.end);
       if(s===null||e===null) return '';
       const left=r2((s-headStart)/range*100), width=r2((e-s)/range*100);
-      return `<div class="tlr"><div class="tll">${r.lbl}</div><div class="tlt"><div class="tlb" style="left:${left}%;width:${Math.max(width,2)}%;background:${r.col}">${r.start?r.start.slice(0,5):''}-${r.end?r.end.slice(0,5):''}</div></div></div>`;
+      const ts=r.start?r.start.slice(0,5):'', te=r.end?r.end.slice(0,5):''; return `<div class="tlr"><div class="tll">${r.lbl}</div><div class="tlt"><div class="tlb" title="${r.lbl} ${ts}~${te}" style="left:${left}%;width:${Math.max(width,2)}%;background:${r.col}">${ts}-${te}</div></div></div>`;
     }).join('')}
   </div></div>`;
 }
