@@ -407,21 +407,39 @@ function renderPL(type){
 
       // 신규 매트릭스 영역
       let pkMatrix = '<div style="margin:8px 0;padding:8px;background:#fff;border-radius:6px;border:1px dashed var(--g3)">';
-      // 와건별 kg (noMeat가 아닐 때만)
       const wd = r.wagonDist || {};
-      if(!_isNoMeat && Object.keys(wd).length){
-        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">와건별 사용 kg</div>';
-        Object.keys(wd).forEach(w => {
-          pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#72243E">와건 ${w}</span><input class="fc pkEd-wd" data-w="${w}" data-kind="wagon" type="number" step="0.01" value="${wd[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
-        });
-      }
-      // 카트별 kg (noMeat가 아닐 때만)
       const cd = r.cartDist || {};
-      if(!_isNoMeat && Object.keys(cd).length){
-        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#1a56db;margin:6px 0 4px">카트별 사용 kg</div>';
-        Object.keys(cd).forEach(c => {
-          pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#1a56db">카트 ${c}</span><input class="fc pkEd-wd" data-w="${c}" data-kind="cart" type="number" step="0.01" value="${cd[c]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
-        });
+      const tk = r.typeKgs || {};
+      // 와건별 kg (noMeat 아니면 항상 표시 — 와건번호 input 변경 시 동적 갱신)
+      if(!_isNoMeat){
+        pkMatrix += '<div id="pkEdWdBox_'+r.id+'">';
+        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">와건별 사용 kg</div>';
+        // 초기 렌더: wagonDist 키 우선, 없으면 wagon 문자열에서 추출
+        const wKeys = Object.keys(wd).length
+          ? Object.keys(wd)
+          : (r.wagon ? String(r.wagon).split(',').map(w=>w.trim()).filter(Boolean) : []);
+        if(wKeys.length){
+          wKeys.forEach(w => {
+            pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#72243E">와건 ${w}</span><input class="fc pkEd-wd" data-w="${w}" data-kind="wagon" type="number" step="0.01" value="${wd[w]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+          });
+        } else {
+          pkMatrix += '<div style="font-size:11px;color:var(--g4);padding:4px 0">와건번호 입력 후 자동 생성</div>';
+        }
+        pkMatrix += '</div>';
+      }
+      // 카트별 kg (noMeat 아니면 항상)
+      if(!_isNoMeat){
+        pkMatrix += '<div id="pkEdCdBox_'+r.id+'" style="margin-top:6px">';
+        const cKeys = Object.keys(cd).length
+          ? Object.keys(cd)
+          : (r.cart ? String(r.cart).split(',').map(c=>c.trim()).filter(Boolean) : []);
+        if(cKeys.length){
+          pkMatrix += '<div style="font-size:11px;font-weight:600;color:#1a56db;margin-bottom:4px">카트별 사용 kg</div>';
+          cKeys.forEach(c => {
+            pkMatrix += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:#1a56db">카트 ${c}</span><input class="fc pkEd-wd" data-w="${c}" data-kind="cart" type="number" step="0.01" value="${cd[c]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+          });
+        }
+        pkMatrix += '</div>';
       }
       // 소스 탱크
       const st = r.sauceTanks || [];
@@ -431,13 +449,22 @@ function renderPL(type){
           pkMatrix += `<div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${s.tank||'-'}</span><input class="fc pkEd-st" data-tank="${s.tank||''}" data-idx="${i}" type="number" step="0.01" value="${s.kg||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
         });
       }
-      // 원육별 kg
-      const tk = r.typeKgs || {};
-      if(Object.keys(tk).length){
-        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#72243E;margin:6px 0 4px">원육별 사용 kg</div>';
-        Object.keys(tk).forEach(t => {
-          pkMatrix += `<div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${t}</span><input class="fc pkEd-tk" data-type="${t}" type="number" step="0.01" value="${tk[t]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
-        });
+      // 원육별 kg (항상 표시 — 빈 typeKgs라도 부위 추가 가능)
+      if(!_isNoMeat){
+        pkMatrix += '<div id="pkEdTkBox_'+r.id+'" style="margin-top:6px">';
+        pkMatrix += '<div style="font-size:11px;font-weight:600;color:#72243E;margin-bottom:4px">원육별 사용 kg</div>';
+        const tKeys = Object.keys(tk);
+        if(tKeys.length){
+          tKeys.forEach(t => {
+            pkMatrix += `<div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px">${t}</span><input class="fc pkEd-tk" data-type="${t}" type="number" step="0.01" value="${tk[t]||0}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+          });
+        } else {
+          // 빈 typeKgs: 부위 직접 추가 가능한 select
+          ['우둔','홍두깨','설도'].forEach(t => {
+            pkMatrix += `<div style="display:grid;grid-template-columns:90px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:var(--g5)">${t}</span><input class="fc pkEd-tk" data-type="${t}" type="number" step="0.01" placeholder="0" value="" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+          });
+        }
+        pkMatrix += '</div>';
       }
       pkMatrix += '</div>';
 
@@ -445,8 +472,8 @@ function renderPL(type){
     <div id="pkEdit_${r.id}" style="display:none;background:#f8f9fa;border-radius:6px;padding:10px;margin-top:6px;font-size:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
         <div><label style="font-size:11px;color:var(--g5);display:block">설비번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_machine_${r.id}" value="${r.machine||''}"></div>
-        ${_isNoMeat ? '' : `<div><label style="font-size:11px;color:#72243E;display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}"></div>`}
-        ${_isNoMeat ? '' : `<div><label style="font-size:11px;color:#1a56db;display:block">카트번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_cart_${r.id}" value="${r.cart||''}"></div>`}
+        ${_isNoMeat ? '' : `<div><label style="font-size:11px;color:#72243E;display:block">와건번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_wagon_${r.id}" value="${r.wagon||''}" oninput="pkEdRefreshMatrix('${r.id}','wagon')"></div>`}
+        ${_isNoMeat ? '' : `<div><label style="font-size:11px;color:#1a56db;display:block">카트번호</label><input class="fc" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_cart_${r.id}" value="${r.cart||''}" oninput="pkEdRefreshMatrix('${r.id}','cart')"></div>`}
         <div><label style="font-size:11px;color:var(--g5);display:block">생산 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_ea_${r.id}" value="${r.ea||0}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">불량 EA</label><input class="fc" type="number" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_defect_${r.id}" value="${r.defect||0}"></div>
         <div><label style="font-size:11px;color:var(--g5);display:block">시작</label><input class="fc" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" style="padding:4px 8px;font-size:12px;width:100%" id="pkEd_start_${r.id}" value="${r.start||''}"></div>
@@ -476,6 +503,38 @@ function renderPL(type){
       </div>
     </div>${editForm}`;
   }).join('')+'</div>';
+}
+
+// 수정 폼: 와곤/카트번호 input 변경 시 와곤별 사용 kg 입력칸 동적 갱신
+function pkEdRefreshMatrix(id, kind){
+  const inputId = kind==='cart' ? 'pkEd_cart_'+id : 'pkEd_wagon_'+id;
+  const boxId   = kind==='cart' ? 'pkEdCdBox_'+id  : 'pkEdWdBox_'+id;
+  const inp = document.getElementById(inputId);
+  const box = document.getElementById(boxId);
+  if(!inp || !box) return;
+
+  const nums = inp.value.split(',').map(s=>s.trim()).filter(Boolean);
+  // 기존 입력값 보존
+  const existing = {};
+  box.querySelectorAll('.pkEd-wd[data-kind="'+kind+'"]').forEach(el => {
+    existing[el.dataset.w] = parseFloat(el.value) || 0;
+  });
+
+  const labelTxt = kind==='cart' ? '카트별 사용 kg' : '와건별 사용 kg';
+  const color = kind==='cart' ? '#1a56db' : '#72243E';
+  const prefix = kind==='cart' ? '카트' : '와건';
+
+  let html = '';
+  if(nums.length){
+    html = `<div style="font-size:11px;font-weight:600;color:${color};margin-bottom:4px">${labelTxt}</div>`;
+    nums.forEach(w => {
+      const v = existing[w] || 0;
+      html += `<div style="display:grid;grid-template-columns:80px 1fr 30px;gap:4px;align-items:center;margin-bottom:3px"><span style="font-size:11px;color:${color}">${prefix} ${w}</span><input class="fc pkEd-wd" data-w="${w}" data-kind="${kind}" type="number" step="0.01" value="${v}" style="padding:3px 6px;font-size:11px;text-align:right"><span style="font-size:10px;color:var(--g5)">kg</span></div>`;
+    });
+  } else {
+    html = `<div style="font-size:11px;color:var(--g4);padding:4px 0">${prefix}번호 입력 후 자동 생성</div>`;
+  }
+  box.innerHTML = html;
 }
 
 function savePkEdit(id, fbId) {
