@@ -237,30 +237,42 @@
       thKgByDate[dt] = (thKgByDate[dt]||0) + kg;
     });
 
-    // 2) 일자×제품 packing 그룹핑 (R/S/T열의 키)
-    //    같은 날 같은 제품의 여러 packing 레코드는 합산
-    //    DB에 hours 필드 없음 → start/end로 계산
+    // 2) 일자×제품 packing 그룹핑 — 인시 방식
     var byDP = {};   // key 'date|product'
     (pk||[]).forEach(function(r){
       var dt=d(r); var prod=r.product||''; if(!dt||!prod) return;
       var k = dt+'|'+prod;
-      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, workers:0, recs:0};
-      byDP[k].ea      += _num(r.ea);
-      byDP[k].hours   += _hoursFromSE(r.start, r.end);
-      byDP[k].workers  = Math.max(byDP[k].workers, _num(r.workers));
-      byDP[k].recs    += 1;
+      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0, recs:0};
+      byDP[k].ea += _num(r.ea);
+      var h = _hoursFromSE(r.start, r.end);
+      var w = _num(r.workers);
+      byDP[k].hours += h;
+      byDP[k].personHours += h * w;
+      byDP[k].recs += 1;
+    });
+    // 시간가중평균 인원
+    Object.keys(byDP).forEach(function(k){
+      var p = byDP[k];
+      p.workers = p.hours>0 ? p.personHours/p.hours : 0;
     });
 
     // 3) 일자별 preprocess/cooking/shredding 합산
-    //    DB에 hours 필드 없음 → start/end로 계산
+    //    인시(person-hour) 방식: 작업별로 시간×인원 계산해 합산
+    //    인원 = 시간가중평균 (= 인시 ÷ 시간) → G×H = I 일치
     function sumByDate(arr){
       var m={};
       (arr||[]).forEach(function(r){
         var dt=d(r); if(!dt) return;
-        if(!m[dt]) m[dt]={kg:0,hours:0,workers:0};
-        m[dt].kg      += _num(r.kg);  // preprocess/cooking/shredding 모두 'kg' 필드
-        m[dt].hours   += _hoursFromSE(r.start, r.end);
-        m[dt].workers  = Math.max(m[dt].workers, _num(r.workers));
+        if(!m[dt]) m[dt]={kg:0,hours:0,personHours:0,workers:0};
+        m[dt].kg += _num(r.kg);
+        var h = _hoursFromSE(r.start, r.end);
+        var w = _num(r.workers);
+        m[dt].hours += h;
+        m[dt].personHours += h * w;
+      });
+      // 시간가중평균 인원
+      Object.keys(m).forEach(function(dt){
+        m[dt].workers = m[dt].hours>0 ? m[dt].personHours/m[dt].hours : 0;
       });
       return m;
     }
@@ -291,6 +303,8 @@
       var thKg = thKgByDate[dt] || 0;
 
       // 모든 행에 일자별 값 동일하게 표시 (합계 계산은 unique date 기준)
+      // 인원은 시간가중평균(소수1), 인시는 별도 필드
+      function r1(x){ return Math.round(x*10)/10; }
       rows.push({
         date: dt,
         dayNo: dayCnt[dt],
@@ -299,16 +313,20 @@
         rmKg: _r2(thKg),
         ppKg: _r2(ppr.kg),
         ppHours: _r2(ppr.hours),
-        ppWorkers: ppr.workers,
+        ppWorkers: r1(ppr.workers),
+        ppPersonHours: _r2(ppr.personHours),
         ckKg: _r2(ckr.kg),
         ckHours: _r2(ckr.hours),
-        ckWorkers: ckr.workers,
+        ckWorkers: r1(ckr.workers),
+        ckPersonHours: _r2(ckr.personHours),
         shKg: _r2(shr.kg),
         shHours: _r2(shr.hours),
-        shWorkers: shr.workers,
+        shWorkers: r1(shr.workers),
+        shPersonHours: _r2(shr.personHours),
         pkEa: p.ea,
         pkHours: _r2(p.hours),
-        pkWorkers: p.workers
+        pkWorkers: r1(p.workers),
+        pkPersonHours: _r2(p.personHours)
       });
     });
 
@@ -335,15 +353,15 @@
       if(r.dateRowIdx===0 || r.dateRowIdx==null){
         sum.rmKg+=r.rmKg;
         sum.ppKg+=r.ppKg; sum.ppHours+=r.ppHours; sum.ppWorkers+=r.ppWorkers;
-        sum.ppTotal += (r.ppHours*r.ppWorkers);
+        sum.ppTotal += r.ppPersonHours;   // 인시 합 (정확)
         sum.ckKg+=r.ckKg; sum.ckHours+=r.ckHours; sum.ckWorkers+=r.ckWorkers;
-        sum.ckTotal += (r.ckHours*r.ckWorkers);
+        sum.ckTotal += r.ckPersonHours;
         sum.shKg+=r.shKg; sum.shHours+=r.shHours; sum.shWorkers+=r.shWorkers;
-        sum.shTotal += (r.shHours*r.shWorkers);
+        sum.shTotal += r.shPersonHours;
       }
       // 제품별 데이터(내포장·완제품)는 모든 행 합산
       sum.pkEa+=r.pkEa; sum.pkHours+=r.pkHours; sum.pkWorkers+=r.pkWorkers;
-      sum.pkTotal += (r.pkHours*r.pkWorkers);
+      sum.pkTotal += r.pkPersonHours;
       sum.meatKg += r.pkEa*_gramPerEa(r.product);
       sum.prodKg += r.pkEa*_totalGramPerEa(r.product);
       // 비율 컬럼은 0이 아닌 값만 평균에 포함 (분모 0인 케이스 제외)
@@ -422,10 +440,10 @@
 
     // 행 계산 보강 (총 작업시간/생산성/수율)
     var calcRows = _mpRows.map(function(r){
-      var ppT = r.ppHours*r.ppWorkers;
-      var ckT = r.ckHours*r.ckWorkers;
-      var shT = r.shHours*r.shWorkers;
-      var pkT = r.pkHours*r.pkWorkers;
+      var ppT = r.ppPersonHours || 0;
+      var ckT = r.ckPersonHours || 0;
+      var shT = r.shPersonHours || 0;
+      var pkT = r.pkPersonHours || 0;
       var meatKg = r.pkEa*_gramPerEa(r.product);
       var prodKg = r.pkEa*_totalGramPerEa(r.product);
       var rm = r.rmKg;
@@ -451,9 +469,26 @@
     // 합계
     var sum = _mpAggregate(calcRows);
     var prevSum = _mpAggregate((_mpPrevRows||[]).map(function(r){
-      var ppT=r.ppHours*r.ppWorkers, ckT=r.ckHours*r.ckWorkers, shT=r.shHours*r.shWorkers, pkT=r.pkHours*r.pkWorkers;
-      return Object.assign({}, r, {ppTotal:ppT,ckTotal:ckT,shTotal:shT,pkTotal:pkT,
-        meatKg:r.pkEa*_gramPerEa(r.product), prodKg:r.pkEa*_totalGramPerEa(r.product)});
+      var ppT=r.ppPersonHours||0, ckT=r.ckPersonHours||0, shT=r.shPersonHours||0, pkT=r.pkPersonHours||0;
+      var meatKg = r.pkEa*_gramPerEa(r.product);
+      var rm = r.rmKg;
+      return Object.assign({}, r, {
+        ppTotal:ppT, ckTotal:ckT, shTotal:shT, pkTotal:pkT,
+        meatKg:meatKg, prodKg:r.pkEa*_totalGramPerEa(r.product),
+        prodPp: rm&&ppT?rm/ppT:0,
+        prodCk: rm&&ckT?rm/ckT:0,
+        prodSh: rm&&shT?rm/shT:0,
+        prodPk: rm&&pkT?rm/pkT:0,
+        prodAll: rm&&(ppT+ckT+shT+pkT)?rm/(ppT+ckT+shT+pkT):0,
+        yieldRmPp: rm?r.ppKg/rm:0,
+        yieldRmCk: rm?r.ckKg/rm:0,
+        yieldRmSh: rm?r.shKg/rm:0,
+        yieldRmPk: rm?meatKg/rm:0,
+        yieldPp:   rm?r.ppKg/rm:0,
+        yieldCk:   r.ppKg?r.ckKg/r.ppKg:0,
+        yieldSh:   r.ckKg?r.shKg/r.ckKg:0,
+        yieldPk:   r.shKg?meatKg/r.shKg:0
+      });
     }));
 
     // 헤더
@@ -594,9 +629,9 @@
         r.product,                                          // D 제품명
         isFirst ? (r.rmKg||'') : '',                        // E 원육사용량
         isFirst ? (r.ppKg||'') : '',                        // F 전처리KG
-        isFirst ? (r.ppHours||'') : '',                     // G 전처리시간
-        isFirst ? (r.ppWorkers||'') : '',                   // H 전처리인원
-        isFirst ? {f:'IFERROR(G'+rowN+'*H'+rowN+',"")'} : '', // I 전처리총
+        isFirst ? (r.ppHours||'') : '',                     // G 전처리시간 (합)
+        isFirst ? (r.ppWorkers||'') : '',                   // H 전처리 평균인원 (인시/시간)
+        isFirst ? {f:'IFERROR(G'+rowN+'*H'+rowN+',"")'} : '', // I 인시 (G×H = 정확)
         isFirst ? (r.ckKg||'') : '',                        // J 자숙KG
         isFirst ? (r.ckHours||'') : '',                     // K
         isFirst ? (r.ckWorkers||'') : '',                   // L
@@ -611,7 +646,7 @@
         {f:'IFERROR(S'+rowN+'*T'+rowN+',"")'},              // U
         meatPerEa?{f:'R'+rowN+'*'+meatPerEa}:'',           // V 완제품고기중량
         totalPerEa?{f:'R'+rowN+'*'+totalPerEa}:'',         // W 완제품중량
-        {f:'IFERROR(E'+rowN+'/I'+rowN+',"")'},              // X 생산성 전처리
+        {f:'IFERROR(E'+rowN+'/I'+rowN+',"")'},              // X 생산성 전처리 (kg/인시)
         {f:'IFERROR(E'+rowN+'/M'+rowN+',"")'},              // Y
         {f:'IFERROR(E'+rowN+'/Q'+rowN+',"")'},              // Z
         {f:'IFERROR(E'+rowN+'/U'+rowN+',"")'},              // AA
