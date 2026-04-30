@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
   window.delR = delR;
   window.chDay = chDay;
   window.addProd = addProd;
+  window.onNpNoMeatToggle = onNpNoMeatToggle;
   window.delProd = delProd;
   window.cancelEditProd = cancelEditProd;
   window.startEditProd = startEditProd;
