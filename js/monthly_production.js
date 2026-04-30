@@ -644,6 +644,58 @@
       });
     });
 
+    // ★ 같은 (date, type) 단일 부위 행 병합 — 무육/다부위 분리 행은 제외
+    var __mergeMap = {};
+    var __keepRows = [];
+    rows.forEach(function(r){
+      if(r.noMeat || !r.type || r.type==='-' || r.type==='무육' || r.type==='_'){
+        __keepRows.push(r);
+        return;
+      }
+      var key = r.date + '|' + r.type;
+      if(!__mergeMap[key]){
+        __mergeMap[key] = Object.assign({}, r, { _productList: [r.product] });
+      } else {
+        var m = __mergeMap[key];
+        m._productList.push(r.product);
+        // 분배된 부위 데이터 합산 → 그 부위 그날 전체로 복원
+        m.rmKg = _r2((m.rmKg||0) + (r.rmKg||0));
+        m.ppKg = _r2((m.ppKg||0) + (r.ppKg||0));
+        m.ppHours = _r2((m.ppHours||0) + (r.ppHours||0));
+        m.ppWorkers = r1((m.ppWorkers||0) + (r.ppWorkers||0));
+        m.ppPersonHours = _r2((m.ppPersonHours||0) + (r.ppPersonHours||0));
+        m.ckKg = _r2((m.ckKg||0) + (r.ckKg||0));
+        m.ckHours = _r2((m.ckHours||0) + (r.ckHours||0));
+        m.ckWorkers = r1((m.ckWorkers||0) + (r.ckWorkers||0));
+        m.ckPersonHours = _r2((m.ckPersonHours||0) + (r.ckPersonHours||0));
+        m.shKg = _r2((m.shKg||0) + (r.shKg||0));
+        m.shHours = _r2((m.shHours||0) + (r.shHours||0));
+        m.shWorkers = r1((m.shWorkers||0) + (r.shWorkers||0));
+        m.shPersonHours = _r2((m.shPersonHours||0) + (r.shPersonHours||0));
+        // 포장은 제품별 자체 시간/EA → 합산
+        m.pkEa = (m.pkEa||0) + (r.pkEa||0);
+        m.pkEaInner = (m.pkEaInner||0) + (r.pkEaInner||0);
+        m.pkHours = _r2((m.pkHours||0) + (r.pkHours||0));
+        m.pkWorkers = r1((m.pkWorkers||0) + (r.pkWorkers||0));
+        m.pkPersonHours = _r2((m.pkPersonHours||0) + (r.pkPersonHours||0));
+      }
+    });
+    var __mergedRows = Object.values(__mergeMap).map(function(m){
+      m.product = m._productList.join(', ');
+      delete m._productList;
+      return m;
+    });
+    rows = __mergedRows.concat(__keepRows);
+    // dateRowIdx 재정렬 (같은 일자 내 순서)
+    var __byDateG = {};
+    rows.forEach(function(r){
+      if(!__byDateG[r.date]) __byDateG[r.date] = [];
+      __byDateG[r.date].push(r);
+    });
+    Object.keys(__byDateG).forEach(function(d){
+      __byDateG[d].forEach(function(r, i){ r.dateRowIdx = i; });
+    });
+
     return {
       rows: rows,
       testCount: pk.filter(isTestPk).length
