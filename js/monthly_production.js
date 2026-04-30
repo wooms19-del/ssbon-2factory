@@ -949,11 +949,7 @@
     if(tw) tw.style.display='';
 
     if(st){
-      st.style.display='';
-      st.style.color='#1b8a3a';
-      var msg = '✓ 데이터 로드 완료';
-      if(_mpData.testCount>0) msg += ' (테스트 체인 '+_mpData.testCount+'건 역추적 제외)';
-      st.textContent = msg;
+      st.style.display='none';
     }
 
     var ymThis=(_mpYm||_ymToday()), ymPrev=_prevYm(ymThis);
