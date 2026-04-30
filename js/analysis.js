@@ -1464,8 +1464,13 @@ function renderDailyFromLocal_(d){
     pkMap[key]._recs = pkMap[key]._recs||[]; pkMap[key]._recs.push(r);
     pkMap[key].h += dur(r.start,r.end);
   });
-  // 포장 투입: 타입별 파쇄 산출을 EA 비중으로 배분 (이중계산 방지)
-  // 각 shredding 타입별로 해당 타입 사용하는 포장 레코드들의 총 EA 합산 후 비례 배분
+  // 포장 투입: wagonDist 있으면 그 합 그대로, 없으면 EA 비중 fallback
+  // 각 packing의 wagonDist 합을 정확한 투입 kg으로 사용 (wagon 추적된 경우)
+  function _sumWagonDist(rec){
+    var wd = rec && rec.wagonDist;
+    if(!wd || typeof wd !== 'object') return 0;
+    return Object.values(wd).reduce(function(s,v){return s + (parseFloat(v)||0);}, 0);
+  }
   const pkInKgMap = {}; // key별 투입KG 누적
   const pkOrigMap = {}; // key별 원육KG 누적
   const pkMapEntries = Object.entries(pkMap);
@@ -1475,23 +1480,69 @@ function renderDailyFromLocal_(d){
       const types = (vv.type||'').split(',').map(t=>t.trim());
       return types.indexOf(shType) >= 0;
     });
-    const totalRelEa = relEntries.reduce((s,[,vv])=>s+(vv.ea||0),0);
+    // wagonDist 있는 그룹과 없는 그룹 분리
+    const wdEntries = []; // {k, vv, wdSum}
+    const noWdEntries = []; // [k, vv]
     relEntries.forEach(([k,vv]) => {
-      const share = totalRelEa > 0 ? (vv.ea||0) / totalRelEa : 1/relEntries.length;
-      pkInKgMap[k] = r2((pkInKgMap[k]||0) + shGroup[shType].kg * share);
+      const wdSum = (vv._recs||[]).reduce((s,r)=>s+_sumWagonDist(r), 0);
+      if(wdSum > 0){
+        wdEntries.push({k:k, vv:vv, wdSum:wdSum});
+      } else {
+        noWdEntries.push([k, vv]);
+      }
     });
+    // wagonDist 있는 것: 그 합 그대로
+    let usedKg = 0;
+    wdEntries.forEach(e => {
+      pkInKgMap[e.k] = r2((pkInKgMap[e.k]||0) + e.wdSum);
+      usedKg += e.wdSum;
+    });
+    // wagonDist 없는 것: 잔여 파쇄량을 EA 비율로
+    const remainingKg = Math.max(0, shGroup[shType].kg - usedKg);
+    if(noWdEntries.length > 0 && remainingKg > 0){
+      const totalRelEa = noWdEntries.reduce((s,[,vv])=>s+(vv.ea||0),0);
+      noWdEntries.forEach(([k,vv]) => {
+        const share = totalRelEa > 0 ? (vv.ea||0) / totalRelEa : 1/noWdEntries.length;
+        pkInKgMap[k] = r2((pkInKgMap[k]||0) + remainingKg * share);
+      });
+    }
   });
-  // rmByType도 동일 방식으로
+  // rmByType도 동일 방식 (원육 분배)
   Object.keys(rmByType).forEach(rmType => {
     const relEntries = pkMapEntries.filter(([k,vv]) => {
       const types = (vv.type||'').split(',').map(t=>t.trim());
       return types.indexOf(rmType) >= 0;
     });
-    const totalRelEa = relEntries.reduce((s,[,vv])=>s+(vv.ea||0),0);
+    // wagonDist 있는 그룹은 그 비율로 원육 분배 (정확)
+    const wdEntries = []; const noWdEntries = [];
+    let totalWdKg = 0;
     relEntries.forEach(([k,vv]) => {
-      const share = totalRelEa > 0 ? (vv.ea||0) / totalRelEa : 1/relEntries.length;
-      pkOrigMap[k] = r2((pkOrigMap[k]||0) + rmByType[rmType] * share);
+      const wdSum = (vv._recs||[]).reduce((s,r)=>s+_sumWagonDist(r), 0);
+      if(wdSum > 0){ wdEntries.push({k:k, vv:vv, wdSum:wdSum}); totalWdKg += wdSum; }
+      else { noWdEntries.push([k, vv]); }
     });
+    const totalRmKg = rmByType[rmType] || 0;
+    // wagonDist 있는 것: wagonDist 비율로 원육 분배
+    let usedRm = 0;
+    if(totalWdKg > 0){
+      const totalShKg = (shGroup[rmType] && shGroup[rmType].kg) || totalWdKg;
+      // 원육 = 그 type 전체 원육 × (wd합 / 그 type 파쇄총합)
+      wdEntries.forEach(e => {
+        const ratio = e.wdSum / totalShKg;
+        const orig = totalRmKg * ratio;
+        pkOrigMap[e.k] = r2((pkOrigMap[e.k]||0) + orig);
+        usedRm += orig;
+      });
+    }
+    // wagonDist 없는 것: 잔여 원육을 EA 비율로
+    const remainingRm = Math.max(0, totalRmKg - usedRm);
+    if(noWdEntries.length > 0 && remainingRm > 0){
+      const totalRelEa = noWdEntries.reduce((s,[,vv])=>s+(vv.ea||0),0);
+      noWdEntries.forEach(([k,vv]) => {
+        const share = totalRelEa > 0 ? (vv.ea||0) / totalRelEa : 1/noWdEntries.length;
+        pkOrigMap[k] = r2((pkOrigMap[k]||0) + remainingRm * share);
+      });
+    }
   });
   Object.entries(pkMap).forEach(([key, v]) => {
     // noMeat 제품 판별: 첫 레코드의 제품으로 확인
