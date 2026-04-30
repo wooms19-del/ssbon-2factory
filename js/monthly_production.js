@@ -397,16 +397,10 @@
       var oe = opMap[k] || 0;
       p.eaDisp = oe>0 ? oe : p.ea;
       p.eaSrc  = oe>0 ? '외' : '내';
-      // 1) packing 자체의 type (가장 많이 나온 type 우선)
-      var typeList = [];
-      var bestT = null, bestCnt = 0;
-      Object.keys(p.types).forEach(function(t){
-        if(p.types[t]>bestCnt){ bestCnt = p.types[t]; bestT = t; }
-      });
-      if(bestT){
-        typeList = [bestT];
-      } else {
-        // 2) packing에 type 없으면 → 그날 thawing 부위들 자동 추론
+      // 1) packing 자체의 type — kg(EA) 큰 순으로 모두 typeList에 포함
+      var typeList = Object.keys(p.types).sort(function(a,b){return (p.types[b]||0)-(p.types[a]||0);});
+      // 2) packing에 type 없으면 → 그날 thawing 부위들 자동 추론
+      if(typeList.length === 0){
         var thTypes = {};
         Object.keys(thByDateType).forEach(function(thk){
           var pp=thk.split('|');
@@ -414,11 +408,10 @@
             thTypes[pp[1]] = (thTypes[pp[1]]||0) + thByDateType[thk];
           }
         });
-        // kg 큰 순으로 정렬
         typeList = Object.keys(thTypes).sort(function(a,b){return thTypes[b]-thTypes[a];});
       }
-      p.type = typeList[0] || null;       // 단일 (분배 로직용)
-      p.typeList = typeList;               // 배열 (표시용)
+      p.type = typeList[0] || null;
+      p.typeList = typeList;
     });
 
     // 각 packing 행에 부위 매칭된 데이터 할당 (필요시 비율 분배)
@@ -566,16 +559,27 @@
         return;
       }
 
-      // 여러 부위 → 부위마다 별도 행 (thawing kg 비율로 EA·인시 분배)
-      var thKgs = p.typeList.map(function(t){ return thByDateType[dt+'|'+t] || 0; });
-      var totalTh = thKgs.reduce(function(a,b){return a+b;}, 0);
-      // 합이 0이면 균등 분배
-      var ratios = totalTh>0
-        ? thKgs.map(function(x){return x/totalTh;})
-        : p.typeList.map(function(){return 1/p.typeList.length;});
+      // 여러 부위 → 부위마다 별도 행
+      // EA 분배 우선순위: (1) packing에 type 명시된 EA 비율 (2) thawing kg 비율
+      var hasPkTypes = Object.keys(p.types).length > 0;
+      var ratios;
+      if(hasPkTypes){
+        var totalPkType = p.typeList.reduce(function(s,t){return s+(p.types[t]||0);},0);
+        ratios = p.typeList.map(function(t){
+          return totalPkType>0 ? (p.types[t]||0)/totalPkType : 1/p.typeList.length;
+        });
+      } else {
+        var thKgs = p.typeList.map(function(t){ return thByDateType[dt+'|'+t] || 0; });
+        var totalTh = thKgs.reduce(function(a,b){return a+b;}, 0);
+        ratios = totalTh>0
+          ? thKgs.map(function(x){return x/totalTh;})
+          : p.typeList.map(function(){return 1/p.typeList.length;});
+      }
 
       p.typeList.forEach(function(t, i){
         var src = _dataByType(dt, t);
+        // 부위 데이터 비어있으면 그날 전체 데이터로 폴백
+        if(src.rmKg===0 && src.pp.kg===0) src = _dataAll(dt);
         var ratio = ratios[i];
         prodCnt[dt] = prodCnt[dt]||0;
         var idx2 = prodCnt[dt];
@@ -774,16 +778,14 @@
       if(!isFinite(v)) return '-';
       if(v===0) return '-';
       var grp = c[1];
-      if(grp==='yield' || grp==='prod') return v.toFixed(3);
-      // 정수형 EA
+      // 수율: % 표시
+      if(grp==='yield') return (v*100).toFixed(1) + '%';
+      // 생산성: kg/인시
+      if(grp==='prod') return v.toFixed(2);
       if(c[0]==='pkEa' || c[0]==='dayNo') return Math.round(v).toLocaleString();
-      // 인원: 소수1
       if(c[0]==='ppWorkers'||c[0]==='ckWorkers'||c[0]==='shWorkers'||c[0]==='pkWorkers') return v.toFixed(1);
-      // 시간: 소수2
       if(c[0]==='ppHours'||c[0]==='ckHours'||c[0]==='shHours'||c[0]==='pkHours') return v.toFixed(2);
-      // 인시: 소수1
       if(c[0]==='ppPersonHours'||c[0]==='ckPersonHours'||c[0]==='shPersonHours'||c[0]==='pkPersonHours') return v.toFixed(1);
-      // KG류: 천단위 콤마 + 소수1 또는 정수
       return v%1===0 ? v.toLocaleString() : v.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:2});
     }
 
@@ -845,7 +847,9 @@
       if(v==null) return '';
       if(typeof v!=='number') return String(v);
       if(!isFinite(v)) return '';
-      if(c && (c[1]==='yield'||c[1]==='prod')) return v.toFixed(3);
+      // 수율은 %, 생산성은 소수
+      if(c && c[1]==='yield') return (v*100).toFixed(1) + '%';
+      if(c && c[1]==='prod') return v.toFixed(2);
       var key = c ? c[0] : '';
       if(key==='pkEa' || key==='dayNo') return Math.round(v).toLocaleString();
       if(key==='ppWorkers'||key==='ckWorkers'||key==='shWorkers'||key==='pkWorkers') return v.toFixed(1);
