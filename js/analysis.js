@@ -522,9 +522,11 @@ function _moRenderRows(selProds) {
     const capa   = meta.capa!=null?meta.capa:(firstProd&&firstProd.capa?firstProd.capa.toLocaleString():'');
     const note   = meta.note!=null?meta.note:'';
     const thDay  = thMonth.filter(r=>String(r.date||'').slice(0,10)===date);
-    let meatParts=[...new Set(thDay.flatMap(r=>(r.type||'').split(',').map(s=>s.trim()).filter(Boolean)))];
+    // 그날 모든 제품이 무육(메추리알 등)이면 부위 표시 안 함
+    const _isAllNoMeat = dayRows.length>0 && dayRows.every(r => /메추리알/.test(r.product||''));
+    let meatParts = _isAllNoMeat ? [] : [...new Set(thDay.flatMap(r=>(r.type||'').split(',').map(s=>s.trim()).filter(Boolean)))];
     // 방혈 type 없으면 전처리 type으로 fallback
-    if(!meatParts.length && ppMonth){
+    if(!meatParts.length && ppMonth && !_isAllNoMeat){
       const ppDay=(ppMonth||[]).filter(r=>String(r.date||'').slice(0,10)===date);
       meatParts=[...new Set(ppDay.flatMap(r=>(r.type||'').split(',').map(s=>s.trim()).filter(Boolean)))];
     }
