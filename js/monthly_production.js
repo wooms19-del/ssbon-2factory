@@ -279,9 +279,8 @@
     keys.forEach(function(k){
       var p = byDP[k];
       var dt = p.date;
-      // 일자별 공정 데이터 → 첫번째 행에만 표시 (후속 제품 행은 0)
       prodCntPerDate[dt] = (prodCntPerDate[dt]||0);
-      var isFirst = prodCntPerDate[dt]===0;
+      var dateRowIdx = prodCntPerDate[dt];   // 그날 몇 번째 제품인지 (0=첫 행)
       prodCntPerDate[dt] += 1;
 
       var ppr = ppByDate[dt] || {kg:0,hours:0,workers:0};
@@ -289,20 +288,22 @@
       var shr = shByDate[dt] || {kg:0,hours:0,workers:0};
       var thKg = thKgByDate[dt] || 0;
 
+      // 모든 행에 일자별 값 동일하게 표시 (합계 계산은 unique date 기준)
       rows.push({
         date: dt,
         dayNo: dayCnt[dt],
+        dateRowIdx: dateRowIdx,
         product: p.product,
-        rmKg: isFirst ? _r2(thKg) : 0,
-        ppKg: isFirst ? _r2(ppr.kg) : 0,
-        ppHours: isFirst ? _r2(ppr.hours) : 0,
-        ppWorkers: isFirst ? ppr.workers : 0,
-        ckKg: isFirst ? _r2(ckr.kg) : 0,
-        ckHours: isFirst ? _r2(ckr.hours) : 0,
-        ckWorkers: isFirst ? ckr.workers : 0,
-        shKg: isFirst ? _r2(shr.kg) : 0,
-        shHours: isFirst ? _r2(shr.hours) : 0,
-        shWorkers: isFirst ? shr.workers : 0,
+        rmKg: _r2(thKg),
+        ppKg: _r2(ppr.kg),
+        ppHours: _r2(ppr.hours),
+        ppWorkers: ppr.workers,
+        ckKg: _r2(ckr.kg),
+        ckHours: _r2(ckr.hours),
+        ckWorkers: ckr.workers,
+        shKg: _r2(shr.kg),
+        shHours: _r2(shr.hours),
+        shWorkers: shr.workers,
         pkEa: p.ea,
         pkHours: _r2(p.hours),
         pkWorkers: p.workers
@@ -321,12 +322,17 @@
                meatKg:0,prodKg:0};
     var dates = {};
     rows.forEach(function(r){
-      sum.rmKg+=r.rmKg; sum.ppKg+=r.ppKg; sum.ppHours+=r.ppHours; sum.ppWorkers+=r.ppWorkers;
-      sum.ppTotal += (r.ppHours*r.ppWorkers);
-      sum.ckKg+=r.ckKg; sum.ckHours+=r.ckHours; sum.ckWorkers+=r.ckWorkers;
-      sum.ckTotal += (r.ckHours*r.ckWorkers);
-      sum.shKg+=r.shKg; sum.shHours+=r.shHours; sum.shWorkers+=r.shWorkers;
-      sum.shTotal += (r.shHours*r.shWorkers);
+      // 일자별 데이터(원육·전처리·자숙·파쇄)는 unique date(그날 첫 행)만 카운트
+      if(r.dateRowIdx===0 || r.dateRowIdx==null){
+        sum.rmKg+=r.rmKg;
+        sum.ppKg+=r.ppKg; sum.ppHours+=r.ppHours; sum.ppWorkers+=r.ppWorkers;
+        sum.ppTotal += (r.ppHours*r.ppWorkers);
+        sum.ckKg+=r.ckKg; sum.ckHours+=r.ckHours; sum.ckWorkers+=r.ckWorkers;
+        sum.ckTotal += (r.ckHours*r.ckWorkers);
+        sum.shKg+=r.shKg; sum.shHours+=r.shHours; sum.shWorkers+=r.shWorkers;
+        sum.shTotal += (r.shHours*r.shWorkers);
+      }
+      // 제품별 데이터(내포장·완제품)는 모든 행 합산
       sum.pkEa+=r.pkEa; sum.pkHours+=r.pkHours; sum.pkWorkers+=r.pkWorkers;
       sum.pkTotal += (r.pkHours*r.pkWorkers);
       sum.meatKg += r.pkEa*_gramPerEa(r.product);
@@ -353,10 +359,9 @@
       return;
     }
 
-    // 컬럼 정의 (엑셀 36컬럼 순서 그대로)
+    // 컬럼 정의 (엑셀 36컬럼 순서 그대로, 번호 제외)
     var COLS = [
       // [key, group, label]
-      ['no',      'base',    '번호'],
       ['dayNo',   'base',    '생산\n일수'],
       ['date',    'base',    '생산일자'],
       ['product', 'base',    '제품명'],
@@ -440,12 +445,12 @@
 
     // 데이터 행
     var bodyHtml = calcRows.map(function(r,i){
-      r.no = i+1;
       return '<tr>'+visibleCols.map(function(c){
         var v = r[c[0]];
         if(c[0]==='date') return '<td>'+(v||'').slice(5)+'</td>';
         if(c[0]==='product') return '<td style="text-align:left;padding-left:8px">'+(v||'')+'</td>';
         if(typeof v==='number'){
+          if(v===0) return '<td class="numL">-</td>';   // 진짜 0인 데이터는 - 표시
           var s = c[1]==='yield'||c[1]==='prod' ? v.toFixed(3) : (v%1===0?String(v):v.toFixed(2));
           return '<td class="numL">'+s+'</td>';
         }
@@ -453,43 +458,40 @@
       }).join('')+'</tr>';
     }).join('');
 
-    // 합계행
-    function fmtSum(key){
-      var v = sum[key]; if(v==null) return '';
+    // 합계행 (dayNo, date, product 3컬럼은 라벨 자리)
+    function fmtNum(v, c){
+      if(v==null) return '';
       if(typeof v!=='number') return String(v);
+      if(c && (c[1]==='yield'||c[1]==='prod')) return v.toFixed(3);
       return v%1===0?String(v):v.toFixed(2);
     }
-    var sumHtml = '<tr class="sumRow"><td colspan="2">합계</td><td colspan="2"></td>'
-      + visibleCols.slice(4).map(function(c){
-          return '<td class="numL">'+fmtSum(c[0])+'</td>';
+    var sumHtml = '<tr class="sumRow"><td>합계</td><td colspan="2"></td>'
+      + visibleCols.slice(3).map(function(c){
+          return '<td class="numL">'+fmtNum(sum[c[0]], c)+'</td>';
         }).join('')
       + '</tr>';
 
     // 평균행 (생산일수로 나눔)
     var dc = sum.dayCount||1;
-    var avgHtml = '<tr class="avgRow"><td colspan="2">평균</td><td colspan="2"></td>'
-      + visibleCols.slice(4).map(function(c){
-          var v = sum[c[0]]; if(v==null) return '<td></td>';
-          if(typeof v!=='number') return '<td></td>';
-          var avg = v/dc;
-          return '<td class="numL">'+(avg%1===0?String(avg):avg.toFixed(2))+'</td>';
+    var avgHtml = '<tr class="avgRow"><td>평균</td><td colspan="2"></td>'
+      + visibleCols.slice(3).map(function(c){
+          var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td></td>';
+          return '<td class="numL">'+fmtNum(v/dc, c)+'</td>';
         }).join('')
       + '</tr>';
 
     // 전월 평균행
     var pdc = prevSum.dayCount||1;
-    var prevHtml = '<tr class="prevRow"><td colspan="2">전월 평균</td><td colspan="2"></td>'
-      + visibleCols.slice(4).map(function(c){
-          var v = prevSum[c[0]]; if(v==null) return '<td></td>';
-          if(typeof v!=='number') return '<td></td>';
-          var avg = v/pdc;
-          return '<td class="numL">'+(avg%1===0?String(avg):avg.toFixed(2))+'</td>';
+    var prevHtml = '<tr class="prevRow"><td>전월 평균</td><td colspan="2"></td>'
+      + visibleCols.slice(3).map(function(c){
+          var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td></td>';
+          return '<td class="numL">'+fmtNum(v/pdc, c)+'</td>';
         }).join('')
       + '</tr>';
 
     // 증감율
-    var diffHtml = '<tr class="diffRow"><td colspan="2">증감율(%)</td><td colspan="2"></td>'
-      + visibleCols.slice(4).map(function(c){
+    var diffHtml = '<tr class="diffRow"><td>증감율(%)</td><td colspan="2"></td>'
+      + visibleCols.slice(3).map(function(c){
           var v = sum[c[0]]||0;
           var p = prevSum[c[0]]||0;
           if(!p) return '<td></td>';
@@ -552,13 +554,7 @@
     var startRow = 6;
     _mpRows.forEach(function(r,i){
       var rowN = startRow+i;
-      // 엑셀 행 번호로 수식 만들기
-      // I = G*H, M = K*L, Q = O*P, U = S*T
-      // V = R*gramPerEa, W = R*totalGramPerEa
-      // X = E/I, Y = E/M, Z = E/Q, AA = E/U
-      // AB = E/(I+M+Q+U)
-      // AC=F/E, AD=J/E, AE=N/E, AF=V/E
-      // AG=AC, AH=J/F, AI=N/J, AJ=V/N
+      var isFirst = (r.dateRowIdx===0 || r.dateRowIdx==null);  // 일자별 값은 첫 행에만
       var meatPerEa = _gramPerEa(r.product);
       var totalPerEa = _totalGramPerEa(r.product);
 
@@ -567,20 +563,20 @@
         r.dayNo,                                            // B 생산일수
         r.date,                                             // C 생산일자
         r.product,                                          // D 제품명
-        r.rmKg||'',                                         // E 원육사용량
-        r.ppKg||'',                                         // F 전처리KG
-        r.ppHours||'',                                      // G 전처리시간
-        r.ppWorkers||'',                                    // H 전처리인원
-        {f:'IFERROR(G'+rowN+'*H'+rowN+',"")'},              // I 전처리총
-        r.ckKg||'',                                         // J 자숙KG
-        r.ckHours||'',                                      // K
-        r.ckWorkers||'',                                    // L
-        {f:'IFERROR(K'+rowN+'*L'+rowN+',"")'},              // M
-        r.shKg||'',                                         // N 파쇄KG
-        r.shHours||'',                                      // O
-        r.shWorkers||'',                                    // P
-        {f:'IFERROR(O'+rowN+'*P'+rowN+',"")'},              // Q
-        r.pkEa||'',                                         // R 내포장EA
+        isFirst ? (r.rmKg||'') : '',                        // E 원육사용량
+        isFirst ? (r.ppKg||'') : '',                        // F 전처리KG
+        isFirst ? (r.ppHours||'') : '',                     // G 전처리시간
+        isFirst ? (r.ppWorkers||'') : '',                   // H 전처리인원
+        isFirst ? {f:'IFERROR(G'+rowN+'*H'+rowN+',"")'} : '', // I 전처리총
+        isFirst ? (r.ckKg||'') : '',                        // J 자숙KG
+        isFirst ? (r.ckHours||'') : '',                     // K
+        isFirst ? (r.ckWorkers||'') : '',                   // L
+        isFirst ? {f:'IFERROR(K'+rowN+'*L'+rowN+',"")'} : '', // M
+        isFirst ? (r.shKg||'') : '',                        // N 파쇄KG
+        isFirst ? (r.shHours||'') : '',                     // O
+        isFirst ? (r.shWorkers||'') : '',                   // P
+        isFirst ? {f:'IFERROR(O'+rowN+'*P'+rowN+',"")'} : '', // Q
+        r.pkEa||'',                                         // R 내포장EA (제품별)
         r.pkHours||'',                                      // S
         r.pkWorkers||'',                                    // T
         {f:'IFERROR(S'+rowN+'*T'+rowN+',"")'},              // U
