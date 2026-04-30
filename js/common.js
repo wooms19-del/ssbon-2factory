@@ -74,7 +74,6 @@ function nL(){
       {name:'시그니처 장조림 130g 마트용', kgea:0.025, capa:800, sauce:'FC 장조림 소스'},
       {name:'FC 장조림 3KG',          kgea:1.3,   capa:500,  sauce:'FC 장조림 소스'},
       {name:'트레이더스 장조림 460g', kgea:0.147, capa:2100, sauce:'FC 장조림 소스'},
-      {name:'메추리알 장조림 180g',   kgea:0,     capa:2000, sauce:'FP 장조림 소스', noMeat:true},
     ],
     sauces:[{name:'FC 장조림 소스', memo:'기본 배합'},{name:'FP 장조림 소스', memo:'기본 배합'}],
     submats:['메추리알','버터'],
