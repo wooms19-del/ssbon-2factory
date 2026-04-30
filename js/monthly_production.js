@@ -636,16 +636,15 @@
 
     var dates = {};
     rows.forEach(function(r){
-      if(r.dateRowIdx===0 || r.dateRowIdx==null){
-        sum.rmKg+=r.rmKg;
-        sum.ppKg+=r.ppKg; sum.ppHours+=r.ppHours; sum.ppWorkers+=r.ppWorkers;
-        sum.ppTotal += r.ppPersonHours;
-        sum.ckKg+=r.ckKg; sum.ckHours+=r.ckHours; sum.ckWorkers+=r.ckWorkers;
-        sum.ckTotal += r.ckPersonHours;
-        sum.shKg+=r.shKg; sum.shHours+=r.shHours; sum.shWorkers+=r.shWorkers;
-        sum.shTotal += r.shPersonHours;
-      }
-      sum.pkEa+=r.pkEa; sum.pkHours+=r.pkHours; sum.pkWorkers+=r.pkWorkers;
+      // 부위 분리·분배 적용 후 → 모든 행 합산 (각 행은 자기 부위 분배 몫만 가짐)
+      sum.rmKg += r.rmKg;
+      sum.ppKg += r.ppKg; sum.ppHours += r.ppHours; sum.ppWorkers += r.ppWorkers;
+      sum.ppTotal += r.ppPersonHours;
+      sum.ckKg += r.ckKg; sum.ckHours += r.ckHours; sum.ckWorkers += r.ckWorkers;
+      sum.ckTotal += r.ckPersonHours;
+      sum.shKg += r.shKg; sum.shHours += r.shHours; sum.shWorkers += r.shWorkers;
+      sum.shTotal += r.shPersonHours;
+      sum.pkEa += r.pkEa; sum.pkHours += r.pkHours; sum.pkWorkers += r.pkWorkers;
       sum.pkTotal += r.pkPersonHours;
       sum.meatKg += r.pkEa * (r.kgea||0);
       sum.prodKg += r.pkEa * (r.kgTot||0);
