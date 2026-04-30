@@ -1754,18 +1754,20 @@ var _moPackingArgs = null; // 마지막 렌더 인자 보관 (탭 전환 시 재
 
 function setPackingChartMode(mode){
   _moPackingMode = mode;
-  // 탭 active 상태 갱신
+  // segmented control: 활성 버튼만 흰 배경 + 그림자, 나머지는 투명
   ['ea','weight','detail'].forEach(m => {
     const btn = document.getElementById('pkTab_'+m);
     if(!btn) return;
     if(m === mode){
-      btn.style.background = '#1a56db';
-      btn.style.color = '#fff';
-      btn.style.borderColor = '#1a56db';
-    } else {
       btn.style.background = '#fff';
-      btn.style.color = 'var(--g6)';
-      btn.style.borderColor = 'var(--g3)';
+      btn.style.color = '#1e293b';
+      btn.style.fontWeight = '600';
+      btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = '#64748b';
+      btn.style.fontWeight = '500';
+      btn.style.boxShadow = 'none';
     }
   });
   // 차트 다시 그리기
