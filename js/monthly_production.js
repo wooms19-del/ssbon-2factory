@@ -114,27 +114,25 @@
       + '#mpTbl{border-collapse:separate;border-spacing:0;font-size:12.5px;white-space:nowrap;min-width:100%;font-variant-numeric:tabular-nums}'
       + '#mpTbl th,#mpTbl td{border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;padding:7px 8px;text-align:center;vertical-align:middle}'
       + '#mpTbl thead th{background:#374151;color:#fff;font-weight:600;position:sticky;top:0;z-index:10;padding:9px 8px;line-height:1.35;font-size:12px;border-color:#1f2937;box-shadow:inset 0 -2px 0 #1f2937}'
-      // ── 그룹별 헤더 색상
-      + '#mpTbl thead th.grp-base{background:#374151}'                    // 기본: 진회색
-      + '#mpTbl thead th.grp-inout{background:#475569}'                   // 투입/배출(KG): 슬레이트
-      + '#mpTbl thead th.grp-workers{background:#9a3412}'                 // 작업인원: 적갈색
-      + '#mpTbl thead th.grp-hours{background:#3f6212}'                   // 작업시간: 올리브
-      + '#mpTbl thead th.grp-prod{background:#0f766e}'                    // 생산성: 청록
-      + '#mpTbl thead th.grp-yield{background:#7c3aed}'                   // 수율: 보라
-      // ── 본문도 그룹별로 미묘한 배경 색상
-      + '#mpTbl tbody td.grp-prod{background:#ecfeff}'                    // 생산성: 매우 연한 청록
-      + '#mpTbl tbody td.grp-yield{background:#faf5ff}'                   // 수율: 매우 연한 보라
-      // 그룹 경계: 첫 컬럼 좌측에 굵은 세로선
-      + '#mpTbl thead th.grp-first.grp-prod,#mpTbl tbody td.grp-first.grp-prod{border-left:2px solid #0f766e}'
-      + '#mpTbl thead th.grp-first.grp-yield,#mpTbl tbody td.grp-first.grp-yield{border-left:2px solid #7c3aed}'
-      + '#mpTbl thead th.grp-first.grp-workers,#mpTbl tbody td.grp-first.grp-workers{border-left:1px solid #9a3412}'
-      + '#mpTbl thead th.grp-first.grp-hours,#mpTbl tbody td.grp-first.grp-hours{border-left:1px solid #3f6212}'
-      // ── 왼쪽 3컬럼 sticky 고정 (생산일수 / 생산일자 / 제품명)
-      + '#mpTbl th:nth-child(1),#mpTbl td:nth-child(1){position:sticky;left:0;min-width:55px;width:55px;z-index:5;background:#fff}'
-      + '#mpTbl th:nth-child(2),#mpTbl td:nth-child(2){position:sticky;left:55px;min-width:90px;width:90px;z-index:5;background:#fff}'
-      + '#mpTbl th:nth-child(3),#mpTbl td:nth-child(3){position:sticky;left:145px;min-width:220px;width:220px;z-index:5;background:#fff;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
+      // 헤더 그룹별 색상 — 미묘하게만 (회색 톤 안에서)
+      + '#mpTbl thead th.grp-base{background:#1e293b}'                    // 기본: 진남색
+      + '#mpTbl thead th.grp-inout{background:#374151}'                   // 투입: 회색
+      + '#mpTbl thead th.grp-workers{background:#475569}'                 // 인원: 슬레이트
+      + '#mpTbl thead th.grp-hours{background:#475569}'                   // 시간: 슬레이트
+      + '#mpTbl thead th.grp-prod{background:#0e7490}'                    // 생산성: 청록 (강조)
+      + '#mpTbl thead th.grp-yield{background:#7e22ce}'                   // 수율: 보라 (강조)
+      // 본문 배경 색상 미니멀하게
+      + '#mpTbl tbody td.grp-prod{background:#f0fdfa}'                    // 매우 연한 청록
+      + '#mpTbl tbody td.grp-yield{background:#faf5ff}'                   // 매우 연한 보라
+      // 그룹 경계: 첫 컬럼 좌측에 굵은 세로선 (생산성 / 수율만)
+      + '#mpTbl thead th.grp-first.grp-prod,#mpTbl tbody td.grp-first.grp-prod{border-left:2px solid #0e7490}'
+      + '#mpTbl thead th.grp-first.grp-yield,#mpTbl tbody td.grp-first.grp-yield{border-left:2px solid #7e22ce}'
+      // ── 왼쪽 3컬럼 sticky 고정 (class 기반: rowspan과 호환)
+      + '#mpTbl th.col-dayno,#mpTbl td.col-dayno{position:sticky;left:0;min-width:55px;width:55px;z-index:5;background:#fff}'
+      + '#mpTbl th.col-date,#mpTbl td.col-date{position:sticky;left:55px;min-width:90px;width:90px;z-index:5;background:#fff}'
+      + '#mpTbl th.col-product,#mpTbl td.col-product{position:sticky;left:145px;min-width:220px;width:220px;z-index:5;background:#fff;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
       // 좌상단 모서리 (헤더 + 좌측 고정의 교차) z-index 가장 높게
-      + '#mpTbl thead th:nth-child(1),#mpTbl thead th:nth-child(2),#mpTbl thead th:nth-child(3){z-index:15;background:#374151}'
+      + '#mpTbl thead th.col-dayno,#mpTbl thead th.col-date,#mpTbl thead th.col-product{z-index:15;background:#1e293b}'
       // 짝수 행 zebra: sticky 셀도 같은 색
       + '#mpTbl tbody tr:nth-child(even):not(.sumRow):not(.avgRow):not(.prevRow):not(.diffRow) td{background:#fafbfc}'
       + '#mpTbl tbody tr:hover:not(.sumRow):not(.avgRow):not(.prevRow):not(.diffRow) td{background:#fef9c3}'
@@ -143,13 +141,11 @@
       + '#mpTbl tr.avgRow td{background:#dcfce7;font-weight:600;color:#14532d;padding:9px 8px}'
       + '#mpTbl tr.prevRow td{background:#f1f5f9;color:#475569;padding:9px 8px}'
       + '#mpTbl tr.diffRow td{background:#fee2e2;font-style:normal;font-weight:600;padding:9px 8px;border-bottom:2px solid #b91c1c}'
-      // 합계/평균 행은 colspan="3" 한 셀이 3컬럼 차지 → 그 셀에 left:0 + 더 큰 너비 부여
-      + '#mpTbl tr.sumRow td:first-child,#mpTbl tr.avgRow td:first-child,#mpTbl tr.prevRow td:first-child,#mpTbl tr.diffRow td:first-child{position:sticky;left:0;z-index:5;width:auto;min-width:auto;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
+      // 합계/평균 행은 colspan="3" 한 셀이 3컬럼 차지 → 그 셀에 sum-label 클래스로 sticky
+      + '#mpTbl tr.sumRow td.sum-label,#mpTbl tr.avgRow td.sum-label,#mpTbl tr.prevRow td.sum-label,#mpTbl tr.diffRow td.sum-label{position:sticky;left:0;z-index:5;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
       + '#mpTbl td.product{font-weight:500;color:#1e40af}'
       + '#mpTbl td.dateCell{font-weight:600;color:#1e293b}'
       + '#mpTbl td.dayNoCell{color:#6b7280;font-size:11.5px}'
-      // 빈 dateCell·dayNoCell (그룹 두 번째 행)의 위쪽 border 제거 → 시각적 그룹화
-      + '#mpTbl td.dateCell:empty,#mpTbl td.dayNoCell:empty{border-top:1px dashed #f1f5f9}'
       + '#mpTbl td.eaSrc{font-size:10px;color:#9ca3af;margin-left:3px;font-weight:400}'
       + '#mpCmp{margin:14px;padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}'
       + '#mpCmp h3{margin:0 0 10px 0;font-size:14px;color:#1e293b;font-weight:700}'
@@ -803,7 +799,11 @@
     }
 
     var thHtml = '<tr>'+visibleCols.map(function(c, i){
-      return '<th class="'+_grpCls(c, i)+'">'+c[2].replace(/\n/g,'<br>')+'</th>';
+      var stickyCls = '';
+      if(c[0]==='dayNo')   stickyCls = ' col-dayno';
+      else if(c[0]==='date')    stickyCls = ' col-date';
+      else if(c[0]==='product') stickyCls = ' col-product';
+      return '<th class="'+_grpCls(c, i)+stickyCls+'">'+c[2].replace(/\n/g,'<br>')+'</th>';
     }).join('')+'</tr>';
 
     // 숫자 포맷터: 천단위 콤마 + 자리수
@@ -829,21 +829,21 @@
     calcRows.forEach(function(r){ dateCntMap[r.date] = (dateCntMap[r.date]||0)+1; });
 
     var bodyHtml = calcRows.map(function(r){
+      var cnt = dateCntMap[r.date] || 1;
       return '<tr>'+visibleCols.map(function(c,_i_){
         var v = r[c[0]];
-        // dayNo, date: 모든 행마다 td 출력. 두 번째 부위 행은 빈 td (sticky 정렬 위해)
+        // dayNo, date: 그날 첫 행에만 rowspan 출력. 둘째 부위 행부터는 td 생략
         if(c[0]==='dayNo'){
           if(r.dateRowIdx===0){
-            return '<td class="dayNoCell">'+(v||'')+'</td>';
+            return '<td class="dayNoCell col-dayno"'+(cnt>1?' rowspan="'+cnt+'"':'')+'>'+(v||'')+'</td>';
           }
-          // 두 번째 행: 빈 td (위 셀의 border-bottom 없애서 시각적 그룹화)
-          return '<td class="dayNoCell" style="border-top:none"></td>';
+          return '';  // 두 번째 행부터 dayNo td 생략
         }
         if(c[0]==='date'){
           if(r.dateRowIdx===0){
-            return '<td class="dateCell">'+(v||'').slice(5)+'</td>';
+            return '<td class="dateCell col-date"'+(cnt>1?' rowspan="'+cnt+'"':'')+'>'+(v||'').slice(5)+'</td>';
           }
-          return '<td class="dateCell" style="border-top:none"></td>';
+          return '';
         }
         if(c[0]==='product') {
           // 부위별 색상 팔레트
@@ -864,7 +864,7 @@
               return '<span style="display:inline-block;background:'+col.bg+';color:'+col.fg+';border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:4px">'+t+'</span>';
             }).join('');
           }
-          return '<td class="product" style="text-align:center">'+(v||'')+typeBadges+'</td>';
+          return '<td class="product col-product" style="text-align:center">'+(v||'')+typeBadges+'</td>';
         }
         if(c[0]==='pkEa') {
           var s = v ? Math.round(v).toLocaleString() : '-';
@@ -893,7 +893,7 @@
     }
     function isRatio(c){ return c[1]==='yield'||c[1]==='prod'; }
 
-    var sumHtml = '<tr class="sumRow"><td colspan="3">합 계</td>'
+    var sumHtml = '<tr class="sumRow"><td colspan="3" class="sum-label">합 계</td>'
       + visibleCols.slice(3).map(function(c,_i_){
           if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
           return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(sum[c[0]], c)+'</td>';
@@ -901,7 +901,7 @@
       + '</tr>';
 
     var dc = sum.dayCount||1;
-    var avgHtml = '<tr class="avgRow"><td colspan="3">일 평 균</td>'
+    var avgHtml = '<tr class="avgRow"><td colspan="3" class="sum-label">일 평 균</td>'
       + visibleCols.slice(3).map(function(c,_i_){
           var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
           if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v, c)+'</td>';
@@ -910,7 +910,7 @@
       + '</tr>';
 
     var pdc = prevSum.dayCount||1;
-    var prevHtml = '<tr class="prevRow"><td colspan="3">전월 평균</td>'
+    var prevHtml = '<tr class="prevRow"><td colspan="3" class="sum-label">전월 평균</td>'
       + visibleCols.slice(3).map(function(c,_i_){
           var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td class="'+_grpCls(c, _i_+3)+'">—</td>';
           if(isRatio(c)) return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtNum(v, c)+'</td>';
@@ -918,7 +918,7 @@
         }).join('')
       + '</tr>';
 
-    var diffHtml = '<tr class="diffRow"><td colspan="3">전월 대비 증감</td>'
+    var diffHtml = '<tr class="diffRow"><td colspan="3" class="sum-label">전월 대비 증감</td>'
       + visibleCols.slice(3).map(function(c,_i_){
           var v = sum[c[0]]||0;
           var p = prevSum[c[0]]||0;
