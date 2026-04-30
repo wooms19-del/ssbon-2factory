@@ -116,11 +116,13 @@ function addProd(){
   const c=parseInt(document.getElementById('np_cp').value)||0;
   const s=document.getElementById('np_sc').value;
   const sub=document.getElementById('np_sub')?.value||'';
+  const subKe=parseFloat(document.getElementById('np_subke')?.value)||0;
   if(!n){toast('제품명 입력','d');return;}
   const recipe={inner:[],outer:[]};
   const prodObj = {name:n, kgea:k, capa:c, sauce:s, recipe};
   if(noMeat) prodObj.noMeat = true;
   if(sub) prodObj.subName = sub;
+  if(subKe>0) prodObj.subKgea = subKe;
 
   if(_editProdIdx >= 0){
     L.products[_editProdIdx] = prodObj;
@@ -134,6 +136,7 @@ function addProd(){
     document.getElementById('np_cp').value='';
     const npSc=document.getElementById('np_sc'); if(npSc) npSc.value='';
     const npSub=document.getElementById('np_sub'); if(npSub) npSub.value='';
+    const npSubKe=document.getElementById('np_subke'); if(npSubKe) npSubKe.value='';
     const npNm=document.getElementById('np_nomeat'); if(npNm){ npNm.checked=false; onNpNoMeatToggle(); }
     clearRecipeForm();
   }
@@ -148,6 +151,7 @@ function cancelEditProd(){
   document.getElementById('np_cp').value='';
   const npSc=document.getElementById('np_sc'); if(npSc) npSc.value='';
   const npSub=document.getElementById('np_sub'); if(npSub) npSub.value='';
+  const npSubKe=document.getElementById('np_subke'); if(npSubKe) npSubKe.value='';
   const npNm=document.getElementById('np_nomeat'); if(npNm){ npNm.checked=false; onNpNoMeatToggle(); }
   clearRecipeForm();
   const addBtn = document.querySelector('#p-settings .btn.bs[onclick="addProd()"]');
