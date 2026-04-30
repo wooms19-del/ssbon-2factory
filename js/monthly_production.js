@@ -48,30 +48,32 @@
     return Math.round((e-s)/60*100)/100;  // 시간 단위 소수 2자리
   }
 
-  // 제품명 → 1봉 g  (엑셀 키워드 매핑 그대로)
+  // 제품명 → 1봉 g  (엑셀 키워드 매핑 그대로, 대소문자 무시)
   function _gramPerEa(name){
     if(!name) return 0;
-    if(name.indexOf('미니')>=0) return 0.024;
-    if(name.indexOf('코스트코')>=0) return 0.054;
-    if(name.indexOf('130g')>=0) return 0.025;
-    if(name.indexOf('460g')>=0) return 0.147;
-    if(name.indexOf('3kg')>=0)  return 3;
-    if(name.indexOf('120g')>=0) return 0.03;
-    if(name.indexOf('180g')>=0) return 0.035;  // 메추리알 등
-    if(name.indexOf('170g')>=0) return 0.054;  // 코스트코170g
+    var n = name.toLowerCase();
+    if(n.indexOf('미니')>=0) return 0.024;
+    if(n.indexOf('코스트코')>=0) return 0.054;
+    if(n.indexOf('130g')>=0) return 0.025;
+    if(n.indexOf('460g')>=0) return 0.147;
+    if(n.indexOf('3kg')>=0)  return 3;
+    if(n.indexOf('120g')>=0) return 0.03;
+    if(n.indexOf('180g')>=0) return 0.035;  // 메추리알 등
+    if(n.indexOf('170g')>=0) return 0.054;  // 코스트코170g
     return 0;
   }
   // 1봉 전체중량(완제품 중량) kg
   function _totalGramPerEa(name){
     if(!name) return 0;
-    if(name.indexOf('미니쇠고기장조림')>=0) return 0.07;
-    if(name.indexOf('코스트코')>=0) return 0.17;
-    if(name.indexOf('120g')>=0) return 0.12;
-    if(name.indexOf('460g')>=0) return 0.46;
-    if(name.indexOf('130g')>=0) return 0.13;
-    if(name.indexOf('3kg')>=0)  return 3;
-    if(name.indexOf('180g')>=0) return 0.18;
-    if(name.indexOf('170g')>=0) return 0.17;
+    var n = name.toLowerCase();
+    if(n.indexOf('미니쇠고기장조림')>=0) return 0.07;
+    if(n.indexOf('코스트코')>=0) return 0.17;
+    if(n.indexOf('120g')>=0) return 0.12;
+    if(n.indexOf('460g')>=0) return 0.46;
+    if(n.indexOf('130g')>=0) return 0.13;
+    if(n.indexOf('3kg')>=0)  return 3;
+    if(n.indexOf('180g')>=0) return 0.18;
+    if(n.indexOf('170g')>=0) return 0.17;
     return 0;
   }
 
@@ -320,6 +322,13 @@
                shKg:0,shHours:0,shWorkers:0,shTotal:0,
                pkEa:0,pkHours:0,pkWorkers:0,pkTotal:0,
                meatKg:0,prodKg:0};
+    // 비율 컬럼 (생산성·수율) — 합계 의미 없으므로 평균으로
+    var ratioKeys = ['prodPp','prodCk','prodSh','prodPk','prodAll',
+                     'yieldRmPp','yieldRmCk','yieldRmSh','yieldRmPk',
+                     'yieldPp','yieldCk','yieldSh','yieldPk'];
+    var ratioBucket = {};
+    ratioKeys.forEach(function(k){ ratioBucket[k] = []; });
+
     var dates = {};
     rows.forEach(function(r){
       // 일자별 데이터(원육·전처리·자숙·파쇄)는 unique date(그날 첫 행)만 카운트
@@ -337,9 +346,18 @@
       sum.pkTotal += (r.pkHours*r.pkWorkers);
       sum.meatKg += r.pkEa*_gramPerEa(r.product);
       sum.prodKg += r.pkEa*_totalGramPerEa(r.product);
+      // 비율 컬럼은 0이 아닌 값만 평균에 포함 (분모 0인 케이스 제외)
+      ratioKeys.forEach(function(k){
+        if(r[k]>0 && isFinite(r[k])) ratioBucket[k].push(r[k]);
+      });
       if(r.date) dates[r.date]=true;
     });
     sum.dayCount = Object.keys(dates).length;
+    // 비율 평균
+    ratioKeys.forEach(function(k){
+      var arr = ratioBucket[k];
+      sum[k] = arr.length ? arr.reduce(function(a,b){return a+b;},0)/arr.length : 0;
+    });
     return sum;
   }
 
@@ -462,20 +480,26 @@
     function fmtNum(v, c){
       if(v==null) return '';
       if(typeof v!=='number') return String(v);
+      if(!isFinite(v)) return '';
       if(c && (c[1]==='yield'||c[1]==='prod')) return v.toFixed(3);
       return v%1===0?String(v):v.toFixed(2);
     }
+    function isRatio(c){ return c[1]==='yield'||c[1]==='prod'; }
+
     var sumHtml = '<tr class="sumRow"><td>합계</td><td colspan="2"></td>'
       + visibleCols.slice(3).map(function(c){
+          // 비율 컬럼은 합계 의미 없음 → 빈칸
+          if(isRatio(c)) return '<td></td>';
           return '<td class="numL">'+fmtNum(sum[c[0]], c)+'</td>';
         }).join('')
       + '</tr>';
 
-    // 평균행 (생산일수로 나눔)
+    // 평균행 (생산일수로 나눔, 비율 컬럼은 sum이 이미 평균)
     var dc = sum.dayCount||1;
     var avgHtml = '<tr class="avgRow"><td>평균</td><td colspan="2"></td>'
       + visibleCols.slice(3).map(function(c){
           var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td></td>';
+          if(isRatio(c)) return '<td class="numL">'+fmtNum(v, c)+'</td>';
           return '<td class="numL">'+fmtNum(v/dc, c)+'</td>';
         }).join('')
       + '</tr>';
@@ -485,6 +509,7 @@
     var prevHtml = '<tr class="prevRow"><td>전월 평균</td><td colspan="2"></td>'
       + visibleCols.slice(3).map(function(c){
           var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td></td>';
+          if(isRatio(c)) return '<td class="numL">'+fmtNum(v, c)+'</td>';
           return '<td class="numL">'+fmtNum(v/pdc, c)+'</td>';
         }).join('')
       + '</tr>';
@@ -495,7 +520,11 @@
           var v = sum[c[0]]||0;
           var p = prevSum[c[0]]||0;
           if(!p) return '<td></td>';
-          var pct = (v/dc - p/pdc)/(p/pdc)*100;
+          // 비율 컬럼: 이미 평균 → 직접 비교
+          var thisV = isRatio(c) ? v : v/dc;
+          var prevV = isRatio(c) ? p : p/pdc;
+          if(!prevV) return '<td></td>';
+          var pct = (thisV - prevV)/prevV*100;
           var color = pct>0?'#1b8a3a':(pct<0?'#c0392b':'#666');
           return '<td class="numL" style="color:'+color+'">'+pct.toFixed(1)+'%</td>';
         }).join('')
