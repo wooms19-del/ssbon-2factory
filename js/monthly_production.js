@@ -95,42 +95,48 @@
 
     var html = ''
       + '<style>'
-      + '#mpToolbar{padding:10px;background:#f5f6fa;border-bottom:1px solid #ddd;display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
-      + '#mpToolbar .btn{padding:6px 12px;border:1px solid #bbb;background:#fff;border-radius:5px;cursor:pointer;font-size:13px}'
+      + '#mpToolbar{padding:12px 14px;background:#f5f6fa;border-bottom:1px solid #ddd;display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
+      + '#mpToolbar .btn{padding:7px 14px;border:1px solid #bbb;background:#fff;border-radius:5px;cursor:pointer;font-size:13px}'
       + '#mpToolbar .btn:hover{background:#eee}'
-      + '#mpToolbar .btn.dl{background:#1f7a3a;color:#fff;border-color:#1f7a3a}'
+      + '#mpToolbar .btn.dl{background:#1f7a3a;color:#fff;border-color:#1f7a3a;font-weight:600}'
       + '#mpToolbar .btn.dl:hover{background:#176029}'
-      + '#mpToolbar .lbl{font-weight:600;color:#333;margin:0 8px}'
-      + '#mpToolbar2 .grp{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:#fff;border:1px solid #ddd;border-radius:5px;cursor:pointer;font-size:12px}'
-      + '#mpToolbar2 .grp input{margin:0}'
-      + '#mpToolbar2 .grp.on{background:#e7f0ff;border-color:#3b6fb8}'
-      + '#mpStatus{padding:8px;color:#1b8a3a;font-size:13px}'
-      + '#mpTblWrap{overflow-x:auto;background:#fff}'
-      + '#mpTbl{border-collapse:collapse;font-size:11px;white-space:nowrap;min-width:100%}'
-      + '#mpTbl th,#mpTbl td{border:1px solid #999;padding:3px 6px;text-align:center}'
-      + '#mpTbl thead th{background:#dfe6f0;font-weight:600;position:sticky;top:0;z-index:2}'
-      + '#mpTbl tr.sumRow td{background:#fff8d8;font-weight:600}'
-      + '#mpTbl tr.avgRow td{background:#e8f4e0;font-weight:500}'
-      + '#mpTbl tr.prevRow td{background:#f0f0f0;color:#555}'
-      + '#mpTbl tr.diffRow td{background:#ffe8e8;font-style:italic}'
-      + '#mpTbl td.numL{text-align:right;padding-right:8px}'
-      + '#mpTbl tr:hover td:not([class*="Row"]){background:#fffceb}'
-      + '#mpCmp{margin:12px;padding:10px;background:#fff;border:1px solid #ccc;border-radius:6px}'
-      + '#mpCmp table{border-collapse:collapse;font-size:13px}'
-      + '#mpCmp th,#mpCmp td{border:1px solid #aaa;padding:6px 12px;text-align:center}'
-      + '#mpCmp th{background:#dfe6f0}'
+      + '#mpToolbar .lbl{font-weight:700;color:#1e293b;margin:0 8px;font-size:15px}'
+      + '#mpToolbar2 .grp{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;background:#fff;border:1px solid #ddd;border-radius:5px;cursor:pointer;font-size:12px;user-select:none}'
+      + '#mpToolbar2 .grp input{margin:0;cursor:pointer}'
+      + '#mpToolbar2 .grp.on{background:#e7f0ff;border-color:#3b6fb8;color:#1e3a8a;font-weight:600}'
+      + '#mpStatus{padding:10px 14px;color:#1b8a3a;font-size:13px;font-weight:500;background:#f0fdf4;border-bottom:1px solid #d1fae5}'
+      + '#mpTblWrap{overflow-x:auto;background:#fff;padding-bottom:4px}'
+      + '#mpTbl{border-collapse:collapse;font-size:12.5px;white-space:nowrap;min-width:100%;font-variant-numeric:tabular-nums}'
+      + '#mpTbl th,#mpTbl td{border:1px solid #d1d5db;padding:7px 8px;text-align:center;vertical-align:middle}'
+      + '#mpTbl thead th{background:#374151;color:#fff;font-weight:600;position:sticky;top:0;z-index:2;padding:9px 8px;line-height:1.35;font-size:12px;border-color:#1f2937}'
+      + '#mpTbl tbody tr:nth-child(even):not(.sumRow):not(.avgRow):not(.prevRow):not(.diffRow) td{background:#fafbfc}'
+      + '#mpTbl tbody tr:hover:not(.sumRow):not(.avgRow):not(.prevRow):not(.diffRow) td{background:#fef9c3}'
+      + '#mpTbl tr.sumRow td{background:#fef3c7;font-weight:700;color:#78350f;border-top:2px solid #92400e;padding:9px 8px}'
+      + '#mpTbl tr.avgRow td{background:#dcfce7;font-weight:600;color:#14532d;padding:9px 8px}'
+      + '#mpTbl tr.prevRow td{background:#f1f5f9;color:#475569;padding:9px 8px}'
+      + '#mpTbl tr.diffRow td{background:#fee2e2;font-style:normal;font-weight:600;padding:9px 8px;border-bottom:2px solid #b91c1c}'
+      + '#mpTbl td.product{font-weight:500;color:#1e40af}'
+      + '#mpTbl td.dateCell{font-weight:600;color:#1e293b}'
+      + '#mpTbl td.dayNoCell{color:#6b7280;font-size:11.5px}'
+      + '#mpTbl td.eaSrc{font-size:10px;color:#9ca3af;margin-left:3px;font-weight:400}'
+      + '#mpCmp{margin:14px;padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}'
+      + '#mpCmp h3{margin:0 0 10px 0;font-size:14px;color:#1e293b;font-weight:700}'
+      + '#mpCmp table{border-collapse:collapse;font-size:13px;width:100%;font-variant-numeric:tabular-nums}'
+      + '#mpCmp th,#mpCmp td{border:1px solid #d1d5db;padding:8px 14px;text-align:center}'
+      + '#mpCmp th{background:#374151;color:#fff;font-weight:600}'
+      + '#mpCmp tr:nth-child(even) td{background:#fafbfc}'
       + '</style>'
       + '<div id="mpToolbar">'
       + '<button class="btn" onclick="mpPrevMonth()">◀</button>'
       + '<span class="lbl" id="mpYmLbl">'+monthLbl+'</span>'
       + '<button class="btn" onclick="mpNextMonth()">▶</button>'
       + '<button class="btn" onclick="mpThisMonth()">이번달</button>'
-      + '<input type="month" value="'+ym+'" onchange="mpPickMonth(this.value)" style="padding:5px;border:1px solid #bbb;border-radius:4px;font-size:13px">'
+      + '<input type="month" value="'+ym+'" onchange="mpPickMonth(this.value)" style="padding:6px 8px;border:1px solid #bbb;border-radius:4px;font-size:13px">'
       + '<span style="flex:1"></span>'
       + '<button class="btn dl" onclick="mpDownload()">📥 엑셀 다운로드</button>'
       + '</div>'
-      + '<div id="mpToolbar2" style="padding:6px 10px;background:#fafafa;display:flex;flex-wrap:wrap;gap:6px;align-items:center;border-bottom:1px solid #ddd">'
-      + '<span style="font-size:12px;color:#555">컬럼:</span>'
+      + '<div id="mpToolbar2" style="padding:8px 14px;background:#fafafa;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #e5e7eb">'
+      + '<span style="font-size:12px;color:#555;font-weight:600">컬럼 표시:</span>'
       + _grpChip('inout','투입/배출')
       + _grpChip('workers','작업인원')
       + _grpChip('hours','작업시간')
@@ -560,18 +566,40 @@
       return '<th>'+c[2].replace(/\n/g,'<br>')+'</th>';
     }).join('')+'</tr>';
 
+    // 숫자 포맷터: 천단위 콤마 + 자리수
+    function fmtCell(v, c){
+      if(v==null) return '-';
+      if(typeof v!=='number') return String(v);
+      if(!isFinite(v)) return '-';
+      if(v===0) return '-';
+      var grp = c[1];
+      if(grp==='yield' || grp==='prod') return v.toFixed(3);
+      // 정수형 EA
+      if(c[0]==='pkEa' || c[0]==='dayNo') return Math.round(v).toLocaleString();
+      // 인원: 소수1
+      if(c[0]==='ppWorkers'||c[0]==='ckWorkers'||c[0]==='shWorkers'||c[0]==='pkWorkers') return v.toFixed(1);
+      // 시간: 소수2
+      if(c[0]==='ppHours'||c[0]==='ckHours'||c[0]==='shHours'||c[0]==='pkHours') return v.toFixed(2);
+      // 인시: 소수1
+      if(c[0]==='ppPersonHours'||c[0]==='ckPersonHours'||c[0]==='shPersonHours'||c[0]==='pkPersonHours') return v.toFixed(1);
+      // KG류: 천단위 콤마 + 소수1 또는 정수
+      return v%1===0 ? v.toLocaleString() : v.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:2});
+    }
+
     var bodyHtml = calcRows.map(function(r){
       return '<tr>'+visibleCols.map(function(c){
         var v = r[c[0]];
-        if(c[0]==='date') return '<td>'+(v||'').slice(5)+'</td>';
-        if(c[0]==='product') return '<td style="text-align:left;padding-left:8px">'+(v||'')+'</td>';
-        if(c[0]==='pkEa') return '<td class="numL">'+(v||0).toLocaleString()+'<span style="font-size:9px;color:#888;margin-left:2px">('+(r.pkEaSrc||'')+')</span></td>';
-        if(typeof v==='number'){
-          if(v===0) return '<td class="numL">-</td>';
-          var s = c[1]==='yield'||c[1]==='prod' ? v.toFixed(3) : (v%1===0?String(v):v.toFixed(2));
-          return '<td class="numL">'+s+'</td>';
+        if(c[0]==='date')    return '<td class="dateCell">'+(v||'').slice(5)+'</td>';
+        if(c[0]==='dayNo')   return '<td class="dayNoCell">'+(v||'')+'</td>';
+        if(c[0]==='product') return '<td class="product" style="text-align:center">'+(v||'')+'</td>';
+        if(c[0]==='pkEa') {
+          var s = v ? Math.round(v).toLocaleString() : '-';
+          return '<td>'+s+'<span class="eaSrc">('+(r.pkEaSrc||'')+')</span></td>';
         }
-        return '<td>'+(v==null?'':v)+'</td>';
+        if(typeof v==='number'){
+          return '<td>'+fmtCell(v, c)+'</td>';
+        }
+        return '<td>'+(v==null?'-':v)+'</td>';
       }).join('')+'</tr>';
     }).join('');
 
@@ -580,46 +608,52 @@
       if(typeof v!=='number') return String(v);
       if(!isFinite(v)) return '';
       if(c && (c[1]==='yield'||c[1]==='prod')) return v.toFixed(3);
-      return v%1===0?String(v):v.toFixed(2);
+      var key = c ? c[0] : '';
+      if(key==='pkEa' || key==='dayNo') return Math.round(v).toLocaleString();
+      if(key==='ppWorkers'||key==='ckWorkers'||key==='shWorkers'||key==='pkWorkers') return v.toFixed(1);
+      if(key==='ppHours'||key==='ckHours'||key==='shHours'||key==='pkHours') return v.toFixed(2);
+      if(key==='ppPersonHours'||key==='ckPersonHours'||key==='shPersonHours'||key==='pkPersonHours') return v.toFixed(1);
+      return v%1===0 ? v.toLocaleString() : v.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:2});
     }
     function isRatio(c){ return c[1]==='yield'||c[1]==='prod'; }
 
-    var sumHtml = '<tr class="sumRow"><td>합계</td><td colspan="2"></td>'
+    var sumHtml = '<tr class="sumRow"><td colspan="3">합 계</td>'
       + visibleCols.slice(3).map(function(c){
-          if(isRatio(c)) return '<td></td>';
-          return '<td class="numL">'+fmtNum(sum[c[0]], c)+'</td>';
+          if(isRatio(c)) return '<td>—</td>';
+          return '<td>'+fmtNum(sum[c[0]], c)+'</td>';
         }).join('')
       + '</tr>';
 
     var dc = sum.dayCount||1;
-    var avgHtml = '<tr class="avgRow"><td>평균</td><td colspan="2"></td>'
+    var avgHtml = '<tr class="avgRow"><td colspan="3">일 평 균</td>'
       + visibleCols.slice(3).map(function(c){
-          var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td></td>';
-          if(isRatio(c)) return '<td class="numL">'+fmtNum(v, c)+'</td>';
-          return '<td class="numL">'+fmtNum(v/dc, c)+'</td>';
+          var v = sum[c[0]]; if(v==null||typeof v!=='number') return '<td>—</td>';
+          if(isRatio(c)) return '<td>'+fmtNum(v, c)+'</td>';
+          return '<td>'+fmtNum(v/dc, c)+'</td>';
         }).join('')
       + '</tr>';
 
     var pdc = prevSum.dayCount||1;
-    var prevHtml = '<tr class="prevRow"><td>전월 평균</td><td colspan="2"></td>'
+    var prevHtml = '<tr class="prevRow"><td colspan="3">전월 평균</td>'
       + visibleCols.slice(3).map(function(c){
-          var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td></td>';
-          if(isRatio(c)) return '<td class="numL">'+fmtNum(v, c)+'</td>';
-          return '<td class="numL">'+fmtNum(v/pdc, c)+'</td>';
+          var v = prevSum[c[0]]; if(v==null||typeof v!=='number') return '<td>—</td>';
+          if(isRatio(c)) return '<td>'+fmtNum(v, c)+'</td>';
+          return '<td>'+fmtNum(v/pdc, c)+'</td>';
         }).join('')
       + '</tr>';
 
-    var diffHtml = '<tr class="diffRow"><td>증감율(%)</td><td colspan="2"></td>'
+    var diffHtml = '<tr class="diffRow"><td colspan="3">전월 대비 증감</td>'
       + visibleCols.slice(3).map(function(c){
           var v = sum[c[0]]||0;
           var p = prevSum[c[0]]||0;
-          if(!p) return '<td></td>';
+          if(!p) return '<td>—</td>';
           var thisV = isRatio(c) ? v : v/dc;
           var prevV = isRatio(c) ? p : p/pdc;
-          if(!prevV) return '<td></td>';
+          if(!prevV) return '<td>—</td>';
           var pct = (thisV - prevV)/prevV*100;
-          var color = pct>0?'#1b8a3a':(pct<0?'#c0392b':'#666');
-          return '<td class="numL" style="color:'+color+'">'+pct.toFixed(1)+'%</td>';
+          var color = pct>0?'#15803d':(pct<0?'#b91c1c':'#475569');
+          var arrow = pct>0?'▲':(pct<0?'▼':'');
+          return '<td style="color:'+color+'">'+arrow+' '+Math.abs(pct).toFixed(1)+'%</td>';
         }).join('')
       + '</tr>';
 
@@ -639,14 +673,24 @@
     var prevAvg = prevSum.dayCount?(prevSum.rmKg/prevSum.dayCount):0;
     var diff = thisAvg-prevAvg;
     var diffPct = prevAvg?(diff/prevAvg*100):0;
-    cmp.innerHTML = '<table>'
-      + '<thead><tr><th>구분</th><th>'+ymThis.replace('-','년 ')+'월</th><th>'+ymPrev.replace('-','년 ')+'월</th><th>차이</th><th>증감율(%)</th></tr></thead>'
+    function nf(v, dec){ if(!isFinite(v)) return '-'; return v.toLocaleString(undefined,{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0}); }
+    function diffColor(d){ return d>0?'#15803d':(d<0?'#b91c1c':'#475569'); }
+    function arr(d){ return d>0?'▲':(d<0?'▼':''); }
+    cmp.innerHTML = '<h3>📊 전월 대비 비교</h3>'
+      + '<table>'
+      + '<thead><tr><th>구분</th><th>'+ymThis.replace('-','년 ')+'월</th><th>'+ymPrev.replace('-','년 ')+'월</th><th>차이</th><th>증감율</th></tr></thead>'
       + '<tbody>'
-      + '<tr><td>일평균 원육사용량</td><td class="numL">'+thisAvg.toFixed(2)+'</td><td class="numL">'+prevAvg.toFixed(2)+'</td><td class="numL" style="color:'+(diff>=0?'#1b8a3a':'#c0392b')+'">'+(diff>=0?'+':'')+diff.toFixed(2)+'</td><td class="numL">'+(diffPct>=0?'+':'')+diffPct.toFixed(1)+'%</td></tr>'
-      + '<tr><td>생산일수</td><td>'+sum.dayCount+'</td><td>'+prevSum.dayCount+'</td><td>'+(sum.dayCount-prevSum.dayCount)+'</td><td></td></tr>'
-      + '<tr><td>월 누적 원육사용량</td><td class="numL">'+sum.rmKg.toFixed(2)+'</td><td class="numL">'+prevSum.rmKg.toFixed(2)+'</td><td class="numL">'+(sum.rmKg-prevSum.rmKg).toFixed(2)+'</td><td></td></tr>'
-      + '<tr><td>월 누적 EA (외포장 우선)</td><td class="numL">'+sum.pkEa.toLocaleString()+'</td><td class="numL">'+prevSum.pkEa.toLocaleString()+'</td><td class="numL">'+(sum.pkEa-prevSum.pkEa).toLocaleString()+'</td><td></td></tr>'
-      + '<tr><td>완제품 고기중량 합</td><td class="numL">'+sum.meatKg.toFixed(2)+'</td><td class="numL">'+prevSum.meatKg.toFixed(2)+'</td><td class="numL">'+(sum.meatKg-prevSum.meatKg).toFixed(2)+'</td><td></td></tr>'
+      + '<tr><td><strong>일평균 원육사용량</strong></td><td>'+nf(thisAvg,2)+' kg</td><td>'+nf(prevAvg,2)+' kg</td>'
+      +   '<td style="color:'+diffColor(diff)+';font-weight:600">'+arr(diff)+' '+nf(Math.abs(diff),2)+' kg</td>'
+      +   '<td style="color:'+diffColor(diffPct)+';font-weight:600">'+arr(diffPct)+' '+nf(Math.abs(diffPct),1)+'%</td></tr>'
+      + '<tr><td><strong>생산일수</strong></td><td>'+sum.dayCount+'일</td><td>'+prevSum.dayCount+'일</td>'
+      +   '<td style="color:'+diffColor(sum.dayCount-prevSum.dayCount)+';font-weight:600">'+arr(sum.dayCount-prevSum.dayCount)+' '+Math.abs(sum.dayCount-prevSum.dayCount)+'일</td><td>—</td></tr>'
+      + '<tr><td><strong>월 누적 원육사용량</strong></td><td>'+nf(sum.rmKg,2)+' kg</td><td>'+nf(prevSum.rmKg,2)+' kg</td>'
+      +   '<td style="color:'+diffColor(sum.rmKg-prevSum.rmKg)+';font-weight:600">'+arr(sum.rmKg-prevSum.rmKg)+' '+nf(Math.abs(sum.rmKg-prevSum.rmKg),2)+' kg</td><td>—</td></tr>'
+      + '<tr><td><strong>월 누적 EA (외포장)</strong></td><td>'+nf(sum.pkEa,0)+'</td><td>'+nf(prevSum.pkEa,0)+'</td>'
+      +   '<td style="color:'+diffColor(sum.pkEa-prevSum.pkEa)+';font-weight:600">'+arr(sum.pkEa-prevSum.pkEa)+' '+nf(Math.abs(sum.pkEa-prevSum.pkEa),0)+'</td><td>—</td></tr>'
+      + '<tr><td><strong>완제품 고기중량</strong></td><td>'+nf(sum.meatKg,2)+' kg</td><td>'+nf(prevSum.meatKg,2)+' kg</td>'
+      +   '<td style="color:'+diffColor(sum.meatKg-prevSum.meatKg)+';font-weight:600">'+arr(sum.meatKg-prevSum.meatKg)+' '+nf(Math.abs(sum.meatKg-prevSum.meatKg),2)+' kg</td><td>—</td></tr>'
       + '</tbody></table>';
     cmp.style.display='';
   }
