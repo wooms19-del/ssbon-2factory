@@ -1970,8 +1970,15 @@ async function downloadPackingChart() {
   if (!canvas || !_moPackingChart) return;
   const ym = _moYm || tod().slice(0,7);
   const [, m] = ym.split('-');
+  const mode = _moPackingMode || 'detail';
+  const modeLbl = mode==='ea' ? 'EA(봉수)' : mode==='weight' ? '중량(kg)' : '상세 (EA + 중량)';
+  const subText = mode==='detail'
+    ? '막대 = 생산 무게(kg) · 막대 위 = 봉수(EA) / 무게(kg)'
+    : mode==='ea'
+      ? '막대 = 생산 봉수(EA)'
+      : '막대 = 생산 무게(kg)';
 
-  const PPT_W = 1280, PPT_H = 720, HEADER_H = 110;
+  const PPT_W = 1280, PPT_H = 720, HEADER_H = 140;
 
   // 1) 차트를 PPT 크기에 맞게 임시 확대
   const chartWrapDiv = canvas.parentElement;
@@ -1997,6 +2004,11 @@ async function downloadPackingChart() {
   ctx.font = 'bold 24px sans-serif';
   ctx.fillText('운영팀 ' + parseInt(m) + '월 내포장 수량', 24, 60);
 
+  // 3-2) 부제 (모드 + 설명)
+  ctx.fillStyle = '#475569';
+  ctx.font = '13px sans-serif';
+  ctx.fillText('[' + modeLbl + ']  ' + subText, 24, 84);
+
   // 4) 범례 — <span style="..."><span style="background:색상"></span>이름</span> 구조
   const legendEl = document.getElementById('mo_packing_legend');
   if (legendEl) {
@@ -2007,11 +2019,11 @@ async function downloadPackingChart() {
       const bg = colorEl.style.background || colorEl.style.backgroundColor || '#888';
       const label = sp.textContent.trim();
       ctx.fillStyle = bg;
-      ctx.fillRect(lx, 78, 10, 10);
+      ctx.fillRect(lx, 108, 10, 10);
       ctx.fillStyle = '#444';
       ctx.font = '12px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(label, lx + 14, 88);
+      ctx.fillText(label, lx + 14, 118);
       lx += ctx.measureText(label).width + 32;
     });
   }
