@@ -513,7 +513,7 @@ function attWeekPrev(){ _attWeekStart.setDate(_attWeekStart.getDate()-7); _rende
 function attWeekNext(){ _attWeekStart.setDate(_attWeekStart.getDate()+7); _renderAttMonthly(); }
 function attWeekToday(){ _attWeekStart=_attGetWeekMon(tod()); _renderAttMonthly(); }
 
-function _renderAttMonthly(){
+async function _renderAttMonthly(){
   var tbl=document.getElementById('attWeekTable'); if(!tbl) return;
   if(!_attWeekStart) _attWeekStart=_attGetWeekMon(_attDate||tod());
   var dates=[];
@@ -526,6 +526,27 @@ function _renderAttMonthly(){
     var s=dates[0],e=dates[6];
     lbl.textContent=(s.getMonth()+1)+'/'+s.getDate()+'('+dow[s.getDay()]+') ~ '+(e.getMonth()+1)+'/'+e.getDate()+'('+dow[e.getDay()]+')';
   }
+
+  // ★ Firebase에서 1주일치 직접 로드 (localStorage 누락 방지)
+  var weekData = {};
+  for(var i=0;i<dates.length;i++){
+    var ds = _attFmtDate2(dates[i]);
+    try{
+      var doc = await firebase.firestore().collection('attendance').doc(ds).get();
+      if(doc.exists){
+        weekData[ds] = doc.data().records || {};
+        // localStorage에도 동기화 (캐시 갱신)
+        localStorage.setItem(_attDateKey(ds), JSON.stringify(weekData[ds]));
+      } else {
+        var raw = localStorage.getItem(_attDateKey(ds));
+        if(raw) weekData[ds] = JSON.parse(raw);
+      }
+    } catch(e){
+      var raw = localStorage.getItem(_attDateKey(ds));
+      if(raw) weekData[ds] = JSON.parse(raw);
+    }
+  }
+
   var todayStr=tod();
   var html='<thead><tr style="background:var(--g1)">'
     +'<th style="padding:8px 10px;font-size:12px;font-weight:700;text-align:left;border:0.5px solid var(--g2);position:sticky;left:0;background:var(--g1);min-width:70px">이름</th>';
@@ -548,8 +569,8 @@ function _renderAttMonthly(){
     html+='<tr><td style="padding:6px 10px;font-size:12px;font-weight:500;border:0.5px solid var(--g2);white-space:nowrap;position:sticky;left:0;background:var(--bg)">'+emp.name+'</td>';
     dates.forEach(function(dt){
       var ds=_attFmtDate2(dt);
-      var raw=localStorage.getItem(_attDateKey(ds));
-      var r=raw?JSON.parse(raw)[emp.name]:null;
+      var dayRec = weekData[ds];
+      var r = dayRec ? dayRec[emp.name] : null;
       var tags=r?(r.tags||[]):[];
       var inT=r?(r.inTime||'09:00'):'';
       var outT=r?(r.outTime||'18:00'):'';
@@ -580,9 +601,21 @@ function _renderAttMonthly(){
   tbl.innerHTML=html;
 }
 
-function attWeekCellEdit(ds, empName){
-  var raw=localStorage.getItem(_attDateKey(ds));
-  var dayRec=raw?JSON.parse(raw):{};
+async function attWeekCellEdit(ds, empName){
+  // Firebase 우선 (다른 PC 입력 데이터도 보임)
+  var dayRec = {};
+  try{
+    var doc = await firebase.firestore().collection('attendance').doc(ds).get();
+    if(doc.exists){
+      dayRec = doc.data().records || {};
+    } else {
+      var raw = localStorage.getItem(_attDateKey(ds));
+      dayRec = raw ? JSON.parse(raw) : {};
+    }
+  } catch(e){
+    var raw = localStorage.getItem(_attDateKey(ds));
+    dayRec = raw ? JSON.parse(raw) : {};
+  }
   var r=dayRec[empName]||{tags:[],inTime:'09:00',outTime:'18:00'};
   var tags=r.tags||[];
   var parts=ds.split('-');
