@@ -370,6 +370,9 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       var defPouch = Math.max(0, Math.round(pkr.pouch) - innerEa);
       var boxUse = opR.boxes + opR.boxDef;
       var qaiKg = (pkr.subKg>0) ? _perfR2(pkr.subKg) : 0;
+      // 무육 제품 여부 (메추리알 등) — 부위 그룹과 분리
+      var __pInfo = (typeof L!=='undefined' && L && L.products) ? L.products.find(function(x){return x.name===prod;}) : null;
+      var isNoMeatProd = !!(__pInfo && __pInfo.noMeat);
       // 소비기한 (당일 포함 일수): 3KG/3kg → 60일(=+59일), 그 외 → 12개월(=+12개월 -1일)
       var dt=new Date(date+'T00:00:00');
       var is3kg = (prod.indexOf('3KG')>=0)||(prod.indexOf('3kg')>=0);
@@ -377,8 +380,8 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       else { dt.setMonth(dt.getMonth()+12); dt.setDate(dt.getDate()-1); }
       var expDate = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 
-      // 첫 제품 + 부위 2개 이상 → 부위별 행 분리
-      if(pi===0 && partList.length>1){
+      // 첫 제품 + 부위 2개 이상 → 부위별 행 분리 (단, noMeat 제품은 분리 X)
+      if(pi===0 && partList.length>1 && !isNoMeatProd){
         var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
         var isKostco = prod.indexOf('코스트코')>=0||prod.indexOf('코코')>=0;
         var outBoxVal = isKostco ? (opR.tray||0) : opR.boxes;
@@ -417,21 +420,32 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
         });
       } else {
         // 단일 부위 또는 같은 날 2번째 이후 제품
-        var rmTypeStr = (pi===0 && partList.length===1) ? partList[0] : '';
-        var rmKgVal = (pi===0 && partList.length===1) ? _perfR2(partKg[partList[0]]||0) : (pi===0 ? rmKg : 0);
+        var rmTypeStr, rmKgVal;
+        if(isNoMeatProd){
+          // 무육 제품: 부위/원육 빈칸
+          rmTypeStr = '';
+          rmKgVal = 0;
+        } else if(pi===0 && partList.length===1){
+          rmTypeStr = partList[0];
+          rmKgVal = _perfR2(partKg[partList[0]]||0);
+        } else {
+          rmTypeStr = '';
+          rmKgVal = pi===0 ? rmKg : 0;
+        }
         var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
         var isKostco2 = prod.indexOf('코스트코')>=0||prod.indexOf('코코')>=0;
         var outBoxVal2 = isKostco2 ? (opR.tray||0) : opR.boxes;
         rows.push({
           date: date, dayNo: dayNo, product: prod,
           productIndex: pi, subRowIdx: 0, totalSub: 1,
+          isNoMeat: isNoMeatProd,
           expDate: expDate,
           workers: pi===0 ? Math.round(pkr.workers||0) : 0,
           rmType: rmTypeStr,
           rmKg: rmKgVal,
-          boxSeoldo: pi===0 ? (partBx['설도']||0) : 0,
-          boxHongdu: pi===0 ? (partBx['홍두깨']||partBx['홍두께']||0) : 0,
-          boxUdun:   pi===0 ? (partBx['우둔']||0) : 0,
+          boxSeoldo: !isNoMeatProd && pi===0 ? (partBx['설도']||0) : 0,
+          boxHongdu: !isNoMeatProd && pi===0 ? (partBx['홍두깨']||partBx['홍두께']||0) : 0,
+          boxUdun:   !isNoMeatProd && pi===0 ? (partBx['우둔']||0) : 0,
           ppKg: pi===0 ? ppD : 0,
           ckKg: pi===0 ? ckD : 0,
           shKg: pi===0 ? shD : 0,
@@ -531,6 +545,18 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     else if(_dayAllSingle[r.date]===undefined) _dayAllSingle[r.date]=true;
   });
   combined.forEach(function(r){ r.dayAllSingle=(_dayAllSingle[r.date]!==false); });
+  // 무육 제외 — 첫 비-무육 행 idx + 그날 비-무육 행 수
+  var _dayFirstMeatIdx = {};
+  var _dayMeatCnt = {};
+  combined.forEach(function(r){
+    if(r.isTest || r.isNoMeat) return;
+    if(_dayFirstMeatIdx[r.date] === undefined) _dayFirstMeatIdx[r.date] = r.dayRowIdx;
+    _dayMeatCnt[r.date] = (_dayMeatCnt[r.date]||0)+1;
+  });
+  combined.forEach(function(r){
+    r.dayFirstMeatIdx = _dayFirstMeatIdx[r.date];
+    r.dayMeatSpan = _dayMeatCnt[r.date] || 0;
+  });
   return combined;
 }
 
@@ -598,15 +624,21 @@ function _perfRenderTable(rows){
       if(isSubRow && MCOLS.has(i)) return;
       // 날짜 2번째+ 행: DAY_MCOLS 컬럼 skip
       if(r.dayRowIdx>0 && DAY_MCOLS.has(i)) return;
-      // 원육 컬럼(4~8): 단일부위 날 + 두 번째 제품 행 → skip
+      // 원육 컬럼(4~8): 무육 행은 자기 행에 빈칸 출력 (rowspan 받지 않음)
       var isRMcol=(i>=4&&i<=8);
-      if(isRMcol && r.dayAllSingle && r.dayRowIdx>0 && !isSubRow) return;
+      if(isRMcol && r.isNoMeat){
+        html+='<td style="text-align:center"></td>';
+        return;
+      }
+      // 원육 컬럼: 첫 비-무육 행이 아니면 skip (rowspan 받음)
+      if(isRMcol && r.dayAllSingle && r.dayMeatSpan>0 && r.dayRowIdx !== r.dayFirstMeatIdx && !isSubRow) return;
       var rs='';
       var dts = r.dayTotalSpan||1;
+      var dms = r.dayMeatSpan||1;
       if(DAY_MCOLS.has(i) && dts>1 && r.dayRowIdx===0 && !isSubRow){
         rs=' rowspan="'+dts+'"';
-      } else if(isRMcol && r.dayAllSingle && dts>1 && r.dayRowIdx===0 && !isSubRow){
-        rs=' rowspan="'+dts+'"';
+      } else if(isRMcol && r.dayAllSingle && dms>1 && r.dayRowIdx === r.dayFirstMeatIdx && !isSubRow){
+        rs=' rowspan="'+dms+'"';
       } else if(MCOLS.has(i) && span>1 && !isSubRow && !DAY_MCOLS.has(i)){
         rs=' rowspan="'+span+'"';
       }
