@@ -677,7 +677,7 @@ function _calcWorkHours(tags){
 // ─────────────────────────────────────────────────────────
 // 주간 출퇴근 서명표 엑셀 다운로드 (A4 가로 맞춤)
 // ─────────────────────────────────────────────────────────
-function attDownloadWeekly(){
+async function attDownloadWeekly(){
   var today=new Date(_attDate);
   var day=today.getDay();
   var diff=day===0?-6:1-day;
@@ -686,12 +686,32 @@ function attDownloadWeekly(){
   var allDates=[], dlabels=['월','화','수','목','금','토','일'];
   for(var i=0;i<7;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);allDates.push(d);}
 
+  // ★ Firebase에서 1주일치 출퇴근 직접 로드 (localStorage 캐시 누락 방지)
+  var weekData = {};  // {ds: records}
+  for(var i=0;i<allDates.length;i++){
+    var dt=allDates[i];
+    var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+    try{
+      var doc = await firebase.firestore().collection('attendance').doc(ds).get();
+      if(doc.exists){
+        weekData[ds] = doc.data().records || {};
+      } else {
+        // Firebase 없으면 localStorage 폴백
+        var raw = localStorage.getItem(_attDateKey(ds));
+        if(raw) weekData[ds] = JSON.parse(raw);
+      }
+    } catch(e){
+      // Firebase 에러 시 localStorage 폴백
+      var raw = localStorage.getItem(_attDateKey(ds));
+      if(raw) weekData[ds] = JSON.parse(raw);
+    }
+  }
+
   // 기록 있는 날만 필터
   var dates=allDates.filter(function(dt){
     var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-    var raw=localStorage.getItem(_attDateKey(ds));
-    if(!raw) return false;
-    var dayRec=JSON.parse(raw);
+    var dayRec = weekData[ds];
+    if(!dayRec) return false;
     return _attEmps.some(function(e){
       var r=dayRec[e.name];
       return r&&(r.tags&&r.tags.length>0||r.inTime||r.outTime);
@@ -773,9 +793,11 @@ function attDownloadWeekly(){
     for(var d=0;d<numDays;d++){
       var base=DS+d*8;
       var dt=dates[d];
-      var lb=(dt.getMonth()+1)+'/'+dt.getDate()+'('+dlabels[d]+')';
+      // 요일 라벨: 실제 요일 기반 (필터링된 인덱스가 아닌 dt.getDay() 기반)
+      var dayIdx = dt.getDay()===0 ? 6 : dt.getDay()-1;  // Sun=6, Mon=0, ...
+      var lb=(dt.getMonth()+1)+'/'+dt.getDate()+'('+dlabels[dayIdx]+')';
       setRange(3,base,3,base+7,lb,{bold:true,fill:'DBE5F1',
-        bl:d==0?med():thin(),br:d==6?med():thin(),bt:med(),bb:thin()});
+        bl:d==0?med():thin(),br:d===numDays-1?med():thin(),bt:med(),bb:thin()});
     }
     setRange(3,SS,3,LASTCOL,'서  명',{bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
 
@@ -786,7 +808,7 @@ function attDownloadWeekly(){
       setRange(4,base,4,base+3,'출  근',{bold:true,fill:'DBE5F1',
         bl:d==0?med():thin(),br:thin(),bt:thin(),bb:med()});
       setRange(4,base+4,4,base+7,'퇴  근',{bold:true,fill:'DBE5F1',
-        bl:thin(),br:d==6?med():thin(),bt:thin(),bb:med()});
+        bl:thin(),br:d===numDays-1?med():thin(),bt:thin(),bb:med()});
     }
     setRange(4,SS,4,LASTCOL,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
 
@@ -804,8 +826,8 @@ function attDownloadWeekly(){
         var base=DS+d*8;
         var dt=dates[d];
         var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-        var raw=localStorage.getItem(_attDateKey(ds));
-        var r=raw?JSON.parse(raw)[name]:null;
+        var dayRec = weekData[ds];
+        var r = dayRec ? dayRec[name] : null;
         var inT='', outT='';
         if(r){
           var tags=r.tags||[];
@@ -814,7 +836,7 @@ function attDownloadWeekly(){
           else{inT=r.inTime||'';outT=r.outTime||'';}
         }
         setRange(row,base,row,base+3,inT,{bl:d==0?med():thin(),br:thin(),bt:thin(),bb:bb});
-        setRange(row,base+4,row,base+7,outT,{bl:thin(),br:d==6?med():thin(),bt:thin(),bb:bb});
+        setRange(row,base+4,row,base+7,outT,{bl:thin(),br:d===numDays-1?med():thin(),bt:thin(),bb:bb});
       }
       setRange(row,SS,row,LASTCOL,'',{bl:med(),br:med(),bt:thin(),bb:bb});
     }
