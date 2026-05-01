@@ -363,6 +363,13 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     // 부위 목록 (박스 많은 순)
     var partList = Object.keys(partBx).filter(function(k){return k && partBx[k]>0;}).sort(function(a,b){return partBx[b]-partBx[a];});
 
+    // 첫 비-무육 제품 인덱스 (메추리알 등 무육이 앞에 있어도 다음 비-무육에 원육 정보 부여)
+    var firstMeatPi = -1;
+    for(var __k=0; __k<prods.length; __k++){
+      var __info = (typeof L!=='undefined' && L && L.products) ? L.products.find(function(x){return x.name===prods[__k];}) : null;
+      if(!(__info && __info.noMeat)){ firstMeatPi = __k; break; }
+    }
+
     prods.forEach(function(prod, pi){
       var pkr=byDP[date+'|'+prod];
       var opR=opMap[date+'|'+prod]||{ea:0,boxes:0,tray:0,trayDef:0,unitCnt:0,boxDef:0};
@@ -380,8 +387,8 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       else { dt.setMonth(dt.getMonth()+12); dt.setDate(dt.getDate()-1); }
       var expDate = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 
-      // 첫 제품 + 부위 2개 이상 → 부위별 행 분리 (단, noMeat 제품은 분리 X)
-      if(pi===0 && partList.length>1 && !isNoMeatProd){
+      // 첫 비-무육 제품 + 부위 2개 이상 → 부위별 행 분리
+      if(pi===firstMeatPi && partList.length>1 && !isNoMeatProd){
         var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
         var isKostco = prod.indexOf('코스트코')>=0||prod.indexOf('코코')>=0;
         var outBoxVal = isKostco ? (opR.tray||0) : opR.boxes;
@@ -425,12 +432,12 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
           // 무육 제품: 부위/원육 빈칸
           rmTypeStr = '';
           rmKgVal = 0;
-        } else if(pi===0 && partList.length===1){
+        } else if(pi===firstMeatPi && partList.length===1){
           rmTypeStr = partList[0];
           rmKgVal = _perfR2(partKg[partList[0]]||0);
         } else {
           rmTypeStr = '';
-          rmKgVal = pi===0 ? rmKg : 0;
+          rmKgVal = pi===firstMeatPi ? rmKg : 0;
         }
         var isPending = (opR.boxes||0)===0 && (opR.boxDef||0)===0;
         var isKostco2 = prod.indexOf('코스트코')>=0||prod.indexOf('코코')>=0;
@@ -443,9 +450,9 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
           workers: pi===0 ? Math.round(pkr.workers||0) : 0,
           rmType: rmTypeStr,
           rmKg: rmKgVal,
-          boxSeoldo: !isNoMeatProd && pi===0 ? (partBx['설도']||0) : 0,
-          boxHongdu: !isNoMeatProd && pi===0 ? (partBx['홍두깨']||partBx['홍두께']||0) : 0,
-          boxUdun:   !isNoMeatProd && pi===0 ? (partBx['우둔']||0) : 0,
+          boxSeoldo: !isNoMeatProd && pi===firstMeatPi ? (partBx['설도']||0) : 0,
+          boxHongdu: !isNoMeatProd && pi===firstMeatPi ? (partBx['홍두깨']||partBx['홍두께']||0) : 0,
+          boxUdun:   !isNoMeatProd && pi===firstMeatPi ? (partBx['우둔']||0) : 0,
           ppKg: pi===0 ? ppD : 0,
           ckKg: pi===0 ? ckD : 0,
           shKg: pi===0 ? shD : 0,
