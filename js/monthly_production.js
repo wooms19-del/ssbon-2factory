@@ -644,49 +644,48 @@
       });
     });
 
-    // ★ 같은 (date, type) 단일 부위 행 병합 — 무육/다부위 분리 행은 제외
-    var __mergeMap = {};
-    var __keepRows = [];
+    // ★ 같은 (date, type) 그룹: 행은 따로 두고 부위 컬럼만 rowspan 표시용
+    //   → 같은 그룹 첫 row만 부위 KG/시간/인원/인시 + meatKg(그룹 합산)을 보유,
+    //     나머지 row는 0 (화면에서 td 자체를 안 그림 → 부위 컬럼 rowspan 효과)
+    var __PART_KEYS = ['rmKg','ppKg','ppHours','ppPersonHours','ppWorkers',
+                       'ckKg','ckHours','ckPersonHours','ckWorkers',
+                       'shKg','shHours','shPersonHours','shWorkers'];
+    var __grpMap = {};
     rows.forEach(function(r){
-      if(r.noMeat || !r.type || r.type==='-' || r.type==='무육' || r.type==='_'){
-        __keepRows.push(r);
-        return;
-      }
-      var key = r.date + '|' + r.type;
-      if(!__mergeMap[key]){
-        __mergeMap[key] = Object.assign({}, r, { _productList: [r.product] });
-      } else {
-        var m = __mergeMap[key];
-        m._productList.push(r.product);
-        // 분배된 부위 데이터 합산 → 그 부위 그날 전체로 복원
-        m.rmKg = _r2((m.rmKg||0) + (r.rmKg||0));
-        m.ppKg = _r2((m.ppKg||0) + (r.ppKg||0));
-        m.ppHours = _r2((m.ppHours||0) + (r.ppHours||0));
-        m.ppWorkers = r1((m.ppWorkers||0) + (r.ppWorkers||0));
-        m.ppPersonHours = _r2((m.ppPersonHours||0) + (r.ppPersonHours||0));
-        m.ckKg = _r2((m.ckKg||0) + (r.ckKg||0));
-        m.ckHours = _r2((m.ckHours||0) + (r.ckHours||0));
-        m.ckWorkers = r1((m.ckWorkers||0) + (r.ckWorkers||0));
-        m.ckPersonHours = _r2((m.ckPersonHours||0) + (r.ckPersonHours||0));
-        m.shKg = _r2((m.shKg||0) + (r.shKg||0));
-        m.shHours = _r2((m.shHours||0) + (r.shHours||0));
-        m.shWorkers = r1((m.shWorkers||0) + (r.shWorkers||0));
-        m.shPersonHours = _r2((m.shPersonHours||0) + (r.shPersonHours||0));
-        // 포장은 제품별 자체 시간/EA → 합산
-        m.pkEa = (m.pkEa||0) + (r.pkEa||0);
-        m.pkEaInner = (m.pkEaInner||0) + (r.pkEaInner||0);
-        m.pkHours = _r2((m.pkHours||0) + (r.pkHours||0));
-        m.pkWorkers = r1((m.pkWorkers||0) + (r.pkWorkers||0));
-        m.pkPersonHours = _r2((m.pkPersonHours||0) + (r.pkPersonHours||0));
-      }
+      if(r.noMeat){ r._grpKey = null; return; }
+      var key = r.date + '|' + (r.type || '');
+      if(!__grpMap[key]) __grpMap[key] = [];
+      r._grpKey = key;
+      __grpMap[key].push(r);
     });
-    var __mergedRows = Object.values(__mergeMap).map(function(m){
-      m.product = m._productList.join(', ');
-      delete m._productList;
-      return m;
+    Object.keys(__grpMap).forEach(function(key){
+      var grp = __grpMap[key];
+      // 부위 합계 (분배되어 있던 값들 합산 → 그날 그 부위 전체)
+      var total = {};
+      __PART_KEYS.forEach(function(k){
+        total[k] = grp.reduce(function(s,r){ return s+(r[k]||0); }, 0);
+      });
+      // 그룹 합산 완제품 고기 무게 (yieldPk 계산용)
+      var grpMeatKg = grp.reduce(function(s,r){
+        return s + (r.pkEa||0) * (r.kgea||0);
+      }, 0);
+      grp.forEach(function(r, i){
+        r._grpSize  = grp.length;
+        r._grpFirst = (i===0);
+        r._grpRowIdx = i;
+        if(grp.length > 1){
+          if(i === 0){
+            __PART_KEYS.forEach(function(k){ r[k] = _r2(total[k]); });
+            r._grpMeatKg = grpMeatKg;
+          } else {
+            __PART_KEYS.forEach(function(k){ r[k] = 0; });
+          }
+        } else {
+          r._grpMeatKg = grpMeatKg;
+        }
+      });
     });
-    rows = __mergedRows.concat(__keepRows);
-    // dateRowIdx 재정렬 (같은 일자 내 순서)
+    // dateRowIdx 재정렬
     var __byDateG = {};
     rows.forEach(function(r){
       if(!__byDateG[r.date]) __byDateG[r.date] = [];
@@ -813,6 +812,8 @@
       var meatKg = r.pkEa * (r.kgea||0);
       var prodKg = r.pkEa * (r.kgTot||0);
       var rm = r.rmKg;
+      // 그룹 단위 yield: 첫 row만 표시 (둘째 row 이후는 부위 KG가 0이라 자동으로 0)
+      var grpMeat = r._grpMeatKg || meatKg;
       return Object.assign({}, r, {
         meatKg:_r2(meatKg), prodKg:_r2(prodKg),
         prodPp: rm&&ppT?_r2(rm/ppT):0,
@@ -823,11 +824,11 @@
         yieldRmPp: rm?_r2(r.ppKg/rm*100)/100:0,
         yieldRmCk: rm?_r2(r.ckKg/rm*100)/100:0,
         yieldRmSh: rm?_r2(r.shKg/rm*100)/100:0,
-        yieldRmPk: rm?_r2(meatKg/rm*100)/100:0,
+        yieldRmPk: rm?_r2(grpMeat/rm*100)/100:0,
         yieldPp:   rm?_r2(r.ppKg/rm*100)/100:0,
         yieldCk:   r.ppKg?_r2(r.ckKg/r.ppKg*100)/100:0,
         yieldSh:   r.ckKg?_r2(r.shKg/r.ckKg*100)/100:0,
-        yieldPk:   r.shKg?_r2(meatKg/r.shKg*100)/100:0
+        yieldPk:   r.shKg?_r2(grpMeat/r.shKg*100)/100:0
       });
     });
 
@@ -896,8 +897,20 @@
     var dateCntMap = {};
     calcRows.forEach(function(r){ dateCntMap[r.date] = (dateCntMap[r.date]||0)+1; });
 
+    // ★ 부위 컬럼 (그룹 단위로 rowspan 처리) — 제품별이 아닌 컬럼
+    var __PART_COLS = {
+      'rmKg':1,'ppKg':1,'ppHours':1,'ppWorkers':1,'ppPersonHours':1,
+      'ckKg':1,'ckHours':1,'ckWorkers':1,'ckPersonHours':1,
+      'shKg':1,'shHours':1,'shWorkers':1,'shPersonHours':1,
+      'prodPp':1,'prodCk':1,'prodSh':1,
+      'yieldRmPp':1,'yieldRmCk':1,'yieldRmSh':1,'yieldRmPk':1,
+      'yieldPp':1,'yieldCk':1,'yieldSh':1,'yieldPk':1
+    };
+
     var bodyHtml = calcRows.map(function(r){
       var cnt = dateCntMap[r.date] || 1;
+      var grpCnt = r._grpSize || 1;
+      var isGrpFirst = r._grpFirst !== false;
       return '<tr>'+visibleCols.map(function(c,_i_){
         var v = r[c[0]];
         // dayNo, date: 그날 첫 행에만 rowspan 출력. 둘째 부위 행부터는 td 생략
@@ -933,6 +946,15 @@
             }).join('');
           }
           return '<td class="product col-product" style="text-align:center">'+(v||'')+typeBadges+'</td>';
+        }
+        // 부위 컬럼: 그룹 첫 row만 td 출력 (rowspan으로 병합), 나머지 row는 td 생략
+        if(__PART_COLS[c[0]]){
+          if(grpCnt > 1 && !isGrpFirst) return '';  // 두번째 row부터 부위 컬럼 생략
+          var rs = (grpCnt > 1) ? ' rowspan="'+grpCnt+'"' : '';
+          if(typeof v === 'number'){
+            return '<td class="'+_grpCls(c, _i_)+'"'+rs+'>'+fmtCell(v, c)+'</td>';
+          }
+          return '<td class="'+_grpCls(c, _i_)+'"'+rs+'>'+(v==null?'-':v)+'</td>';
         }
         if(c[0]==='pkEa') {
           var s = v ? Math.round(v).toLocaleString() : '-';
