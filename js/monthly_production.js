@@ -647,6 +647,7 @@
     // ★ 같은 (date, type) 그룹: 행은 따로 두고 부위 컬럼만 rowspan 표시용
     //   → 같은 그룹 첫 row만 부위 KG/시간/인원/인시 + meatKg(그룹 합산)을 보유,
     //     나머지 row는 0 (화면에서 td 자체를 안 그림 → 부위 컬럼 rowspan 효과)
+    //   ★ 분배합이 누락되는 경우가 있어 thByDateType/ppByDT/ckByDT/shByDT 직접 조회
     var __PART_KEYS = ['rmKg','ppKg','ppHours','ppPersonHours','ppWorkers',
                        'ckKg','ckHours','ckPersonHours','ckWorkers',
                        'shKg','shHours','shPersonHours','shWorkers'];
@@ -660,12 +661,14 @@
     });
     Object.keys(__grpMap).forEach(function(key){
       var grp = __grpMap[key];
-      // 부위 합계 (분배되어 있던 값들 합산 → 그날 그 부위 전체)
-      var total = {};
-      __PART_KEYS.forEach(function(k){
-        total[k] = grp.reduce(function(s,r){ return s+(r[k]||0); }, 0);
-      });
-      // 그룹 합산 완제품 고기 무게 (yieldPk 계산용)
+      var parts = key.split('|');
+      var d = parts[0], t = parts[1];
+      // 부위 전체 데이터 (분배 무시, 직접 조회)
+      var rmTotal = thByDateType[d+'|'+t] || 0;
+      var ppItem  = ppByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
+      var ckItem  = ckByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
+      var shItem  = shByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
+      // 그룹 합산 완제품 고기 (yieldPk 계산용)
       var grpMeatKg = grp.reduce(function(s,r){
         return s + (r.pkEa||0) * (r.kgea||0);
       }, 0);
@@ -675,12 +678,25 @@
         r._grpRowIdx = i;
         if(grp.length > 1){
           if(i === 0){
-            __PART_KEYS.forEach(function(k){ r[k] = _r2(total[k]); });
+            r.rmKg = _r2(rmTotal);
+            r.ppKg = _r2(ppItem.kg);
+            r.ppHours = _r2(ppItem.hours);
+            r.ppPersonHours = _r2(ppItem.personHours);
+            r.ppWorkers = ppItem.hours>0 ? r1(ppItem.personHours/ppItem.hours) : 0;
+            r.ckKg = _r2(ckItem.kg);
+            r.ckHours = _r2(ckItem.hours);
+            r.ckPersonHours = _r2(ckItem.personHours);
+            r.ckWorkers = ckItem.hours>0 ? r1(ckItem.personHours/ckItem.hours) : 0;
+            r.shKg = _r2(shItem.kg);
+            r.shHours = _r2(shItem.hours);
+            r.shPersonHours = _r2(shItem.personHours);
+            r.shWorkers = shItem.hours>0 ? r1(shItem.personHours/shItem.hours) : 0;
             r._grpMeatKg = grpMeatKg;
           } else {
             __PART_KEYS.forEach(function(k){ r[k] = 0; });
           }
         } else {
+          // 단일 row 그룹: 그대로 두되 _grpMeatKg만 부여
           r._grpMeatKg = grpMeatKg;
         }
       });
