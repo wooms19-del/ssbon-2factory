@@ -61,6 +61,12 @@
     return p ? (parseFloat(p.kgea)||0) : 0;
   }
 
+  function _prodNoMeat(name){
+    if(typeof L==='undefined' || !L || !L.products) return false;
+    var p = L.products.find(function(x){ return x.name===name; });
+    return !!(p && p.noMeat);
+  }
+
   /* ===== 메인 메뉴 → 실적관리 ===== */
   function showPerf(){
     if(typeof setModePerf==='function') setModePerf();
@@ -426,10 +432,12 @@
       var oe = opMap[k] || 0;
       p.eaDisp = oe>0 ? oe : p.ea;
       p.eaSrc  = oe>0 ? '외' : '내';
+      // noMeat 제품: type 자동 추론 안 함 (무육은 부위 그룹에 끼면 안 됨)
+      var isNoMeat = _prodNoMeat(p.product);
       // 1) packing 자체의 type — kg(EA) 큰 순으로 모두 typeList에 포함
       var typeList = Object.keys(p.types).sort(function(a,b){return (p.types[b]||0)-(p.types[a]||0);});
-      // 2) packing에 type 없으면 → 그날 thawing 부위들 자동 추론
-      if(typeList.length === 0){
+      // 2) packing에 type 없으면 → 그날 thawing 부위들 자동 추론 (noMeat 제외)
+      if(typeList.length === 0 && !isNoMeat){
         var thTypes = {};
         Object.keys(thByDateType).forEach(function(thk){
           var pp=thk.split('|');
@@ -441,6 +449,7 @@
       }
       p.type = typeList[0] || null;
       p.typeList = typeList;
+      p.isNoMeat = isNoMeat;
     });
 
     // 각 packing 행에 부위 매칭된 데이터 할당 (필요시 비율 분배)
