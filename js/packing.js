@@ -274,10 +274,14 @@ function pkWagonSumChange(idx){
 }
 
 // 와건/카트번호 → 원육 타입 (cooking/preprocess 추적)
-function pkResolveTypeFromWagon(wNum, kind){
+function pkResolveTypeFromWagon(wNum, kind, pkDate){
   kind = kind === 'cart' ? 'cart' : 'wagon';
-  // shredding 에서 해당 번호의 wagonOut/cartOut 찾기 → wagonIn → cooking.wagonOut → cooking.type
-  const sh = (L.shredding||[]).find(r => {
+  // packing 날짜 — 인자로 받았거나, 기본 오늘
+  const targetDate = pkDate || (typeof tod==='function' ? tod() : '');
+  // shredding 에서 해당 번호의 wagonOut/cartOut 찾기 (★ 같은 날짜 우선, 없으면 어제)
+  const shList = (L.shredding||[]).filter(r => {
+    const d = String(r.date||'').slice(0,10);
+    if(targetDate && d !== targetDate) return false;
     if(kind === 'cart'){
       if(r.cartOutDist && r.cartOutDist[wNum] != null) return true;
       return (r.cartOut||'').split(',').map(x=>x.trim()).includes(wNum);
@@ -285,10 +289,16 @@ function pkResolveTypeFromWagon(wNum, kind){
     if(r.wagonOutDist && r.wagonOutDist[wNum] != null) return true;
     return (r.wagonOut||'').split(',').map(x=>x.trim()).includes(wNum);
   });
+  const sh = shList[0];
   if(!sh) return '';
+  // ★ 같은 날짜의 cooking으로 제한 — 와곤번호는 날짜별 재사용되므로 다른 날짜 cooking과 매칭되면 부위 오추론
+  const shDate = String(sh.date||'').slice(0,10);
   const wIns = (sh.wagonIn||'').split(',').map(x=>x.trim()).filter(Boolean);
   for(const wIn of wIns){
-    const ck = (L.cooking||[]).find(r => (r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn));
+    const ck = (L.cooking||[]).find(r =>
+      String(r.date||'').slice(0,10) === shDate &&
+      (r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn)
+    );
     if(ck && ck.type) return ck.type.split(',')[0].trim();
   }
   return '';
