@@ -96,7 +96,7 @@ function _renderAttAll(){
   var wrapId={input:'attInputWrap',monthly:'attMonthlyWrap',staff:'attStaffWrap'}[_attSubTab];
   var w=document.getElementById(wrapId);if(w)w.style.display='';
   if(_attSubTab==='input')_renderAttInput();
-  if(_attSubTab==='monthly')_renderAttMonthly();
+  if(_attSubTab==='monthly')_attShowMonthly();  // ★ Firebase prefetch + render
   if(_attSubTab==='staff')_renderAttStaff();
 }
 function attShowSubTab(tab,el){
@@ -509,9 +509,43 @@ function _attGetWeekMon(baseDate){
 function _attFmtDate2(dt){
   return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 }
-function attWeekPrev(){ _attWeekStart.setDate(_attWeekStart.getDate()-7); _renderAttMonthly(); }
-function attWeekNext(){ _attWeekStart.setDate(_attWeekStart.getDate()+7); _renderAttMonthly(); }
-function attWeekToday(){ _attWeekStart=_attGetWeekMon(tod()); _renderAttMonthly(); }
+
+// ★ Firebase에서 1주일치 → localStorage로 동기화 (월별 조회용)
+//   실패해도 기존 localStorage는 유지 (안전 폴백)
+async function _attPrefetchWeek(weekStart){
+  if(!weekStart) return;
+  var promises = [];
+  for(var i=0; i<7; i++){
+    (function(idx){
+      var d = new Date(weekStart); d.setDate(weekStart.getDate()+idx);
+      var ds = _attFmtDate2(d);
+      promises.push(
+        firebase.firestore().collection('attendance').doc(ds).get()
+          .then(function(doc){
+            if(doc && doc.exists){
+              var rec = doc.data().records || {};
+              localStorage.setItem(_attDateKey(ds), JSON.stringify(rec));
+            }
+          })
+          .catch(function(err){
+            console.warn('[attPrefetch] '+ds+' 실패:', err && err.message);
+          })
+      );
+    })(i);
+  }
+  await Promise.all(promises);
+}
+
+// prefetch + render 묶음 (호출자가 이 함수를 await로 부름)
+async function _attShowMonthly(){
+  if(!_attWeekStart) _attWeekStart=_attGetWeekMon(_attDate||tod());
+  await _attPrefetchWeek(_attWeekStart);
+  _renderAttMonthly();
+}
+
+function attWeekPrev(){ _attWeekStart.setDate(_attWeekStart.getDate()-7); _attShowMonthly(); }
+function attWeekNext(){ _attWeekStart.setDate(_attWeekStart.getDate()+7); _attShowMonthly(); }
+function attWeekToday(){ _attWeekStart=_attGetWeekMon(tod()); _attShowMonthly(); }
 
 function _renderAttMonthly(){
   var tbl=document.getElementById('attWeekTable'); if(!tbl) return;
