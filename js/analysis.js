@@ -134,6 +134,7 @@ async function renderMonthly() {
 
   // ── 차트 ─────────────────────────────────────────────────
   // pkClean: KPI와 일관성 — testRun/isTest 제외
+  // 불량률 공식: defect / 파우치사용량 (= ea + defect) — KPI와 동일
   const byDate={};
   pkClean.forEach(r=>{ const d=String(r.date||'').slice(0,10);
     if(!byDate[d]) byDate[d]={ea:0,def:0};
@@ -141,7 +142,10 @@ async function renderMonthly() {
   });
   const dates=Object.keys(byDate).sort();
   const eaVals=dates.map(d=>byDate[d].ea);
-  const defVals=dates.map(d=>byDate[d].ea>0?parseFloat((byDate[d].def/byDate[d].ea*100).toFixed(2)):null);
+  const defVals=dates.map(d=>{
+    const pouch = byDate[d].ea + byDate[d].def;  // 파우치사용량 = 정상 + 불량
+    return pouch>0 ? parseFloat((byDate[d].def/pouch*100).toFixed(2)) : null;
+  });
   const labels=dates.map(d=>d.slice(5)+'('+dayOfWeek(d)+')');
 
   // mo_bar_chart → renderPackingChart로 위임 (renderMonthlyReport에서 호출)
