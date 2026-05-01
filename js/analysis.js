@@ -133,8 +133,9 @@ async function renderMonthly() {
     </tr>`; }
 
   // ── 차트 ─────────────────────────────────────────────────
+  // pkClean: KPI와 일관성 — testRun/isTest 제외
   const byDate={};
-  pk.forEach(r=>{ const d=String(r.date||'').slice(0,10);
+  pkClean.forEach(r=>{ const d=String(r.date||'').slice(0,10);
     if(!byDate[d]) byDate[d]={ea:0,def:0};
     byDate[d].ea+=parseFloat(r.ea)||0; byDate[d].def+=parseFloat(r.defect)||0;
   });
