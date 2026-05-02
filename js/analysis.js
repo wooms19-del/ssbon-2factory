@@ -17,6 +17,66 @@ function chMonth(dir) {
   renderMonthly();
 }
 
+// ── 월간 메타(작업인원/Capa/메모) firestore 동기화 헬퍼 ─────────────────────
+//
+// 컬렉션: monthlyMeta, 문서ID: ym (예: '2026-04')
+// 데이터 형태: { "2026-04-01": { workers, capa, note }, ... }
+//
+// 동작:
+//  - 로드: firestore 우선, 없으면 localStorage fallback
+//  - 마이그레이션: localStorage에 있고 firestore에 없으면 자동 업로드 (1회)
+//  - 저장: localStorage 즉시 저장 + firestore 저장 (백그라운드)
+//
+// 이 헬퍼 도입 전에는 localStorage에만 저장되어 다른 PC/브라우저/시크릿모드에서
+// 메모가 안 보이고, 캐시 정리 시 사라지는 문제가 있었음.
+async function _moLoadMeta(ym){
+  const metaKey = 'moMeta_' + ym;
+  let lsData = {};
+  try { lsData = JSON.parse(localStorage.getItem(metaKey)||'{}'); } catch(e){}
+
+  let fbData = null;
+  try {
+    if(typeof db !== 'undefined' && db) {
+      const snap = await db.collection('monthlyMeta').doc(ym).get();
+      if(snap.exists) {
+        const raw = snap.data() || {};
+        // 시스템 필드(_createdAt 등) 제거
+        fbData = {};
+        for(const k in raw){ if(!k.startsWith('_')) fbData[k] = raw[k]; }
+      }
+    }
+  } catch(e) { console.warn('[월간메모] firestore 로드 실패, localStorage 사용:', e.message); }
+
+  // 마이그레이션: localStorage에 있고 firestore에 없으면 자동 업로드
+  if(fbData === null && Object.keys(lsData).length > 0) {
+    if(typeof fbSave === 'function') {
+      try {
+        await fbSave('monthlyMeta', lsData, ym);
+        console.log('[월간메모 마이그레이션] localStorage → firestore 완료', ym, Object.keys(lsData).length+'일');
+      } catch(e) { console.warn('[월간메모 마이그레이션 실패]', e.message); }
+    }
+    return lsData;
+  }
+
+  // firestore가 우선. localStorage 동기화
+  if(fbData !== null) {
+    try { localStorage.setItem(metaKey, JSON.stringify(fbData)); } catch(e){}
+    return fbData;
+  }
+  return lsData;
+}
+
+async function _moSaveMeta(ym, mm){
+  const metaKey = 'moMeta_' + ym;
+  // localStorage 즉시 저장 (오프라인 캐시)
+  try { localStorage.setItem(metaKey, JSON.stringify(mm)); } catch(e){}
+  // firestore 저장 (백그라운드, fbSave는 staging에서 자동 차단됨)
+  if(typeof fbSave === 'function') {
+    try { await fbSave('monthlyMeta', mm, ym); }
+    catch(e) { console.warn('[월간메모 저장 실패]', e.message); }
+  }
+}
+
 async function renderMonthly() {
   if(!_moYm) _moYm = tod().slice(0,7);
   const ym = _moYm;
@@ -58,6 +118,24 @@ async function renderMonthly() {
     _kpiDpMap[key]+=parseFloat(r.ea)||0;
   });
   const totalEA = Object.entries(_kpiDpMap).reduce((s,[key,pkEa])=>s+(_kpiOpMap[key]||pkEa), 0);
+
+  // ─── Phase 2.2 마이그레이션: dataLayer.getMonth 비교 모니터 (사용자 영향 0) ───
+  if(typeof window !== 'undefined' && window.DL && typeof window.DL.getMonth === 'function'){
+    try{
+      const _dlM = window.DL.getMonth(ym);  // 'YYYY-MM' 문자열
+      const _dlMS = _dlM && _dlM.monthSummary;
+      if(_dlMS){
+        const _dlPkEa = _dlMS.pkEaTotalDisp || 0;
+        const _check = (label, legacy, dl, tol=1) => {
+          const diff = Math.abs((legacy||0) - (dl||0));
+          if(diff > tol) console.warn(`[Phase2.2 비교 차이] ${ym} ${label}: legacy=${legacy}, DL=${dl}, Δ=${diff.toFixed(2)}`);
+        };
+        _check('monthlyTotalEA', totalEA, _dlPkEa);
+      }
+    }catch(_e){
+      console.error('[Phase2.2 DL 비교 오류]', _e.message);
+    }
+  }
   const avgEA    = workDays > 0 ? Math.round(totalEA/workDays) : 0;
   // 불량률 = 불량 ÷ 파우치사용량
   const _kpiPkEaTotal=pkClean.reduce((s,r)=>s+(parseFloat(r.ea)||0),0);
@@ -241,8 +319,8 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
 
   const ym = _moYm || tod().slice(0,7);
   const metaKey = 'moMeta_' + ym;
-  let metaMap = {};
-  try { metaMap = JSON.parse(localStorage.getItem(metaKey)||'{}'); } catch(e){}
+  // [메타 로드] firestore 우선, 없으면 localStorage fallback + 자동 마이그레이션
+  let metaMap = await _moLoadMeta(ym);
 
   // 날짜별 + 제품별 집계 (작업인원 포함)
   const byDateProd = {};
@@ -465,9 +543,9 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
 
   // 인라인 편집 이벤트 바인딩
   tbody.querySelectorAll('.mo-edit').forEach(el => {
-    el.addEventListener('click', function() {
+    el.addEventListener('click', async function() {
       const field = this.dataset.field;
-      const date  = this.dataset.date;
+      const date  = this.dataset.field === 'note' ? this.dataset.date : this.dataset.date;
       const labels = {workers:'작업 인원 (명)', capa:'Full Capa (예: 10,000)', note:'비고'};
       let cur = '';
       try { cur = (JSON.parse(localStorage.getItem(metaKey)||'{}')[date]||{})[field]||''; } catch(e){}
@@ -478,10 +556,11 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
       if(!mm[date]) mm[date]={};
       if(val.trim()==='') {
         delete mm[date][field];
+        if(Object.keys(mm[date]).length===0) delete mm[date];
       } else {
         mm[date][field] = (field==='note') ? val : (parseFloat(val.replace(/,/g,''))||val);
       }
-      localStorage.setItem(metaKey, JSON.stringify(mm));
+      await _moSaveMeta(ym, mm);
       renderMonthly();
     });
   });
@@ -590,7 +669,7 @@ function _moRenderRows(selProds) {
 
   // 인라인 편집 이벤트 재바인딩
   tbody.querySelectorAll('.mo-edit').forEach(el=>{
-    el.addEventListener('click',function(){
+    el.addEventListener('click',async function(){
       const field=this.dataset.field, date=this.dataset.date;
       const labels={workers:'작업 인원 (명)',capa:'Full Capa (예: 10,000)',note:'비고'};
       let cur='';
@@ -600,8 +679,13 @@ function _moRenderRows(selProds) {
       let mm={};
       try{mm=JSON.parse(localStorage.getItem(metaKey)||'{}');}catch(e){}
       if(!mm[date]) mm[date]={};
-      if(val.trim()===''){delete mm[date][field];}else{mm[date][field]=(field==='note')?val:(parseFloat(val.replace(/,/g,''))||val);}
-      localStorage.setItem(metaKey,JSON.stringify(mm));
+      if(val.trim()===''){
+        delete mm[date][field];
+        if(Object.keys(mm[date]).length===0) delete mm[date];
+      } else {
+        mm[date][field]=(field==='note')?val:(parseFloat(val.replace(/,/g,''))||val);
+      }
+      await _moSaveMeta(ym, mm);
       renderMonthly();
     });
   });
@@ -1309,6 +1393,28 @@ function renderDailyFromLocal_(d){
     return s + (p ? (parseFloat(r.ea)||0)*p.kgea : 0);
   },0));
   const oYld = rmKg>0 ? r2(pkRawKg/rmKg*100) : 0;
+
+  // ─── Phase 2.1 마이그레이션: dataLayer 결과 실시간 검증 (사용자 영향 0) ───
+  // dataLayer.getDay() 결과가 legacy 계산과 일치하는지 운영 중 console에 비교 출력.
+  // 차이 발생 시 즉시 감지 가능 → 향후 정식 교체 안전성 보장.
+  if(typeof window !== 'undefined' && window.DL && typeof window.DL.getDay === 'function'){
+    try{
+      const _dl = window.DL.getDay(d);
+      const _check = (label, legacy, dl, tol=0.5) => {
+        const diff = Math.abs((legacy||0) - (dl||0));
+        if(diff > tol) console.warn(`[Phase2.1 비교 차이] ${d} ${label}: legacy=${legacy}, DL=${dl}, Δ=${diff.toFixed(2)}`);
+      };
+      _check('rmKg', rmKg, _dl.summary.rmKgTotal);
+      _check('ppKg', ppKg, _dl.summary._ppKgTotal);
+      _check('ckKg', ckKg, _dl.summary._ckKgTotal);
+      _check('shKg', shKg, _dl.summary._shKgTotal);
+      const _dlEa = Object.values(_dl.summary.pkEaByPart||{}).reduce((a,b)=>a+b,0)
+                  + (_dl.summary.pkEaNoMeat||0) + (_dl.summary.pkEaUnresolved||0);
+      _check('totalEA', totalEA, _dlEa, 1);
+    }catch(_e){
+      console.error('[Phase2.1 DL 비교 오류]', _e.message);
+    }
+  }
 
   const _s=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
   _s('d_ea', totalEA ? totalEA.toLocaleString() : '-');
