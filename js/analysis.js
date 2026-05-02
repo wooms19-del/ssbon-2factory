@@ -58,24 +58,6 @@ async function renderMonthly() {
     _kpiDpMap[key]+=parseFloat(r.ea)||0;
   });
   const totalEA = Object.entries(_kpiDpMap).reduce((s,[key,pkEa])=>s+(_kpiOpMap[key]||pkEa), 0);
-
-  // ─── Phase 2.2 마이그레이션: dataLayer.getMonth 비교 모니터 (사용자 영향 0) ───
-  if(typeof window !== 'undefined' && window.DL && typeof window.DL.getMonth === 'function'){
-    try{
-      const _dlM = window.DL.getMonth(ym);  // 'YYYY-MM' 문자열
-      const _dlMS = _dlM && _dlM.monthSummary;
-      if(_dlMS){
-        const _dlPkEa = _dlMS.pkEaTotalDisp || 0;
-        const _check = (label, legacy, dl, tol=1) => {
-          const diff = Math.abs((legacy||0) - (dl||0));
-          if(diff > tol) console.warn(`[Phase2.2 비교 차이] ${ym} ${label}: legacy=${legacy}, DL=${dl}, Δ=${diff.toFixed(2)}`);
-        };
-        _check('monthlyTotalEA', totalEA, _dlPkEa);
-      }
-    }catch(_e){
-      console.error('[Phase2.2 DL 비교 오류]', _e.message);
-    }
-  }
   const avgEA    = workDays > 0 ? Math.round(totalEA/workDays) : 0;
   // 불량률 = 불량 ÷ 파우치사용량
   const _kpiPkEaTotal=pkClean.reduce((s,r)=>s+(parseFloat(r.ea)||0),0);
@@ -1327,28 +1309,6 @@ function renderDailyFromLocal_(d){
     return s + (p ? (parseFloat(r.ea)||0)*p.kgea : 0);
   },0));
   const oYld = rmKg>0 ? r2(pkRawKg/rmKg*100) : 0;
-
-  // ─── Phase 2.1 마이그레이션: dataLayer 결과 실시간 검증 (사용자 영향 0) ───
-  // dataLayer.getDay() 결과가 legacy 계산과 일치하는지 운영 중 console에 비교 출력.
-  // 차이 발생 시 즉시 감지 가능 → 향후 정식 교체 안전성 보장.
-  if(typeof window !== 'undefined' && window.DL && typeof window.DL.getDay === 'function'){
-    try{
-      const _dl = window.DL.getDay(d);
-      const _check = (label, legacy, dl, tol=0.5) => {
-        const diff = Math.abs((legacy||0) - (dl||0));
-        if(diff > tol) console.warn(`[Phase2.1 비교 차이] ${d} ${label}: legacy=${legacy}, DL=${dl}, Δ=${diff.toFixed(2)}`);
-      };
-      _check('rmKg', rmKg, _dl.summary.rmKgTotal);
-      _check('ppKg', ppKg, _dl.summary._ppKgTotal);
-      _check('ckKg', ckKg, _dl.summary._ckKgTotal);
-      _check('shKg', shKg, _dl.summary._shKgTotal);
-      const _dlEa = Object.values(_dl.summary.pkEaByPart||{}).reduce((a,b)=>a+b,0)
-                  + (_dl.summary.pkEaNoMeat||0) + (_dl.summary.pkEaUnresolved||0);
-      _check('totalEA', totalEA, _dlEa, 1);
-    }catch(_e){
-      console.error('[Phase2.1 DL 비교 오류]', _e.message);
-    }
-  }
 
   const _s=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
   _s('d_ea', totalEA ? totalEA.toLocaleString() : '-');
