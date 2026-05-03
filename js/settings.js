@@ -352,3 +352,211 @@ function startEditProd(i){
   document.getElementById('np_nm').scrollIntoView({behavior:'smooth', block:'center'});
   document.getElementById('np_nm').focus();
 }
+
+
+// ============================================================
+// 알람 임계값 관리 (Firebase + LocalStorage 캐시)
+// ============================================================
+const ALARM_LS_CACHE_KEY = 'ssbon_v6_alarm_thresholds_cache';
+const ALARM_FB_COL = 'config';
+const ALARM_FB_DOC = 'alarms';
+const ALARM_DEFAULTS = {
+  cooking:   { mean: 54.50, std: 1.27, enabled: true },
+  shredding: { mean: 50.83, std: 2.77, enabled: true },
+  packing:   { mean: 50.67, std: 7.23, enabled: true }
+};
+
+// 메모리 캐시 (페이지 시작 시 Firebase에서 로드된 값)
+window._alarmThresholdsCache = null;
+
+async function loadAlarmThresholdsFromFb(){
+  try{
+    const doc = await firebase.firestore().collection(ALARM_FB_COL).doc(ALARM_FB_DOC).get();
+    if(doc.exists){
+      const data = doc.data();
+      window._alarmThresholdsCache = data;
+      // LocalStorage에도 백업
+      try{ localStorage.setItem(ALARM_LS_CACHE_KEY, JSON.stringify(data)); }catch(e){}
+      return data;
+    }
+  }catch(e){ console.warn('알람 임계값 Firebase 로드 실패:', e.message); }
+  // 폴백: LocalStorage 캐시 → 기본값
+  try{
+    const cached = localStorage.getItem(ALARM_LS_CACHE_KEY);
+    if(cached){
+      const data = JSON.parse(cached);
+      window._alarmThresholdsCache = data;
+      return data;
+    }
+  }catch(e){}
+  window._alarmThresholdsCache = JSON.parse(JSON.stringify(ALARM_DEFAULTS));
+  return window._alarmThresholdsCache;
+}
+
+function getAlarmThresholdsSync(){
+  // renderDailyAlerts 등에서 쓸 동기 버전
+  if(window._alarmThresholdsCache) return window._alarmThresholdsCache;
+  try{
+    const cached = localStorage.getItem(ALARM_LS_CACHE_KEY);
+    if(cached) return JSON.parse(cached);
+  }catch(e){}
+  return JSON.parse(JSON.stringify(ALARM_DEFAULTS));
+}
+
+async function saveAlarmThresholds(){
+  const data = {
+    cooking: {
+      mean: parseFloat(document.getElementById('al_ck_mean').value)||ALARM_DEFAULTS.cooking.mean,
+      std:  parseFloat(document.getElementById('al_ck_std').value)||ALARM_DEFAULTS.cooking.std,
+      enabled: document.getElementById('al_ck_on').checked
+    },
+    shredding: {
+      mean: parseFloat(document.getElementById('al_sh_mean').value)||ALARM_DEFAULTS.shredding.mean,
+      std:  parseFloat(document.getElementById('al_sh_std').value)||ALARM_DEFAULTS.shredding.std,
+      enabled: document.getElementById('al_sh_on').checked
+    },
+    packing: {
+      mean: parseFloat(document.getElementById('al_pk_mean').value)||ALARM_DEFAULTS.packing.mean,
+      std:  parseFloat(document.getElementById('al_pk_std').value)||ALARM_DEFAULTS.packing.std,
+      enabled: document.getElementById('al_pk_on').checked
+    },
+    _updatedAt: new Date().toISOString()
+  };
+  try{
+    await firebase.firestore().collection(ALARM_FB_COL).doc(ALARM_FB_DOC).set(data);
+    window._alarmThresholdsCache = data;
+    try{ localStorage.setItem(ALARM_LS_CACHE_KEY, JSON.stringify(data)); }catch(e){}
+    updAlarmThresholdLabels();
+    const msg = document.getElementById('al_save_msg');
+    if(msg){ msg.textContent = '✓ Firebase 저장 완료. 모든 디바이스에 적용됨 (다음 새로고침 시).'; setTimeout(()=>{msg.textContent='';},5000); }
+    if(typeof toast === 'function') toast('알람 임계값 저장됨','s');
+    if(typeof renderDaily === 'function') renderDaily();
+  }catch(e){
+    if(typeof toast==='function') toast('저장 실패: '+e.message,'d');
+    console.error(e);
+  }
+}
+
+function resetAlarmThresholds(){
+  if(!confirm('4월 기본값으로 초기화하시겠습니까?')) return;
+  const d = ALARM_DEFAULTS;
+  document.getElementById('al_ck_mean').value = d.cooking.mean;
+  document.getElementById('al_ck_std').value = d.cooking.std;
+  document.getElementById('al_ck_on').checked = true;
+  document.getElementById('al_sh_mean').value = d.shredding.mean;
+  document.getElementById('al_sh_std').value = d.shredding.std;
+  document.getElementById('al_sh_on').checked = true;
+  document.getElementById('al_pk_mean').value = d.packing.mean;
+  document.getElementById('al_pk_std').value = d.packing.std;
+  document.getElementById('al_pk_on').checked = true;
+  saveAlarmThresholds();
+}
+
+function updAlarmThresholdLabels(){
+  const update = (prefix)=>{
+    const m = parseFloat(document.getElementById(prefix+'_mean').value)||0;
+    const s = parseFloat(document.getElementById(prefix+'_std').value)||0;
+    const yEl = document.getElementById(prefix+'_y');
+    const rEl = document.getElementById(prefix+'_r');
+    if(yEl) yEl.textContent = (m-2*s).toFixed(2)+'%↓';
+    if(rEl) rEl.textContent = (m-3*s).toFixed(2)+'%↓';
+  };
+  update('al_ck'); update('al_sh'); update('al_pk');
+}
+
+async function loadAlarmThresholdsToUI(){
+  // settings 페이지 진입 시 호출 - Firebase에서 최신 가져와서 UI에 채움
+  let t = window._alarmThresholdsCache;
+  if(!t){
+    t = await loadAlarmThresholdsFromFb();
+  }
+  const set = (id, v)=>{ const el = document.getElementById(id); if(el && v != null) el.value = v; };
+  const setChk = (id, v)=>{ const el = document.getElementById(id); if(el) el.checked = !!v; };
+  set('al_ck_mean', t.cooking?.mean); set('al_ck_std', t.cooking?.std); setChk('al_ck_on', t.cooking?.enabled);
+  set('al_sh_mean', t.shredding?.mean); set('al_sh_std', t.shredding?.std); setChk('al_sh_on', t.shredding?.enabled);
+  set('al_pk_mean', t.packing?.mean); set('al_pk_std', t.packing?.std); setChk('al_pk_on', t.packing?.enabled);
+  updAlarmThresholdLabels();
+  // 입력 변경 시 라벨 자동 갱신 리스너 (1회만 등록)
+  ['al_ck_mean','al_ck_std','al_sh_mean','al_sh_std','al_pk_mean','al_pk_std'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && !el._alarmListenerSet){
+      el.addEventListener('input', updAlarmThresholdLabels);
+      el._alarmListenerSet = true;
+    }
+  });
+  // 마지막 저장 시각 표시
+  if(t._updatedAt){
+    const msg = document.getElementById('al_save_msg');
+    if(msg){
+      const dt = new Date(t._updatedAt);
+      msg.textContent = '마지막 수정: ' + dt.toLocaleString('ko-KR');
+      msg.style.color = 'var(--g5)';
+    }
+  }
+}
+
+async function recalcAlarmFromData(){
+  if(!confirm('최근 30일 데이터로 평균과 편차를 자동 계산하시겠습니까?')) return;
+  if(typeof toast==='function') toast('계산 중...','i');
+  const today = new Date();
+  const start = new Date(today); start.setDate(start.getDate()-30);
+  const fmt = d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const sd = fmt(start), ed = fmt(today);
+
+  const fetchCol = async (col)=>{
+    const url = `https://firestore.googleapis.com/v1/projects/ssbon-factory/databases/(default)/documents:runQuery?key=AIzaSyA0Y6VK8EOahDE6O7LEWtyG9-U8YP3yqDE`;
+    const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({structuredQuery:{from:[{collectionId:col}],where:{compositeFilter:{op:'AND',filters:[{fieldFilter:{field:{fieldPath:'date'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:sd}}},{fieldFilter:{field:{fieldPath:'date'},op:'LESS_THAN_OR_EQUAL',value:{stringValue:ed}}}]}}}})});
+    const data = await r.json();
+    return data.filter(d=>d.document).map(d=>{
+      const fd = {};
+      Object.entries(d.document.fields||{}).forEach(([k,v])=>{
+        if(v.stringValue!==undefined) fd[k]=v.stringValue;
+        else if(v.integerValue!==undefined) fd[k]=parseInt(v.integerValue);
+        else if(v.doubleValue!==undefined) fd[k]=parseFloat(v.doubleValue);
+      });
+      return fd;
+    });
+  };
+
+  try{
+    const [th, ck, sh, pk] = await Promise.all([fetchCol('thawing'),fetchCol('cooking'),fetchCol('shredding'),fetchCol('packing')]);
+    const byDate = (recs, key='kg')=>{ const m={}; recs.forEach(r=>{if(r.date){m[r.date]=(m[r.date]||0)+(parseFloat(r[key])||0);}}); return m; };
+    const rmBy = byDate(th, 'totalKg');
+    const ckBy = byDate(ck), shBy = byDate(sh);
+
+    const pkRawBy = {};
+    pk.forEach(r=>{
+      if(!r.date) return;
+      const p = (L.products||[]).find(x=>x.name===r.product);
+      const kgea = p ? p.kgea : 0;
+      pkRawBy[r.date] = (pkRawBy[r.date]||0) + (parseFloat(r.ea)||0)*kgea;
+    });
+
+    const ckYields=[], shYields=[], pkYields=[];
+    Object.keys(rmBy).forEach(d=>{
+      const rm = rmBy[d]; if(rm < 100) return;
+      if(ckBy[d]>0){ const y = ckBy[d]/rm*100; if(20<y && y<100) ckYields.push(y); }
+      if(shBy[d]>0){ const y = shBy[d]/rm*100; if(20<y && y<100) shYields.push(y); }
+      if(pkRawBy[d]>0){ const y = pkRawBy[d]/rm*100; if(20<y && y<100) pkYields.push(y); }
+    });
+
+    const stat = arr=>{
+      if(arr.length<3) return null;
+      const m = arr.reduce((a,b)=>a+b,0)/arr.length;
+      const v = arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length;
+      return {mean: m, std: Math.sqrt(v), n: arr.length};
+    };
+    const sCk = stat(ckYields), sSh = stat(shYields), sPk = stat(pkYields);
+
+    if(sCk){ document.getElementById('al_ck_mean').value = sCk.mean.toFixed(2); document.getElementById('al_ck_std').value = sCk.std.toFixed(2); }
+    if(sSh){ document.getElementById('al_sh_mean').value = sSh.mean.toFixed(2); document.getElementById('al_sh_std').value = sSh.std.toFixed(2); }
+    if(sPk){ document.getElementById('al_pk_mean').value = sPk.mean.toFixed(2); document.getElementById('al_pk_std').value = sPk.std.toFixed(2); }
+    updAlarmThresholdLabels();
+    const msg = document.getElementById('al_save_msg');
+    if(msg){ msg.textContent = `✓ 자동계산 완료 (자숙 n=${sCk?.n||0}, 파쇄 n=${sSh?.n||0}, 포장 n=${sPk?.n||0}). 저장 버튼을 눌러야 적용됩니다.`; msg.style.color='var(--s)'; }
+    if(typeof toast==='function') toast('자동계산 완료. 저장 누르세요.','s');
+  }catch(e){
+    if(typeof toast==='function') toast('자동계산 실패: '+e.message,'d');
+    console.error(e);
+  }
+}
