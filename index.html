@@ -817,6 +817,18 @@
     </div>
     <div class="dvd"></div>
 
+    <!-- 카카오톡 알림 아코디언 -->
+    <div class="acc-hd" onclick="toggleAcc('acc-kakao')">
+      <span class="ct" style="margin-bottom:0">📱 카카오톡 알림 <span id="acc-kakao-status" style="font-size:11px;color:var(--g5);font-weight:400"></span></span>
+      <span class="acc-arrow">▼</span>
+    </div>
+    <div class="acc-body closed" id="acc-kakao">
+      <div style="padding-top:1rem">
+        <div id="kakao_status_box"></div>
+      </div>
+    </div>
+    <div class="dvd"></div>
+
     <!-- 알람 임계값 아코디언 -->
     <div class="acc-hd" onclick="toggleAcc('acc-alarm')">
       <span class="ct" style="margin-bottom:0">🔔 알람 임계값 <span style="font-size:11px;color:var(--g5);font-weight:400">(원육수율 기준)</span></span>
@@ -951,6 +963,9 @@
   </div>
 </div>
 
+<!-- Kakao JavaScript SDK -->
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js" integrity="sha384-DKYJZ8NLiK8MN4/C5P2dtSmLQ4KwPaoqAfyA/DfmEc1VDxu4yyC7wy6K1Hs90nka" crossorigin="anonymous"></script>
+<script>if(window.Kakao){Kakao.init('3c36e1a3bb9ea2d4445a5cd30dd906c1');}</script>
 <script src="js/common.js?v=12"></script>
 <script src="js/barcode.js?v=3"></script>
 <script src="js/thawing.js?v=9"></script>
@@ -961,12 +976,13 @@
 <script src="js/packing.js?v=25"></script>
 <script src="js/csv_upload.js?v=2"></script>
 <script src="js/daily_report.js?v=21"></script>
-<script src="js/analysis.js?v=55"></script>
-<script src="js/dashboard.js?v=3"></script>
+<script src="js/analysis.js?v=56"></script>
+<script src="js/dashboard.js?v=4"></script>
 <script src="js/trace.js?v=4"></script>
 <script src="js/outerpacking.js?v=3"></script>
-<script src="js/settings.js?v=3"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/settings.js?v=4"></script>
+<script src="js/kakao.js?v=1"></script>
+<script src="js/app.js?v=7"></script>
 <script src="js/schedule.js?v=3"></script>
 <script src="js/attendance.js?v=22"></script>
 <script src="js/timepicker.js?v=2"></script>
