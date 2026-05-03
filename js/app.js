@@ -89,6 +89,10 @@ function showTab(mode,tab){
     renderTrTbl();
   } else if(tab==='settings'){
     loadSettings_().then(()=>renderSettings()).catch(()=>renderSettings());
+    // 알람 임계값 Firebase에서 로드 (페이지 시작 시 1회)
+    if(typeof loadAlarmThresholdsFromFb === 'function'){
+      loadAlarmThresholdsFromFb().catch(e=>console.warn('알람 임계값 로드 실패:', e.message));
+    }
   } else if(tab==='schedule'){
     if(typeof initSchedule==='function') initSchedule();
   } else if(tab==='outerpacking'){
