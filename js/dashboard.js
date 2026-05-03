@@ -487,6 +487,9 @@ function renderSettings(){
 
   // 알람 임계값 로드
   if(typeof loadAlarmThresholdsToUI === 'function') loadAlarmThresholdsToUI();
+
+  // 카카오톡 알림 상태 렌더
+  if(typeof _renderKakaoStatus === 'function') _renderKakaoStatus();
 }
 
 // 제품 수정 시작 - 폼에 기존값 채우기
