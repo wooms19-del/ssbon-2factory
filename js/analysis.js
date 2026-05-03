@@ -1430,6 +1430,18 @@ function renderDailyFromLocal_(d){
   const defLabel = document.getElementById('d_def_label');
   if(defLabel) defLabel.textContent = defRate>2 ? '% ▲기준초과' : defRate>0 ? '% ▼기준이하' : '%';
 
+  // ============================================================
+  // 일별 알람 체크 - 자숙/파쇄/포장 수율 이상 탐지
+  // 임계값: 4월 데이터 30일 기준 평균 ± nσ (2026-05 산출)
+  // ============================================================
+  const _ckYield = ppKg > 0 ? r2(ckKg/ppKg*100) : null;
+  const _shYield = ckKg > 0 ? r2(shKg/ckKg*100) : null;
+  const _totalPouch = pk.reduce((s,r)=>s+(parseFloat(r.pouch)||0),0);
+  const _pkYield = _totalPouch > 0 ? r2((_totalPouch - defect)/_totalPouch*100) : null;
+  if(typeof renderDailyAlerts === 'function'){
+    renderDailyAlerts({ cooking: _ckYield, shredding: _shYield, packing: _pkYield });
+  }
+
   // 공정별 현황 - 파쇄 원육타입: 연결된 자숙 레코드에서 type 가져오기
   function getShType(shRecs, ckRecs) {
     const types = new Set();
@@ -2507,4 +2519,62 @@ async function _buildChartSheet(mainBuf, y, m) {
   zip.file('xl/charts/chart1.xml',chartXml);
 
   return await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE'});
+}
+
+// ============================================================
+// 일별 알람 카드 렌더링 (자숙/파쇄/포장 수율 이상 탐지)
+// 4월 30일치 데이터 기반 임계값 (mean ± nσ)
+// ============================================================
+const ALARM_THRESHOLDS = {
+  cooking:   { mean: 56.16, std: 1.20,  direction: 'lower', label: '자숙 수율',  unit: '%' },
+  shredding: { mean: 85.21, std: 10.24, direction: 'lower', label: '파쇄 수율',  unit: '%' },
+  packing:   { mean: 96.39, std: 2.40,  direction: 'lower', label: '포장 수율',  unit: '%' }
+};
+
+function renderDailyAlerts(metrics){
+  const card = document.getElementById('alertCard');
+  if(!card) return;
+
+  const alerts = [];
+  ['cooking','shredding','packing'].forEach(k => {
+    const t = ALARM_THRESHOLDS[k];
+    const v = metrics[k];
+    if(v == null || isNaN(v)) return;
+
+    let level = 'green';
+    if(t.direction === 'lower'){
+      if(v <= t.mean - 3*t.std) level = 'red';
+      else if(v <= t.mean - 2*t.std) level = 'yellow';
+    } else {
+      if(v >= t.mean + 3*t.std) level = 'red';
+      else if(v >= t.mean + 2*t.std) level = 'yellow';
+    }
+
+    if(level !== 'green'){
+      const dev = ((v - t.mean) / t.std).toFixed(1);
+      alerts.push({ key: k, label: t.label, value: v, mean: t.mean, level, dev });
+    }
+  });
+
+  if(alerts.length === 0){
+    card.style.display = 'none';
+    return;
+  }
+
+  const colorMap = {
+    red:    { bg:'#FEE2E2', bd:'#DC2626', tx:'#991B1B', icon:'●', word:'이상' },
+    yellow: { bg:'#FEF3C7', bd:'#F59E0B', tx:'#92400E', icon:'●', word:'경고' }
+  };
+
+  card.style.display = 'block';
+  card.innerHTML = alerts.map(a => {
+    const c = colorMap[a.level];
+    return `<div style="background:${c.bg};border:1px solid ${c.bd};border-radius:8px;padding:10px 14px;margin-bottom:6px;color:${c.tx};display:flex;align-items:center;gap:10px">
+      <span style="font-size:14px;color:${c.bd}">${c.icon}</span>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${a.label} ${c.word}</div>
+        <div style="font-size:11px;opacity:0.85">평소 ${a.mean.toFixed(2)}% · 오늘 <b>${a.value.toFixed(2)}%</b> (평소 대비 ${a.dev}σ)</div>
+      </div>
+    </div>`;
+  }).join('');
 }
