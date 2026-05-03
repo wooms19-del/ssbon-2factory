@@ -817,6 +817,63 @@
     </div>
     <div class="dvd"></div>
 
+    <!-- 알람 임계값 아코디언 -->
+    <div class="acc-hd" onclick="toggleAcc('acc-alarm')">
+      <span class="ct" style="margin-bottom:0">🔔 알람 임계값 <span style="font-size:11px;color:var(--g5);font-weight:400">(원육수율 기준)</span></span>
+      <span class="acc-arrow">▼</span>
+    </div>
+    <div class="acc-body closed" id="acc-alarm">
+      <div style="padding-top:1rem">
+        <div style="font-size:11.5px;color:var(--g5);margin-bottom:12px;line-height:1.5">
+          공정별 원육수율이 평소 평균에서 ±N표준편차(σ) 만큼 벗어나면 알람이 울립니다.<br>
+          기본값은 <b>4월 데이터 30일치</b>로 자동 산출됨. 운영하면서 조정 가능.
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--g1)">
+            <th style="text-align:left;padding:6px 8px;width:80px">공정</th>
+            <th style="text-align:right;padding:6px 8px">평균(%)</th>
+            <th style="text-align:right;padding:6px 8px">편차σ(%)</th>
+            <th style="text-align:right;padding:6px 8px">노란 임계</th>
+            <th style="text-align:right;padding:6px 8px">빨간 임계</th>
+            <th style="text-align:center;padding:6px 8px;width:50px">사용</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding:6px 8px;font-weight:600;color:#0D9488">자숙</td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_ck_mean" style="width:100%;text-align:right" value="54.50"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_ck_std" style="width:100%;text-align:right" value="1.27"></td>
+              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_ck_y">51.97%↓</td>
+              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_ck_r">50.71%↓</td>
+              <td style="padding:6px 8px;text-align:center"><input type="checkbox" id="al_ck_on" checked style="width:16px;height:16px"></td>
+            </tr>
+            <tr>
+              <td style="padding:6px 8px;font-weight:600;color:#B45309">파쇄</td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_sh_mean" style="width:100%;text-align:right" value="50.83"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_sh_std" style="width:100%;text-align:right" value="2.77"></td>
+              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_sh_y">45.29%↓</td>
+              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_sh_r">42.53%↓</td>
+              <td style="padding:6px 8px;text-align:center"><input type="checkbox" id="al_sh_on" checked style="width:16px;height:16px"></td>
+            </tr>
+            <tr>
+              <td style="padding:6px 8px;font-weight:600;color:#B45309">포장</td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_pk_mean" style="width:100%;text-align:right" value="50.67"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_pk_std" style="width:100%;text-align:right" value="7.23"></td>
+              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_pk_y">36.20%↓</td>
+              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_pk_r">28.97%↓</td>
+              <td style="padding:6px 8px;text-align:center"><input type="checkbox" id="al_pk_on" checked style="width:16px;height:16px"></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn bs bsm" onclick="saveAlarmThresholds()">💾 저장</button>
+          <button class="btn bo bsm" onclick="resetAlarmThresholds()">⟲ 4월 기본값으로</button>
+          <button class="btn bo bsm" onclick="recalcAlarmFromData()">🔄 최근 30일로 자동계산</button>
+        </div>
+        <div id="al_save_msg" style="margin-top:8px;font-size:11px;color:var(--s)"></div>
+      </div>
+    </div>
+    <div class="dvd"></div>
+
   </div><!-- /settings card -->
   <!-- 데이터 -->
   <div class="card">
