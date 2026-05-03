@@ -1431,15 +1431,15 @@ function renderDailyFromLocal_(d){
   if(defLabel) defLabel.textContent = defRate>2 ? '% ▲기준초과' : defRate>0 ? '% ▼기준이하' : '%';
 
   // ============================================================
-  // 일별 알람 체크 - 자숙/파쇄/포장 수율 이상 탐지
-  // 임계값: 4월 데이터 30일 기준 평균 ± nσ (2026-05 산출)
+  // 일별 알람 체크 - 자숙/파쇄/포장 원육수율 이상 탐지
+  // 원육수율 = 해당 공정 산출 / 원육 투입(rmKg) * 100
+  // 임계값은 settings 페이지에서 조정 가능 (LocalStorage)
   // ============================================================
-  const _ckYield = ppKg > 0 ? r2(ckKg/ppKg*100) : null;
-  const _shYield = ckKg > 0 ? r2(shKg/ckKg*100) : null;
-  const _totalPouch = pk.reduce((s,r)=>s+(parseFloat(r.pouch)||0),0);
-  const _pkYield = _totalPouch > 0 ? r2((_totalPouch - defect)/_totalPouch*100) : null;
+  const _ckOYld = rmKg > 0 ? r2(ckKg/rmKg*100) : null;
+  const _shOYld = rmKg > 0 ? r2(shKg/rmKg*100) : null;
+  const _pkOYld = oYld;  // 이미 위에서 계산됨 (pkRawKg/rmKg*100)
   if(typeof renderDailyAlerts === 'function'){
-    renderDailyAlerts({ cooking: _ckYield, shredding: _shYield, packing: _pkYield });
+    renderDailyAlerts({ cooking: _ckOYld, shredding: _shOYld, packing: _pkOYld });
   }
 
   // 공정별 현황 - 파쇄 원육타입: 연결된 자숙 레코드에서 type 가져오기
@@ -2522,37 +2522,51 @@ async function _buildChartSheet(mainBuf, y, m) {
 }
 
 // ============================================================
-// 일별 알람 카드 렌더링 (자숙/파쇄/포장 수율 이상 탐지)
-// 4월 30일치 데이터 기반 임계값 (mean ± nσ)
+// 일별 알람 카드 렌더링 (자숙/파쇄/포장 원육수율 이상 탐지)
+// 임계값은 LocalStorage에서 로드 (settings 페이지에서 조정 가능)
+// 기본값: 4월 30일치 데이터 기반 평균 ± nσ
 // ============================================================
-const ALARM_THRESHOLDS = {
-  cooking:   { mean: 56.16, std: 1.20,  direction: 'lower', label: '자숙 수율',  unit: '%' },
-  shredding: { mean: 85.21, std: 10.24, direction: 'lower', label: '파쇄 수율',  unit: '%' },
-  packing:   { mean: 96.39, std: 2.40,  direction: 'lower', label: '포장 수율',  unit: '%' }
+const ALARM_DEFAULTS_FALLBACK = {
+  cooking:   { mean: 54.50, std: 1.27, enabled: true },
+  shredding: { mean: 50.83, std: 2.77, enabled: true },
+  packing:   { mean: 50.67, std: 7.23, enabled: true }
 };
+const ALARM_LABEL = {
+  cooking:   '자숙 원육수율',
+  shredding: '파쇄 원육수율',
+  packing:   '포장 원육수율'
+};
+
+function _getAlarmThresholds(){
+  // 우선순위: settings.js의 동기 헬퍼 → localStorage 캐시 → 기본값
+  if(typeof getAlarmThresholdsSync === 'function') return getAlarmThresholdsSync();
+  try{
+    const s = localStorage.getItem('ssbon_v6_alarm_thresholds_cache');
+    if(s) return JSON.parse(s);
+  }catch(e){}
+  return JSON.parse(JSON.stringify(ALARM_DEFAULTS_FALLBACK));
+}
 
 function renderDailyAlerts(metrics){
   const card = document.getElementById('alertCard');
   if(!card) return;
 
+  const T = _getAlarmThresholds();
   const alerts = [];
   ['cooking','shredding','packing'].forEach(k => {
-    const t = ALARM_THRESHOLDS[k];
+    const t = T[k];
+    if(!t || !t.enabled) return;
     const v = metrics[k];
     if(v == null || isNaN(v)) return;
 
     let level = 'green';
-    if(t.direction === 'lower'){
-      if(v <= t.mean - 3*t.std) level = 'red';
-      else if(v <= t.mean - 2*t.std) level = 'yellow';
-    } else {
-      if(v >= t.mean + 3*t.std) level = 'red';
-      else if(v >= t.mean + 2*t.std) level = 'yellow';
-    }
+    // 원육수율은 낮으면 이상 (lower)
+    if(v <= t.mean - 3*t.std) level = 'red';
+    else if(v <= t.mean - 2*t.std) level = 'yellow';
 
     if(level !== 'green'){
       const dev = ((v - t.mean) / t.std).toFixed(1);
-      alerts.push({ key: k, label: t.label, value: v, mean: t.mean, level, dev });
+      alerts.push({ key: k, label: ALARM_LABEL[k], value: v, mean: t.mean, level, dev });
     }
   });
 
@@ -2569,12 +2583,16 @@ function renderDailyAlerts(metrics){
   card.style.display = 'block';
   card.innerHTML = alerts.map(a => {
     const c = colorMap[a.level];
+    const kakaoBtn = a.level === 'red' && typeof sendKakaoAlert === 'function' 
+      ? `<button onclick="sendKakaoAlert('${a.label}',${a.value.toFixed(2)},${a.mean.toFixed(2)})" style="padding:4px 10px;background:#FEE500;color:#3C1E1E;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600">📱 카톡 발송</button>` 
+      : '';
     return `<div style="background:${c.bg};border:1px solid ${c.bd};border-radius:8px;padding:10px 14px;margin-bottom:6px;color:${c.tx};display:flex;align-items:center;gap:10px">
       <span style="font-size:14px;color:${c.bd}">${c.icon}</span>
       <div style="flex:1">
         <div style="font-weight:600;font-size:13px">${a.label} ${c.word}</div>
         <div style="font-size:11px;opacity:0.85">평소 ${a.mean.toFixed(2)}% · 오늘 <b>${a.value.toFixed(2)}%</b> (평소 대비 ${a.dev}σ)</div>
       </div>
+      ${kakaoBtn}
     </div>`;
   }).join('');
 }
