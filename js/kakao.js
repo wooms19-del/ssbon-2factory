@@ -196,17 +196,27 @@ function _renderKakaoStatus(){
   if(isKakaoLoggedIn()){
     const exp = getKakaoExpiry();
     const expStr = exp ? exp.toLocaleDateString('ko-KR') : '?';
+    const autoOn = isKakaoAutoSendEnabled();
     if(stat) stat.textContent = '· 활성';
-    box.innerHTML = `<div style="background:#ECFDF5;border:1px solid #10B981;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    box.innerHTML = `<div style="background:#ECFDF5;border:1px solid #10B981;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
       <span style="color:#10B981;font-size:14px">●</span>
       <div style="flex:1;min-width:200px">
         <div style="font-size:13px;color:#065F46;font-weight:600;margin-bottom:2px">카카오 알림 활성화됨</div>
-        <div style="font-size:11px;color:#047857">빨간 알람 발생 시 본인 카톡으로 발송 가능 · 만료 ${expStr}</div>
+        <div style="font-size:11px;color:#047857">빨간 알람 시 자동 카톡 발송 · 만료 ${expStr}</div>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn bo bsm" onclick="sendKakaoAlert('테스트',95.5,96.0)">📱 테스트 발송</button>
+        <button class="btn bo bsm" onclick="sendKakaoAlert('테스트',45.0,54.5)">📱 테스트 발송</button>
         <button class="btn bd bsm" onclick="kakaoLogout()">로그아웃</button>
       </div>
+    </div>
+    <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+        <input type="checkbox" id="kakao_auto_on" ${autoOn?'checked':''} onchange="setKakaoAutoSend(this.checked)" style="width:16px;height:16px;cursor:pointer">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#374151">빨간 알람 시 자동 카톡 발송</div>
+          <div style="font-size:11px;color:#6B7280;margin-top:2px">하루 같은 알람 1회만 발송 (중복 방지). 점검 중일 때 OFF 권장.</div>
+        </div>
+      </label>
     </div>`;
   } else {
     if(stat) stat.textContent = '· 비활성';
@@ -220,4 +230,98 @@ function _renderKakaoStatus(){
       </button>
     </div>`;
   }
+}
+
+
+// ============================================================
+// 자동 발송 + 중복 방지 (Firebase 이력)
+// 같은 날짜+지표+레벨의 알람은 1회만 발송
+// ============================================================
+const KAKAO_AUTO_LS_KEY = 'ssbon_v6_kakao_auto_send';
+
+function isKakaoAutoSendEnabled(){
+  try{
+    const v = localStorage.getItem(KAKAO_AUTO_LS_KEY);
+    if(v === null) return true;  // 기본 ON
+    return v === '1';
+  }catch(e){ return true; }
+}
+
+function setKakaoAutoSend(enabled){
+  try{
+    localStorage.setItem(KAKAO_AUTO_LS_KEY, enabled ? '1' : '0');
+    if(typeof toast === 'function') toast(enabled ? '카톡 자동 발송 ON' : '카톡 자동 발송 OFF', 'i');
+  }catch(e){}
+}
+
+async function autoSendKakaoAlerts(redAlerts, dateStr){
+  // 1. 자동 발송 OFF면 스킵
+  if(!isKakaoAutoSendEnabled()) return;
+
+  // 2. 카카오 로그인 안 됐으면 스킵 (조용히)
+  if(!isKakaoLoggedIn()){
+    console.log('[카톡 자동 발송] 카카오 로그인 안 됨, 발송 스킵');
+    return;
+  }
+
+  // 3. 각 알람마다 Firebase 이력 체크 후 안 보낸 것만 발송
+  for(const a of redAlerts){
+    const docId = `${dateStr}_${a.key}_red`;
+    try{
+      // Firebase에서 이력 조회
+      const sentDoc = await firebase.firestore().collection('kakao_sent_log').doc(docId).get();
+      if(sentDoc.exists){
+        // 이미 발송됨 → 스킵
+        continue;
+      }
+
+      // 발송
+      await sendKakaoAlertSilent(a.label, a.value, a.mean, dateStr);
+
+      // 이력 저장
+      await firebase.firestore().collection('kakao_sent_log').doc(docId).set({
+        date: dateStr,
+        metric: a.key,
+        label: a.label,
+        value: a.value,
+        mean: a.mean,
+        level: 'red',
+        sentAt: new Date().toISOString()
+      });
+    }catch(e){
+      console.error('[카톡 자동 발송] 오류:', a.label, e.message);
+    }
+  }
+}
+
+// 토스트 안 띄우는 silent 발송 (자동 발송용)
+async function sendKakaoAlertSilent(label, value, mean, dateStr){
+  const token = await _getKakaoToken();
+  if(!token) throw new Error('카카오 토큰 없음');
+
+  const dt = new Date();
+  const dateDisp = dateStr ? dateStr.replace(/-/g,'.') : `${dt.getMonth()+1}월 ${dt.getDate()}일`;
+  const timeDisp = `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+
+  const template = {
+    object_type: 'text',
+    text: `🚨 순수본 2공장 이상 알림\n\n[${label}]\n평소 ${mean.toFixed(2)}% → 오늘 ${value.toFixed(2)}%\n\n${dateDisp} ${timeDisp} 자동 발송\n시스템에서 확인하세요.`,
+    link: {
+      web_url: 'https://wooms19-del.github.io/ssbon-2factory/',
+      mobile_web_url: 'https://wooms19-del.github.io/ssbon-2factory/'
+    },
+    button_title: '시스템 열기'
+  };
+
+  const resp = await fetch('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+    },
+    body: 'template_object=' + encodeURIComponent(JSON.stringify(template))
+  });
+  const data = await resp.json();
+  if(data.result_code !== 0) throw new Error(data.msg || '카톡 발송 실패');
+  return data;
 }
