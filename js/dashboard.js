@@ -484,6 +484,9 @@ function renderSettings(){
   // 레시피 목록
   renderRecipeSelect();
   renderRcList();
+
+  // 알람 임계값 로드
+  if(typeof loadAlarmThresholdsToUI === 'function') loadAlarmThresholdsToUI();
 }
 
 // 제품 수정 시작 - 폼에 기존값 채우기
