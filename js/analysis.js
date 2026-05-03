@@ -1433,13 +1433,18 @@ function renderDailyFromLocal_(d){
   // ============================================================
   // 일별 알람 체크 - 자숙/파쇄/포장 원육수율 이상 탐지
   // 원육수율 = 해당 공정 산출 / 원육 투입(rmKg) * 100
-  // 임계값은 settings 페이지에서 조정 가능 (LocalStorage)
+  // 임계값은 settings 페이지에서 조정 가능 (Firebase config/alarms)
+  // 데이터 부족 시 (생산 안 하고 있을 때) 알람 차단
   // ============================================================
-  const _ckOYld = rmKg > 0 ? r2(ckKg/rmKg*100) : null;
-  const _shOYld = rmKg > 0 ? r2(shKg/rmKg*100) : null;
-  const _pkOYld = oYld;  // 이미 위에서 계산됨 (pkRawKg/rmKg*100)
+  const _MIN_RM_KG = 100;       // 원육 100kg 미만이면 알람 전체 차단
+  const _MIN_CK_KG = 50;        // 자숙 50kg 미만이면 자숙 알람 차단
+  const _MIN_SH_KG = 50;        // 파쇄 50kg 미만이면 파쇄 알람 차단
+  const _hasProduction = rmKg >= _MIN_RM_KG;
+  const _ckOYld = (_hasProduction && ckKg >= _MIN_CK_KG) ? r2(ckKg/rmKg*100) : null;
+  const _shOYld = (_hasProduction && shKg >= _MIN_SH_KG) ? r2(shKg/rmKg*100) : null;
+  const _pkOYld = (_hasProduction && pk.length > 0) ? oYld : null;
   if(typeof renderDailyAlerts === 'function'){
-    renderDailyAlerts({ cooking: _ckOYld, shredding: _shOYld, packing: _pkOYld });
+    renderDailyAlerts({ cooking: _ckOYld, shredding: _shOYld, packing: _pkOYld }, d);
   }
 
   // 공정별 현황 - 파쇄 원육타입: 연결된 자숙 레코드에서 type 가져오기
@@ -2547,7 +2552,7 @@ function _getAlarmThresholds(){
   return JSON.parse(JSON.stringify(ALARM_DEFAULTS_FALLBACK));
 }
 
-function renderDailyAlerts(metrics){
+function renderDailyAlerts(metrics, dateStr){
   const card = document.getElementById('alertCard');
   if(!card) return;
 
@@ -2560,7 +2565,6 @@ function renderDailyAlerts(metrics){
     if(v == null || isNaN(v)) return;
 
     let level = 'green';
-    // 원육수율은 낮으면 이상 (lower)
     if(v <= t.mean - 3*t.std) level = 'red';
     else if(v <= t.mean - 2*t.std) level = 'yellow';
 
@@ -2583,16 +2587,19 @@ function renderDailyAlerts(metrics){
   card.style.display = 'block';
   card.innerHTML = alerts.map(a => {
     const c = colorMap[a.level];
-    const kakaoBtn = a.level === 'red' && typeof sendKakaoAlert === 'function' 
-      ? `<button onclick="sendKakaoAlert('${a.label}',${a.value.toFixed(2)},${a.mean.toFixed(2)})" style="padding:4px 10px;background:#FEE500;color:#3C1E1E;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600">📱 카톡 발송</button>` 
-      : '';
     return `<div style="background:${c.bg};border:1px solid ${c.bd};border-radius:8px;padding:10px 14px;margin-bottom:6px;color:${c.tx};display:flex;align-items:center;gap:10px">
       <span style="font-size:14px;color:${c.bd}">${c.icon}</span>
       <div style="flex:1">
         <div style="font-weight:600;font-size:13px">${a.label} ${c.word}</div>
         <div style="font-size:11px;opacity:0.85">평소 ${a.mean.toFixed(2)}% · 오늘 <b>${a.value.toFixed(2)}%</b> (평소 대비 ${a.dev}σ)</div>
       </div>
-      ${kakaoBtn}
     </div>`;
   }).join('');
+
+  // 빨간 알람 → 자동 카톡 발송 (kakao.js의 autoSendKakaoAlerts 호출)
+  // 중복 방지: Firebase 이력 체크 후 안 보낸 것만 발송
+  const redAlerts = alerts.filter(a => a.level === 'red');
+  if(redAlerts.length > 0 && typeof autoSendKakaoAlerts === 'function'){
+    autoSendKakaoAlerts(redAlerts, dateStr || (new Date().toISOString().slice(0,10)));
+  }
 }
