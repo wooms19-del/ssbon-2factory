@@ -60,14 +60,16 @@ function showTab(mode,tab){
       .then(()=>{ updateThawInfo(); updPpWagon(); renderPL('preprocess'); });
   } else if(tab==='cooking'){
     if(!L.cooking_pending) L.cooking_pending=[];
-    loadFromServer(today).then(()=>{
+    // ★ loadOpenCooking 추가 (다른 디바이스 진행중 자숙 가시성)
+    Promise.all([loadFromServer(today), loadOpenCooking()]).then(()=>{
       renderCkCageList(); renderPL('cooking'); renderCkPending();
       const hasPending = L.cooking_pending.some(r=>String(r.date||'').slice(0,10)===tod());
       document.getElementById('ck_startCard').style.display = hasPending ? 'none' : '';
       document.getElementById('ck_pendingCard').style.display = hasPending ? '' : 'none';
     });
   } else if(tab==='shredding'){
-    loadFromServer(today).then(()=>{ renderShWagonList(); renderPL('shredding'); });
+    // ★ loadOpenPacking 추가 — shredding은 packing/packing_pending도 표시 (사용된 wagon 추적)
+    Promise.all([loadFromServer(today), loadOpenPacking()]).then(()=>{ renderShWagonList(); renderPL('shredding'); });
   } else if(tab==='packing'){
     if(!L.packing_pending) L.packing_pending = [];
     Promise.all([loadFromServer(today), loadOpenPacking()]).then(()=>{
@@ -89,10 +91,6 @@ function showTab(mode,tab){
     renderTrTbl();
   } else if(tab==='settings'){
     loadSettings_().then(()=>renderSettings()).catch(()=>renderSettings());
-    // 알람 임계값 Firebase에서 로드 (페이지 시작 시 1회)
-    if(typeof loadAlarmThresholdsFromFb === 'function'){
-      loadAlarmThresholdsFromFb().catch(e=>console.warn('알람 임계값 로드 실패:', e.message));
-    }
   } else if(tab==='schedule'){
     if(typeof initSchedule==='function') initSchedule();
   } else if(tab==='outerpacking'){
