@@ -208,7 +208,7 @@ async function startThawing(){
   document.getElementById('tw_summary').innerHTML='';
 
   const rec = {
-    id:gid(), date:addDays(tod(),1), cart:cartNo, type,
+    id:gid(), date:tod(), cart:cartNo, type,
     start:tod()+' '+startTime, end:'',
     boxes:totalBoxes, totalKg, remainKg:totalKg,
     importCodes
@@ -218,7 +218,7 @@ async function startThawing(){
   const fbId = await fbSave('thawing', rec);
   if(fbId){
     rec.fbId = fbId;
-    L.thawing.push(rec); saveL();
+    // ★ localStorage push 제거 — Firebase가 진실. 다음 render에서 fresh fetch로 가져옴
     gasRecord('saveThawing', {cart:cartNo, type, start:startTime, end:'', boxes:totalBoxes, totalKg, importCodes});
     // ★ 저장 후 fresh fetch — async 화면들 await로 호출 (다른 디바이스 동시 작업 record 병합)
     await renderThawWaiting();

@@ -321,9 +321,6 @@ async function fbSave(colName, data, customDocId) {
     let docId = customDocId || makeDocId(colName);
     // thawing 저장 시 무결성 검증·보정
     if(colName === 'thawing') {
-      const today = tod();
-      const tomorrow = addDays(today, 1);
-
       // (1) 옛 코드 잔재 정리: wagon 필드 있으면 cart로 흡수 후 wagon 삭제
       //     (방혈은 cart만 사용. wagon 필드는 thawing record에 절대 남기지 않음)
       if(data.wagon !== undefined) {
@@ -340,11 +337,20 @@ async function fbSave(colName, data, customDocId) {
         return null;
       }
 
-      // (3) date 무조건 종료일 강제 (옛 클라이언트가 시작일 보내도 차단)
-      data = {...data, date: tomorrow};
+      // (3) start 형식 검증 — datetime("YYYY-MM-DD HH:MM") 강제. 옛 페이지는 시간만 보내므로 거부.
+      if(!data.start || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(data.start)) {
+        console.error('[fbSave] thawing 저장 거부 — start는 "YYYY-MM-DD HH:MM" 형식 필수. 페이지 새로고침 필요.', data.start);
+        toast('방혈 저장 실패: 페이지 새로고침 필요 (Ctrl+Shift+R)','d');
+        return null;
+      }
 
-      // (4) 문서ID 무조건 종료일 prefix로 재생성
-      const expectedPrefix = 'th_' + tomorrow.replace(/-/g,'') + '_';
+      // (4) date = 시작일 (start datetime에서 추출). 옛 클라이언트가 종료일을 보내도 환원
+      const startDate = data.start.slice(0,10);
+      data = {...data, date: startDate};
+      const endDate = addDays(startDate, 1);
+
+      // (5) 문서ID 무조건 시작일+1일 prefix로 재생성
+      const expectedPrefix = 'th_' + endDate.replace(/-/g,'') + '_';
       if(!docId.startsWith(expectedPrefix)) {
         const parts = docId.split('_');
         const tail = parts[parts.length-1] || (
@@ -354,7 +360,7 @@ async function fbSave(colName, data, customDocId) {
           String(new Date().getMilliseconds()).padStart(3,'0')
         );
         docId = expectedPrefix + tail;
-        console.warn('[fbSave] thawing docId 종료일로 재생성:', docId);
+        console.warn('[fbSave] thawing docId 시작일+1일 prefix로 재생성:', docId);
       }
 
       // (5) 중복 저장 방지: 같은 importCodes[0] + 진행중인 레코드 있으면 차단
