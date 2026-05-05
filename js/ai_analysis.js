@@ -151,11 +151,29 @@ async function runAIAnalysis() {
     
     let report;
     try {
-      const cleaned = aiText.replace(/```json\s*/g,'').replace(/```\s*$/g,'').trim();
-      report = JSON.parse(cleaned);
+      // aiText가 이미 객체일 수도, 문자열일 수도 있음
+      if(typeof aiText === 'object' && aiText !== null) {
+        report = aiText;
+      } else {
+        // 문자열 — 코드블록/공백 정리 후 파싱
+        let cleaned = String(aiText).trim();
+        // ```json ... ``` 또는 ``` ... ``` 제거
+        cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+        // 첫 { 부터 마지막 } 까지만 추출 (앞뒤 잡문 제거)
+        const firstBrace = cleaned.indexOf('{');
+        const lastBrace = cleaned.lastIndexOf('}');
+        if(firstBrace >= 0 && lastBrace > firstBrace) {
+          cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+        }
+        report = JSON.parse(cleaned);
+      }
     } catch(e) {
-      console.error('[AI] JSON 파싱 실패:', aiText);
-      throw new Error('AI 응답이 JSON 형식이 아닙니다');
+      console.error('[AI] JSON 파싱 실패:', e.message, '\n원본:', aiText);
+      throw new Error('AI 응답이 JSON 형식이 아닙니다 (' + e.message + ')');
+    }
+    
+    if(!report || typeof report !== 'object') {
+      throw new Error('AI 응답이 객체가 아닙니다');
     }
     
     _renderAIReport(resultEl, report, from, to, days, _aiCountRecords(allData));
