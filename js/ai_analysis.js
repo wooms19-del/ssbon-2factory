@@ -113,21 +113,20 @@ async function runAIAnalysis() {
     const aiInput = {
       기간: { from, to, days },
       검증된_KPI: computedKpis,
-      방혈_요약: allData.thawing.map(r => ({
-        date: r.date, type: r.type, cart: r.cart || '', totalKg: r.totalKg
-      })),
-      포장_요약: allData.packing.map(r => ({
-        date: r.date, product: r.product, ea: r.ea, kg: r.kg, defect: r.defect
-      })),
+      // 부위별 그날 작업량만 (raw 큰 array 제거)
+      방혈_일별_부위별: _aiGroupByDateAndType(allData.thawing),
+      포장_일별_제품별: _aiGroupByDateAndProduct(allData.packing),
+      // 부적합만 raw (보통 적은 건수)
       부적합_바코드: allData.barcode
         .filter(r => r.status === '부적합')
         .map(r => ({ date: r.date, part: r.part, reason: r.reason, packDate: r.packDate }))
+        .slice(0, 50)  // 최대 50건
     };
     
     const prompt = _AI_PROMPT_TEMPLATE + '\n\n[데이터]\n' + JSON.stringify(aiInput, null, 2);
     
     const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + _AI_GEMINI_MODEL + ':generateContent?key=' + _AI_GEMINI_KEY;
-    const apiRes = await fetch(apiUrl, {
+    const apiRes = await _aiFetchWithRetry(apiUrl, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -138,7 +137,7 @@ async function runAIAnalysis() {
           responseMimeType: 'application/json'
         }
       })
-    });
+    }, 3);
     
     if(!apiRes.ok) {
       const err = await apiRes.text();
@@ -238,6 +237,55 @@ function _aiCountRecords(allData) {
   let total = 0;
   for(const k in allData) total += allData[k].length;
   return total;
+}
+
+// 일별×부위별 집계 (방혈)
+function _aiGroupByDateAndType(thawingArr) {
+  const r2 = v => Math.round(v*100)/100;
+  const m = {};
+  thawingArr.forEach(r => {
+    const d = String(r.date||'').slice(0,10);
+    const types = (r.type||'').split(',').map(t=>t.trim()).filter(Boolean);
+    const perType = (parseFloat(r.totalKg)||0) / (types.length || 1);
+    types.forEach(t => {
+      const k = d + '|' + t;
+      if(!m[k]) m[k] = {date: d.slice(5).replace('-','/'), type: t, kg: 0, count: 0};
+      m[k].kg += perType;
+      m[k].count++;
+    });
+  });
+  return Object.values(m).map(v => ({...v, kg: r2(v.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+// 일별×제품별 집계 (포장)
+function _aiGroupByDateAndProduct(packingArr) {
+  const r2 = v => Math.round(v*100)/100;
+  const m = {};
+  packingArr.forEach(r => {
+    const d = String(r.date||'').slice(0,10);
+    const k = d + '|' + (r.product||'?');
+    if(!m[k]) m[k] = {date: d.slice(5).replace('-','/'), product: r.product||'?', ea: 0, kg: 0, defect: 0};
+    m[k].ea += parseInt(r.ea)||0;
+    m[k].kg += parseFloat(r.kg)||0;
+    m[k].defect += parseInt(r.defect)||0;
+  });
+  return Object.values(m).map(v => ({...v, kg: r2(v.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+// 503 자동 재시도 (3회, 점진 backoff)
+async function _aiFetchWithRetry(url, options, maxRetry) {
+  for(let i = 0; i < maxRetry; i++) {
+    const res = await fetch(url, options);
+    if(res.ok) return res;
+    if(res.status !== 503 && res.status !== 429) return res;  // 다른 오류는 재시도 X
+    if(i < maxRetry - 1) {
+      const wait = (i+1) * 2000;  // 2초, 4초, 6초
+      console.log(`[AI] ${res.status} 재시도 ${i+2}/${maxRetry} (${wait}ms 대기)`);
+      await new Promise(r => setTimeout(r, wait));
+    } else {
+      return res;  // 마지막 시도는 결과 그대로 반환
+    }
+  }
 }
 
 function _renderAIReport(el, r, from, to, days, recCount) {
