@@ -111,6 +111,8 @@ const _AI_PROMPT_TEMPLATE = `
 - packing.ea = 완제품 개수
 - packing.kg 필드는 존재하지 않음. 포장된 원육 kg는 시스템이 (ea × 제품별 kg/EA)로 계산함.
 - 시스템이 계산한 "검증된_KPI" 안의 평균_수율_pct 값을 그대로 사용하세요.
+- 일별_수율 배열 = 작업이 있던 날만 포함됨 (생산 없는 날=주말/공휴일은 자동 제외).
+- 작업일수 = 실제 생산이 있던 날의 수. "기간 N일" 대신 "작업일수 X일"로 보고하세요.
 - 수율 0%면 "데이터 누락"이 아니라 "그 기간 포장 작업이 없거나 제품 레시피 매칭 실패"일 수 있음.
 
 [분석 시점]
@@ -278,7 +280,7 @@ async function runAIAnalysis() {
       throw new Error('AI 응답이 객체가 아닙니다');
     }
     
-    _renderAIReport(resultEl, report, from, to, days, _aiCountRecords(allData));
+    _renderAIReport(resultEl, report, from, to, days, _aiCountRecords(allData), computedKpis.작업일수 || 0);
     
     if(typeof toast === 'function') toast('AI 분석 완료','s');
     
@@ -328,26 +330,42 @@ function _aiComputeKpis(allData) {
   const bcDefectRate = totalBc > 0 ? r2(ngBc / totalBc * 100) : 0;
   
   // 일별 수율 (날짜별 rmKg와 packEA×kgEA 매칭)
+  // ★ 생산 없는 날 (thawing 0건 AND packing 0건) 자동 제외
   const dailyMap = {};
+  const dailyCount = {};  // 날짜별 record 건수 추적
   allData.thawing.forEach(r => {
     const d = String(r.date||'').slice(0,10);
     if(!dailyMap[d]) dailyMap[d] = {rmKg:0, pkRawKg:0, ea:0};
+    if(!dailyCount[d]) dailyCount[d] = {th:0, pk:0};
     dailyMap[d].rmKg += parseFloat(r.totalKg)||0;
+    dailyCount[d].th++;
   });
   allData.packing.forEach(r => {
     const d = String(r.date||'').slice(0,10);
     if(!dailyMap[d]) dailyMap[d] = {rmKg:0, pkRawKg:0, ea:0};
+    if(!dailyCount[d]) dailyCount[d] = {th:0, pk:0};
     const ea = parseFloat(r.ea)||0;
     dailyMap[d].pkRawKg += ea * _kgEaOf(r.product);
     dailyMap[d].ea += ea;
+    dailyCount[d].pk++;
   });
-  const dailyYields = Object.keys(dailyMap).sort().map(d => ({
-    date: d.slice(5).replace('-','/'),
-    value: dailyMap[d].rmKg > 0 ? r2(dailyMap[d].pkRawKg / dailyMap[d].rmKg * 100) : 0,
-    rmKg: r2(dailyMap[d].rmKg),
-    pkRawKg: r2(dailyMap[d].pkRawKg),
-    ea: dailyMap[d].ea
-  }));
+  
+  // 작업 있는 날만 (thawing 또는 packing 둘 중 하나라도 있으면 포함)
+  const dailyYields = Object.keys(dailyMap)
+    .filter(d => (dailyCount[d].th + dailyCount[d].pk) > 0)
+    .sort()
+    .map(d => ({
+      date: d.slice(5).replace('-','/'),
+      value: dailyMap[d].rmKg > 0 ? r2(dailyMap[d].pkRawKg / dailyMap[d].rmKg * 100) : 0,
+      rmKg: r2(dailyMap[d].rmKg),
+      pkRawKg: r2(dailyMap[d].pkRawKg),
+      ea: dailyMap[d].ea
+    }));
+  
+  // 작업일수 (생산 있던 날)
+  const workDays = Object.keys(dailyCount).filter(d => 
+    (dailyCount[d].th + dailyCount[d].pk) > 0
+  ).length;
   
   // 인시당 EA
   const totalMh = allData.packing.reduce((s,r) => {
@@ -368,6 +386,7 @@ function _aiComputeKpis(allData) {
     바코드_부적합_건수: ngBc,
     바코드_총_건수: totalBc,
     인시당_EA: eaPerMh,
+    작업일수: workDays,
     일별_수율: dailyYields,
     제품_레시피_등록수: products.length
   };
@@ -434,7 +453,7 @@ async function _aiFetchWithRetry(url, options, maxRetry) {
   }
 }
 
-function _renderAIReport(el, r, from, to, days, recCount) {
+function _renderAIReport(el, r, from, to, days, recCount, workDays) {
   const headline = r.headline || '분석 완료';
   const subhead = r.subhead || '';
   const kpis = Array.isArray(r.kpis) ? r.kpis : [];
@@ -461,7 +480,7 @@ function _renderAIReport(el, r, from, to, days, recCount) {
     <div style="padding:8px 0;max-width:880px;margin:0 auto">
       
       <div style="border-bottom:0.5px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px">
-        <p style="font-size:12px;color:#9ca3af;margin:0 0 4px">${from} ~ ${to} (${days}일) 생산 보고 · AI 자동 분석</p>
+        <p style="font-size:12px;color:#9ca3af;margin:0 0 4px">${from} ~ ${to} (${days}일 중 작업 ${workDays}일) · AI 자동 분석</p>
         <h1 style="font-size:22px;font-weight:500;margin:0;color:#0f172a;line-height:1.4">${headline}</h1>
         ${subhead ? `<p style="font-size:13px;color:#64748b;margin:8px 0 0;line-height:1.6">${subhead}</p>` : ''}
       </div>
