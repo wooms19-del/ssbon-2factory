@@ -48,7 +48,7 @@ async function renderThawWaiting(){
     console.warn('[thawing] fresh fetch 실패, L.thawing/L.barcodes 캐시 사용:', e && e.message);
   }
 
-  const scanned=L.barcodes.filter(b=>{
+  const scanned_raw=L.barcodes.filter(b=>{
     const d=String(b.date||'').slice(0,10);
     if(d===yesterday&&b.status==='적합') return true;
     if(d===today&&b.status==='적합'){
@@ -56,6 +56,15 @@ async function renderThawWaiting(){
       return toMin(b.rfEnd)<=nowMin;
     }
     return false;
+  });
+  // ★ importCode 기준 중복 제거 (옛 캐시 + fresh fetch 동일 record 중복 방지)
+  const _seenCodes = new Set();
+  const scanned = scanned_raw.filter(b => {
+    const code = b.importCode || '';
+    if(!code) return true;  // importCode 없으면 그대로
+    if(_seenCodes.has(code)) return false;
+    _seenCodes.add(code);
+    return true;
   });
 
   // startedCodes: L.thawing (이미 fresh로 갱신됨) 기준으로 통합
