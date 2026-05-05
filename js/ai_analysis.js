@@ -1,9 +1,96 @@
 // ============================================================
-// AI 분석 v2 — 임원 보고서 형식 (KPI 카드 + 차트 + 진단 + 액션)
+// AI 분석 v3 — Firestore 기반 API 키 (회사 전체 1곳 관리)
 // ============================================================
 
-const _AI_GEMINI_KEY = 'AIzaSyCA1KDDSrRddu_jqIEBsURRUVs8z_TC8eo';
 const _AI_GEMINI_MODEL = 'gemini-flash-latest';
+let _aiKeyCache = null;  // 메모리 캐시 (한 세션 내 재사용)
+
+// Firestore에서 API 키 조회
+async function _aiGetKey() {
+  if(_aiKeyCache !== null) return _aiKeyCache;
+  try {
+    const doc = await firebase.firestore().collection('_config').doc('ai_settings').get();
+    if(doc.exists) {
+      const k = doc.data().geminiKey || '';
+      _aiKeyCache = k;
+      return k;
+    }
+  } catch(e) {
+    console.error('[AI] key fetch 실패:', e);
+  }
+  return '';
+}
+
+// Firestore에 API 키 저장
+async function _aiSetKey(k) {
+  try {
+    await firebase.firestore().collection('_config').doc('ai_settings').set({
+      geminiKey: k || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    _aiKeyCache = k || '';
+    return true;
+  } catch(e) {
+    console.error('[AI] key 저장 실패:', e);
+    return false;
+  }
+}
+
+// API 키 변경 (설정 화면 버튼)
+async function aiKeyChange() {
+  const cur = await _aiGetKey();
+  const k = prompt(
+    'Gemini API 키를 입력하세요\n(https://aistudio.google.com/apikey)\n\n⚠️ Firestore에 저장됩니다. 회사 모든 디바이스가 이 키를 사용합니다.',
+    cur
+  );
+  if(k === null) return;
+  const trimmed = String(k).trim();
+  if(!trimmed) {
+    if(typeof toast === 'function') toast('빈 키는 저장 안 됨','d');
+    return;
+  }
+  if(!trimmed.startsWith('AIza')) {
+    if(typeof toast === 'function') toast('Gemini API 키 형식이 아닙니다 (AIza... 시작)','d');
+    return;
+  }
+  const ok = await _aiSetKey(trimmed);
+  if(ok) {
+    if(typeof toast === 'function') toast('API 키 저장 완료','s');
+    aiKeyRefresh();
+  } else {
+    if(typeof toast === 'function') toast('저장 실패','d');
+  }
+}
+
+// API 키 삭제
+async function aiKeyClear() {
+  if(!confirm('API 키를 삭제하시겠습니까?\n삭제 후엔 AI 분석 사용 불가합니다.')) return;
+  const ok = await _aiSetKey('');
+  if(ok) {
+    if(typeof toast === 'function') toast('API 키 삭제 완료','s');
+    aiKeyRefresh();
+  }
+}
+
+// API 키 상태 새로고침
+async function aiKeyRefresh() {
+  const el = document.getElementById('ai_key_status');
+  if(!el) return;
+  _aiKeyCache = null;  // 캐시 무효화 후 fresh fetch
+  el.textContent = '확인 중...';
+  const k = await _aiGetKey();
+  if(k) {
+    const masked = k.slice(0, 8) + '...' + k.slice(-4);
+    el.innerHTML = `<span style="color:#059669;font-weight:600">✓ 설정됨</span> <span style="color:#94a3b8;margin-left:8px">${masked}</span>`;
+  } else {
+    el.innerHTML = `<span style="color:#dc2626;font-weight:600">✗ 미설정</span> <span style="color:#94a3b8;margin-left:8px">"API 키 변경" 버튼으로 설정</span>`;
+  }
+}
+
+// 설정 탭 진입 시 자동 호출 (acc-ai 펼칠 때)
+function _aiAutoRefreshOnTab() {
+  if(document.getElementById('ai_key_status')) aiKeyRefresh();
+}
 
 const _AI_PROMPT_TEMPLATE = `
 당신은 순수본 2공장 스마트팩토리의 데이터 분석 AI입니다. 임원(대표) 보고용 분석 결과를 JSON 형식으로만 응답하세요.
@@ -68,6 +155,17 @@ async function runAIAnalysis() {
     return;
   }
   
+  // Firestore에서 API key 조회
+  const apiKey = await _aiGetKey();
+  if(!apiKey) {
+    resultEl.innerHTML = `<div style="padding:20px;background:#fef3c7;border-radius:8px;color:#92400e">
+      ⚠️ API 키가 설정되지 않았습니다.<br><br>
+      <b>분석 → 설정 탭 → 🤖 AI 설정</b> 아코디언에서 API 키를 입력해주세요.<br>
+      <span style="font-size:12px;color:#a16207">발급: https://aistudio.google.com/apikey</span>
+    </div>`;
+    return;
+  }
+  
   const from = fromEl.value;
   const to = toEl.value;
   
@@ -125,7 +223,7 @@ async function runAIAnalysis() {
     
     const prompt = _AI_PROMPT_TEMPLATE + '\n\n[데이터]\n' + JSON.stringify(aiInput, null, 2);
     
-    const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + _AI_GEMINI_MODEL + ':generateContent?key=' + _AI_GEMINI_KEY;
+    const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + _AI_GEMINI_MODEL + ':generateContent?key=' + apiKey;
     const apiRes = await _aiFetchWithRetry(apiUrl, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
