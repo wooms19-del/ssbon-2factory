@@ -107,7 +107,11 @@ const _AI_PROMPT_TEMPLATE = `
 
 [중요 룰]
 - thawing.cart = 해동대차 번호 (wagon 필드는 폐기됨)
-- 수율 = (packing kg 합계) / (thawing totalKg 합계) × 100
+- thawing.totalKg = 그날 그 cart에 배정된 박스 총 중량
+- packing.ea = 완제품 개수
+- packing.kg 필드는 존재하지 않음. 포장된 원육 kg는 시스템이 (ea × 제품별 kg/EA)로 계산함.
+- 시스템이 계산한 "검증된_KPI" 안의 평균_수율_pct 값을 그대로 사용하세요.
+- 수율 0%면 "데이터 누락"이 아니라 "그 기간 포장 작업이 없거나 제품 레시피 매칭 실패"일 수 있음.
 
 [분석 시점]
 이미 시스템이 계산한 KPI는 정확합니다. 당신의 역할:
@@ -294,33 +298,58 @@ async function runAIAnalysis() {
 function _aiComputeKpis(allData) {
   const r2 = v => Math.round(v*100)/100;
   
+  // 총 원육 (방혈)
   const totalRmKg = r2(allData.thawing.reduce((s,r) => s + (parseFloat(r.totalKg)||0), 0));
-  const totalPkKg = r2(allData.packing.reduce((s,r) => s + (parseFloat(r.kg)||0), 0));
-  const totalEa = allData.packing.reduce((s,r) => s + (parseInt(r.ea)||0), 0);
-  const avgYield = totalRmKg > 0 ? r2(totalPkKg / totalRmKg * 100) : 0;
   
+  // ★ 진짜 수율 계산: packing.ea × 제품별 kg/EA = 포장된 원육 kg
+  const products = (typeof L !== 'undefined' && L && Array.isArray(L.products)) ? L.products : [];
+  const _kgEaOf = pname => {
+    const p = products.find(x => x.name === pname);
+    return p ? (parseFloat(p.kgea)||0) : 0;
+  };
+  
+  const totalPkRawKg = r2(allData.packing.reduce((s,r) => {
+    const ea = parseFloat(r.ea)||0;
+    return s + ea * _kgEaOf(r.product);
+  }, 0));
+  
+  const totalEa = allData.packing.reduce((s,r) => s + (parseInt(r.ea)||0), 0);
+  const totalDefect = allData.packing.reduce((s,r) => s + (parseInt(r.defect)||0), 0);
+  
+  // 원육수율
+  const avgYield = totalRmKg > 0 ? r2(totalPkRawKg / totalRmKg * 100) : 0;
+  
+  // 포장 불량률
+  const pkDefectRate = totalEa > 0 ? r2(totalDefect / totalEa * 100) : 0;
+  
+  // 바코드 부적합률
   const totalBc = allData.barcode.length;
   const ngBc = allData.barcode.filter(r => r.status === '부적합').length;
-  const defectRate = totalBc > 0 ? r2(ngBc / totalBc * 100) : 0;
+  const bcDefectRate = totalBc > 0 ? r2(ngBc / totalBc * 100) : 0;
   
+  // 일별 수율 (날짜별 rmKg와 packEA×kgEA 매칭)
   const dailyMap = {};
   allData.thawing.forEach(r => {
     const d = String(r.date||'').slice(0,10);
-    if(!dailyMap[d]) dailyMap[d] = {rmKg:0, pkKg:0};
+    if(!dailyMap[d]) dailyMap[d] = {rmKg:0, pkRawKg:0, ea:0};
     dailyMap[d].rmKg += parseFloat(r.totalKg)||0;
   });
   allData.packing.forEach(r => {
     const d = String(r.date||'').slice(0,10);
-    if(!dailyMap[d]) dailyMap[d] = {rmKg:0, pkKg:0};
-    dailyMap[d].pkKg += parseFloat(r.kg)||0;
+    if(!dailyMap[d]) dailyMap[d] = {rmKg:0, pkRawKg:0, ea:0};
+    const ea = parseFloat(r.ea)||0;
+    dailyMap[d].pkRawKg += ea * _kgEaOf(r.product);
+    dailyMap[d].ea += ea;
   });
   const dailyYields = Object.keys(dailyMap).sort().map(d => ({
     date: d.slice(5).replace('-','/'),
-    value: dailyMap[d].rmKg > 0 ? r2(dailyMap[d].pkKg / dailyMap[d].rmKg * 100) : 0,
+    value: dailyMap[d].rmKg > 0 ? r2(dailyMap[d].pkRawKg / dailyMap[d].rmKg * 100) : 0,
     rmKg: r2(dailyMap[d].rmKg),
-    pkKg: r2(dailyMap[d].pkKg)
+    pkRawKg: r2(dailyMap[d].pkRawKg),
+    ea: dailyMap[d].ea
   }));
   
+  // 인시당 EA
   const totalMh = allData.packing.reduce((s,r) => {
     const w = parseFloat(r.workers)||0;
     const dur = _aiDurH(r.start, r.end);
@@ -330,14 +359,17 @@ function _aiComputeKpis(allData) {
   
   return {
     총_원육_kg: totalRmKg,
-    총_포장_원육_kg: totalPkKg,
+    총_포장_원육_kg: totalPkRawKg,
     총_생산_EA: totalEa,
     평균_수율_pct: avgYield,
-    부적합률_pct: defectRate,
-    부적합_건수: ngBc,
+    포장_불량률_pct: pkDefectRate,
+    포장_불량_건수: totalDefect,
+    바코드_부적합률_pct: bcDefectRate,
+    바코드_부적합_건수: ngBc,
     바코드_총_건수: totalBc,
     인시당_EA: eaPerMh,
-    일별_수율: dailyYields
+    일별_수율: dailyYields,
+    제품_레시피_등록수: products.length
   };
 }
 
@@ -375,17 +407,15 @@ function _aiGroupByDateAndType(thawingArr) {
 
 // 일별×제품별 집계 (포장)
 function _aiGroupByDateAndProduct(packingArr) {
-  const r2 = v => Math.round(v*100)/100;
   const m = {};
   packingArr.forEach(r => {
     const d = String(r.date||'').slice(0,10);
     const k = d + '|' + (r.product||'?');
-    if(!m[k]) m[k] = {date: d.slice(5).replace('-','/'), product: r.product||'?', ea: 0, kg: 0, defect: 0};
+    if(!m[k]) m[k] = {date: d.slice(5).replace('-','/'), product: r.product||'?', ea: 0, defect: 0};
     m[k].ea += parseInt(r.ea)||0;
-    m[k].kg += parseFloat(r.kg)||0;
     m[k].defect += parseInt(r.defect)||0;
   });
-  return Object.values(m).map(v => ({...v, kg: r2(v.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
+  return Object.values(m).sort((a,b)=>a.date.localeCompare(b.date));
 }
 
 // 503 자동 재시도 (3회, 점진 backoff)
