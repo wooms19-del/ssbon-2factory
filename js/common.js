@@ -16,6 +16,24 @@ firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
 // ============================================================
+// 🔄 자동 reload — 새 코드 배포 시 모든 디바이스 즉시 reload
+// 사용 예: deploy 후 _config/version 문서의 value를 새 timestamp로 set
+// 태블릿이 며칠 켜져있어도 자동 갱신됨
+// ============================================================
+db.collection('_config').doc('version').onSnapshot(function(snap){
+  if(!snap.exists) return;
+  var v = snap.data() && snap.data().value;
+  if(!v) return;
+  if(window._appVer && window._appVer !== v){
+    console.log('[auto-reload] 새 버전 감지 — reload:', window._appVer, '→', v);
+    location.reload(true);
+  }
+  window._appVer = v;
+}, function(err){
+  console.warn('[auto-reload] listener 오류 (무시):', err && err.message);
+});
+
+// ============================================================
 // 🔧 STAGING MODE - production은 절대 영향받지 않음
 // ============================================================
 const _STAGING_MODE = false;
