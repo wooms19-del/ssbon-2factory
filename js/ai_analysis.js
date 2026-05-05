@@ -237,7 +237,7 @@ async function runAIAnalysis() {
         contents: [{parts: [{text: prompt}]}],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 4000,
+          maxOutputTokens: 8000,  // v11: 4000 → 8000 (응답 잘림 방지)
           responseMimeType: 'application/json'
         }
       })
@@ -250,8 +250,12 @@ async function runAIAnalysis() {
     
     const apiData = await apiRes.json();
     const aiText = apiData.candidates?.[0]?.content?.parts?.[0]?.text;
+    const finishReason = apiData.candidates?.[0]?.finishReason;
     
     if(!aiText) throw new Error('AI 응답 없음');
+    if(finishReason === 'MAX_TOKENS') {
+      console.warn('[AI] 응답 토큰 한도 도달 (MAX_TOKENS) — 일부 잘릴 수 있음');
+    }
     
     let report;
     try {
