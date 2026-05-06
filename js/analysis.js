@@ -2596,7 +2596,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
 var _moRmChart = null;
 var _moRmTab = '종합';  // 현재 선택된 탭
 // 부위별 색상 — 자동 깔끔하게 (부위 가나다순으로 매핑되도록 정렬해서 처리)
-var _MO_RM_PALETTE = ['#1D9E75','#7F77DD','#D85A30','#185FA5','#BA7517','#993556','#0F6E56','#534AB7'];
+var _MO_RM_PALETTE = ['#1D9E75','#D85A30','#185FA5','#BA7517','#993556','#0F6E56','#534AB7'];
 function _moRmColorFor(part, allParts){
   const idx = allParts.indexOf(part);
   if(idx < 0) return '#888780';
