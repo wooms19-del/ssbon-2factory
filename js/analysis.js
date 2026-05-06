@@ -2491,7 +2491,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
     type: 'bar',
     plugins: [topNumPlugin, dateLabelPlugin,
       {id:'endLbl',afterDatasetsDraw(chart){
-        const {ctx}=chart; ctx.save();
+        const {ctx, chartArea}=chart; ctx.save();
         ctx.font='bold 11px sans-serif';
         const endItems = [];
         chart.data.datasets.forEach((d,i)=>{
@@ -2499,7 +2499,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
           const meta = chart.getDatasetMeta(i).data;
           if(!meta.length) return;
           const lastPt = meta[meta.length-1];
-          endItems.push({ y: lastPt.y, x: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
+          endItems.push({ y: lastPt.y, x: chartArea.right, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
         });
         endItems.sort((a,b) => a.y - b.y);
         const MIN_GAP = 14;
@@ -2611,7 +2611,7 @@ function _moRenderRmChart(rmByDate, ym){
         ctx.restore();
       }},
       {id:'endLbl',afterDatasetsDraw(chart){
-        const {ctx} = chart; ctx.save();
+        const {ctx, chartArea} = chart; ctx.save();
         ctx.font = 'bold 11px sans-serif';
         const endItems = [];
         chart.data.datasets.forEach((d,i) => {
@@ -2619,7 +2619,7 @@ function _moRenderRmChart(rmByDate, ym){
           const meta = chart.getDatasetMeta(i).data;
           if(!meta.length) return;
           const lastPt = meta[meta.length-1];
-          endItems.push({ y: lastPt.y, x: lastPt.x, text: ' '+d._endLabel, color: d.borderColor || '#475569' });
+          endItems.push({ y: lastPt.y, x: chartArea.right, text: ' '+d._endLabel, color: d.borderColor || '#475569' });
         });
         endItems.sort((a,b) => a.y - b.y);
         const MIN_GAP = 14;
