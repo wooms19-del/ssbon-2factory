@@ -209,11 +209,14 @@ async function runAIAnalysis() {
       }
     }
     
-    const computedKpis = _aiComputeKpis(allData);
-    
     // 포장 없으면 생산 안 한 날 — packing.date 있는 날짜만 생산일로 본다
+    // (KPI/차트/AI 입력 모두 이 필터된 allData 기준)
     const _pkDates = new Set(allData.packing.map(r => String(r.date||'').slice(0,10)));
-    const _onlyPkDays = arr => arr.filter(r => _pkDates.has(String(r.date||'').slice(0,10)));
+    ['thawing','preprocess','cooking','shredding','sauce','outerpacking','barcode'].forEach(c => {
+      if(allData[c]) allData[c] = allData[c].filter(r => _pkDates.has(String(r.date||'').slice(0,10)));
+    });
+    
+    const computedKpis = _aiComputeKpis(allData);
     
     btnEl.textContent = 'AI 분석 중...';
     resultEl.innerHTML = '<div style="padding:30px;color:#666;text-align:center;font-size:14px">🤖 AI 분석 중... (10~30초)</div>';
@@ -222,7 +225,7 @@ async function runAIAnalysis() {
       기간: { from, to, days },
       검증된_KPI: computedKpis,
       // 부위별 그날 작업량만 (raw 큰 array 제거)
-      방혈_일별_부위별: _aiGroupByDateAndType(_onlyPkDays(allData.thawing)),
+      방혈_일별_부위별: _aiGroupByDateAndType(allData.thawing),
       포장_일별_제품별: _aiGroupByDateAndProduct(allData.packing),
       // 부적합만 raw (보통 적은 건수)
       부적합_바코드: allData.barcode
