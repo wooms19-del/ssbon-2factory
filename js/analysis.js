@@ -17,18 +17,19 @@ function chMonth(dir) {
   renderMonthly();
 }
 
+// 메모리 캐시 — 입력 시 Firestore 재조회 안 하도록 (renderMonthly 시 갱신됨)
+let _moMetaCache = {};
+
 // ── 월간 메타(작업인원/Capa/메모) firestore 동기화 헬퍼 ─────────────────────
 //
 // 컬렉션: monthlyMeta, 문서ID: ym (예: '2026-04')
 // 데이터 형태: { "2026-04-01": { workers, capa, note }, ... }
 //
 // 동작:
-//  - 로드: firestore 우선, 없으면 localStorage fallback
+//  - 로드: firestore 우선, localStorage는 오프라인 fallback
 //  - 마이그레이션: localStorage에 있고 firestore에 없으면 자동 업로드 (1회)
-//  - 저장: localStorage 즉시 저장 + firestore 저장 (백그라운드)
-//
-// 이 헬퍼 도입 전에는 localStorage에만 저장되어 다른 PC/브라우저/시크릿모드에서
-// 메모가 안 보이고, 캐시 정리 시 사라지는 문제가 있었음.
+//  - 저장: firestore에 직접 (성공 후 localStorage 캐시 갱신)
+//  - 입력 시 _moMetaCache 메모리 사용 (localStorage 의존 끊음)
 async function _moLoadMeta(ym){
   const metaKey = 'moMeta_' + ym;
   let lsData = {};
@@ -58,24 +59,30 @@ async function _moLoadMeta(ym){
     return lsData;
   }
 
-  // firestore가 우선. localStorage 동기화
+  // firestore가 우선. localStorage + 메모리 캐시 갱신
   if(fbData !== null) {
     try { localStorage.setItem(metaKey, JSON.stringify(fbData)); } catch(e){}
+    _moMetaCache[ym] = fbData;
     return fbData;
   }
+  _moMetaCache[ym] = lsData;
   return lsData;
 }
 
 async function _moSaveMeta(ym, mm){
   const metaKey = 'moMeta_' + ym;
-  // localStorage 즉시 저장 (오프라인 캐시)
-  try { localStorage.setItem(metaKey, JSON.stringify(mm)); } catch(e){}
-  // firestore 저장 (백그라운드, fbSave는 staging에서 자동 차단됨)
-  if(typeof fbSave === 'function') {
-    try { await fbSave('monthlyMeta', mm, ym); }
-    catch(e) { console.warn('[월간메모 저장 실패]', e.message); }
+  // ★ Firestore 우선 저장 (실패 시에만 throw)
+  if(typeof fbSave !== 'function') {
+    throw new Error('fbSave 함수 없음 — Firebase 초기화 실패');
   }
+  await fbSave('monthlyMeta', mm, ym);  // 성공해야 다음으로
+  // 성공 후 localStorage 캐시 갱신 (오프라인 대비, 보조 역할)
+  try { localStorage.setItem(metaKey, JSON.stringify(mm)); } catch(e){}
+  // 메모리 캐시도 갱신
+  _moMetaCache[ym] = mm;
 }
+
+
 
 async function renderMonthly() {
   if(!_moYm) _moYm = tod().slice(0,7);
@@ -550,12 +557,13 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
       const field = this.dataset.field;
       const date  = this.dataset.field === 'note' ? this.dataset.date : this.dataset.date;
       const labels = {workers:'작업 인원 (명)', capa:'Full Capa (예: 10,000)', note:'비고'};
-      let cur = '';
-      try { cur = (JSON.parse(localStorage.getItem(metaKey)||'{}')[date]||{})[field]||''; } catch(e){}
+      // ★ 메모리 캐시(=Firestore 최신)에서 읽음. localStorage 의존 X
+      const cacheData = _moMetaCache[ym] || {};
+      let cur = (cacheData[date] || {})[field] || '';
       const val = prompt(labels[field]+' 입력 (비우면 자동값 사용):', cur);
       if(val===null) return;
-      let mm={};
-      try{mm=JSON.parse(localStorage.getItem(metaKey)||'{}');}catch(e){}
+      // ★ 캐시 deep copy해서 변경 (원본 변경 방지)
+      const mm = JSON.parse(JSON.stringify(cacheData));
       if(!mm[date]) mm[date]={};
       if(val.trim()==='') {
         delete mm[date][field];
@@ -563,8 +571,13 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
       } else {
         mm[date][field] = (field==='note') ? val : (parseFloat(val.replace(/,/g,''))||val);
       }
-      await _moSaveMeta(ym, mm);
-      renderMonthly();
+      try {
+        await _moSaveMeta(ym, mm);
+        renderMonthly();
+      } catch(e) {
+        if(typeof toast === 'function') toast('저장 실패: ' + e.message, 'd');
+        console.error('[월간메모 저장 실패]', e);
+      }
     });
   });
 }
@@ -675,12 +688,12 @@ function _moRenderRows(selProds) {
     el.addEventListener('click',async function(){
       const field=this.dataset.field, date=this.dataset.date;
       const labels={workers:'작업 인원 (명)',capa:'Full Capa (예: 10,000)',note:'비고'};
-      let cur='';
-      try{cur=(JSON.parse(localStorage.getItem(metaKey)||'{}')[date]||{})[field]||'';}catch(e){}
+      // ★ 메모리 캐시(=Firestore 최신)에서 읽음
+      const cacheData = _moMetaCache[ym] || {};
+      let cur = (cacheData[date]||{})[field] || '';
       const val=prompt(labels[field]+' 입력 (비우면 자동값 사용):',cur);
       if(val===null) return;
-      let mm={};
-      try{mm=JSON.parse(localStorage.getItem(metaKey)||'{}');}catch(e){}
+      const mm = JSON.parse(JSON.stringify(cacheData));
       if(!mm[date]) mm[date]={};
       if(val.trim()===''){
         delete mm[date][field];
@@ -688,8 +701,13 @@ function _moRenderRows(selProds) {
       } else {
         mm[date][field]=(field==='note')?val:(parseFloat(val.replace(/,/g,''))||val);
       }
-      await _moSaveMeta(ym, mm);
-      renderMonthly();
+      try {
+        await _moSaveMeta(ym, mm);
+        renderMonthly();
+      } catch(e) {
+        if(typeof toast === 'function') toast('저장 실패: ' + e.message, 'd');
+        console.error('[월간메모 저장 실패]', e);
+      }
     });
   });
 }
