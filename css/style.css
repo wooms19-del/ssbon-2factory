@@ -30,7 +30,7 @@ input[placeholder="HH:MM"]{letter-spacing:1px}
 
 /* 메인 */
 .main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:1rem}
-.inner{max-width:1080px;margin:0 auto}
+.inner{max-width:1400px;margin:0 auto}
 .pg{display:none}.pg.on{display:block}
 
 /* 카드 */
