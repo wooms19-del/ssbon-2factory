@@ -1434,10 +1434,9 @@ function chDay(d){
   }
   var dt=new Date(DDATE+'T00:00:00');  // 로컬 자정으로 파싱
   var todayStr = _ld(new Date());
-  // 최초 데이터 날짜 계산
+  // 최초 데이터 날짜 계산 — packing 있는 날만 (포장 없으면 생산 안 한 것)
   var allDates=[];
   if(L&&L.packing) L.packing.forEach(function(r){if(r.date)allDates.push(r.date.slice(0,10));});
-  if(L&&L.thawing) L.thawing.forEach(function(r){if(r.date)allDates.push(r.date.slice(0,10));});
   allDates.sort();
   var firstDateStr = allDates.length ? allDates[0] : null;
 
@@ -1448,10 +1447,9 @@ function chDay(d){
     if(ds > todayStr){ toast('오늘 이후 날짜입니다','d'); return; }
     // 과거 한계 차단
     if(d<0 && firstDateStr && ds < firstDateStr){ toast('더 이상 데이터가 없습니다','d'); return; }
-    // 해당 날짜에 데이터 있는지 L에서 체크
+    // 해당 날짜에 데이터 있는지 L에서 체크 — packing 있는 날만 생산일 (포장 없으면 생산 안 한 것)
     var has=false;
     if(L&&L.packing) has=has||L.packing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
-    if(!has&&L&&L.thawing) has=has||L.thawing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
     if(has){ DDATE=ds; renderDaily(); return; }
   }
   toast('해당 방향에 데이터가 없습니다','d');
