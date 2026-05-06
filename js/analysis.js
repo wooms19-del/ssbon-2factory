@@ -2507,7 +2507,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
   if (mode === 'ea') {
     dataVals = rows.map(r => r.ea);
     yUnit = '';
-    mainLabelFn = (r) => r.ea.toLocaleString() + '봉';
+    mainLabelFn = (r) => r.ea.toLocaleString() + 'EA';
     subLabelFn = null;
   } else if (mode === 'weight') {
     dataVals = rows.map(r => r.kg);
@@ -2517,7 +2517,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
   } else { // detail
     dataVals = rows.map(r => r.kg);
     yUnit = 'kg';
-    mainLabelFn = (r) => r.ea.toLocaleString() + '봉';
+    mainLabelFn = (r) => r.ea.toLocaleString() + 'EA';
     subLabelFn = (r) => r.kg.toLocaleString() + 'kg';
   }
 
@@ -2541,9 +2541,9 @@ function renderPackingChart(dayEntries, opMap, ym) {
   // 부제목 (모드별 안내 문구)
   const subEl = document.getElementById('mo_packing_subtitle');
   if (subEl) {
-    if (mode === 'ea')          subEl.textContent = '막대 = 생산 봉수(EA)';
+    if (mode === 'ea')          subEl.textContent = '막대 = 생산 EA';
     else if (mode === 'weight') subEl.textContent = '막대 = 생산 무게(kg)';
-    else                        subEl.textContent = '막대 = 생산 무게(kg) · 막대 위 = 봉수(EA) / 무게(kg)';
+    else                        subEl.textContent = '막대 = 생산 무게(kg) · 막대 위 = EA / 무게(kg)';
   }
 
 
@@ -2558,7 +2558,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
         ctx.textAlign = 'center';
         ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#222';
         if (subLabelFn) {
-          // 상세 모드: 봉수(검정 굵게) + kg(회색)
+          // 상세 모드: EA(검정 굵게) + kg(회색)
           ctx.font = 'bold 11px sans-serif';
           ctx.fillText(mainLabelFn(r), bar.x, bar.y - 16);
           ctx.font = '10px sans-serif';
@@ -2704,7 +2704,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
             label: ctx => {
               if(ctx.datasetIndex !== 0) return '';
               const r = rows[ctx.dataIndex];
-              return ' ' + r.ea.toLocaleString() + '봉 · ' + r.kg.toLocaleString() + 'kg';
+              return ' ' + r.ea.toLocaleString() + 'EA · ' + r.kg.toLocaleString() + 'kg';
             },
           }
         }
@@ -2967,11 +2967,11 @@ async function downloadPackingChart() {
   const ym = _moYm || tod().slice(0,7);
   const [, m] = ym.split('-');
   const mode = _moPackingMode || 'detail';
-  const modeLbl = mode==='ea' ? 'EA(봉수)' : mode==='weight' ? '중량(kg)' : '상세 (EA + 중량)';
+  const modeLbl = mode==='ea' ? 'EA' : mode==='weight' ? '중량(kg)' : '상세 (EA + 중량)';
   const subText = mode==='detail'
-    ? '막대 = 생산 무게(kg) · 막대 위 = 봉수(EA) / 무게(kg)'
+    ? '막대 = 생산 무게(kg) · 막대 위 = EA / 무게(kg)'
     : mode==='ea'
-      ? '막대 = 생산 봉수(EA)'
+      ? '막대 = 생산 EA'
       : '막대 = 생산 무게(kg)';
 
   const S = 2;  // 2x 고해상도
