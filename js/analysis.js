@@ -2972,25 +2972,52 @@ async function downloadRmChart(){
 async function _downloadGenericChart(canvasId, chart, title){
   if(!chart) { alert('차트 로딩 중'); return; }
   const ym = window._moYm || tod().slice(0,7);
-  const S = 2;
-  const origDPR = chart.options.devicePixelRatio;
-  chart.options.devicePixelRatio = S;
-  chart.resize();
-  chart.update('none');
-  await new Promise(r => requestAnimationFrame(r));
-  await new Promise(r => requestAnimationFrame(r));
-  // 캡처
+  const [, m] = ym.split('-');
   const canvas = document.getElementById(canvasId);
   if(!canvas) return;
-  const link = document.createElement('a');
-  const fname = ym + '_' + title + '.png';
-  link.download = fname;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
-  // 복원
+
+  const S = 2;  // 2x 고해상도
+  const W0 = 1280, H0 = 540, HD0 = 100;
+  const W = W0 * S, H = H0 * S, HD = HD0 * S;
+
+  // Chart.js 2x 렌더 + 사이즈 조정
+  const origDPR = chart.options.devicePixelRatio;
+  chart.options.devicePixelRatio = S;
+  const wrapDiv = canvas.parentElement;
+  const origWrapH = wrapDiv ? wrapDiv.style.height : '';
+  if(wrapDiv) wrapDiv.style.height = (H0 - HD0) + 'px';
+  chart.resize(W0, H0 - HD0);
+  await new Promise(r => setTimeout(r, 350));
+
+  // offscreen 캔버스 (흰 배경)
+  const off = document.createElement('canvas');
+  off.width  = W;
+  off.height = H;
+  const ctx = off.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // 제목 (회사명 + 차트명)
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#94A3B8';
+  ctx.font = (13*S) + 'px sans-serif';
+  ctx.fillText('순수본 2공장', 24*S, 28*S);
+  ctx.fillStyle = '#1E293B';
+  ctx.font = 'bold ' + (22*S) + 'px sans-serif';
+  ctx.fillText(parseInt(m) + '월 ' + title, 24*S, 60*S);
+
+  // 차트 그리기
+  ctx.drawImage(canvas, 0, HD, W, H - HD);
+
+  // 원복
   chart.options.devicePixelRatio = origDPR;
+  if(wrapDiv) wrapDiv.style.height = origWrapH;
   chart.resize();
-  chart.update('none');
+
+  const a = document.createElement('a');
+  a.download = ym + '_' + title + '_HD.png';
+  a.href = off.toDataURL('image/png');
+  a.click();
 }
 
 async function downloadDefChart(){
