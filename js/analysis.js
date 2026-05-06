@@ -320,9 +320,11 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
 
   // 날짜별 원육 투입
   const rmByDate = {};
+  const rmByDatePart = {};  // {YYYY-MM-DD: {우둔: kg, 홍두깨: kg, ...}}
   for(const d of uniqueDates) {
     const ppDay=(ppMonth||[]).filter(r=>String(r.date||'').slice(0,10)===d);
     rmByDate[d] = getThKgByPP_(ppDay, thMonth||[], d);
+    rmByDatePart[d] = getThByPartByPP_(ppDay, thMonth||[], d);
   }
 
   // 날짜별 그룹핑
@@ -347,8 +349,9 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
   renderPackingChart(dayEntries, opMap, _moYm || tod().slice(0,7));
   // 일별 원육 사용량 차트
   window._moRmByDate = rmByDate;
+  window._moRmByDatePart = rmByDatePart;
   if(typeof _moRenderRmChart === 'function'){
-    _moRenderRmChart(rmByDate, _moYm || tod().slice(0,7));
+    _moRenderRmChart(rmByDate, _moYm || tod().slice(0,7), rmByDatePart);
   }
 
   // ── 수율 KPI 계산 ─────────────────────────────────────────
@@ -1061,7 +1064,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     }
     // 일별 원육 차트도 재그림
     if(typeof _moRenderRmChart === 'function' && window._moRmByDate){
-      _moRenderRmChart(window._moRmByDate, window._moPackingArgs ? window._moPackingArgs.ym : (window._moYm||tod().slice(0,7)));
+      _moRenderRmChart(window._moRmByDate, window._moPackingArgs ? window._moPackingArgs.ym : (window._moYm||tod().slice(0,7)), window._moRmByDatePart);
     }
   } catch(e) {
     // KPI 일평균 원육 사용량 갱신
@@ -1493,6 +1496,48 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
   const seen=new Set();
   const deduped=matched.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
   return r2(deduped.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
+}
+
+// getThKgByPP_와 동일한 매칭 로직, 부위별로 분해해서 리턴 — {우둔: 500, 홍두깨: 301, ...}
+function getThByPartByPP_(ppRecs, allThawing, packDate) {
+  const prevD=(()=>{const [y,m,dd]=packDate.split('-').map(Number);const dt=new Date(y,m-1,dd-1);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;})();
+  const _normW=w=>String(w||'').replace(/[^0-9]/g,'')||String(w||'').trim();
+  const wagons=[...new Set(ppRecs.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
+  let matched=[];
+  if(wagons.length){
+    const sameTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate&&wagons.includes(_normW(r.cart)));
+    if(sameTh.length){
+      matched=sameTh;
+    } else {
+      const todayAny=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
+      const prevTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&wagons.includes(_normW(r.cart)));
+      if(todayAny.length){ matched=todayAny; }
+      else if(prevTh.length){ matched=prevTh; }
+    }
+  } else {
+    matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
+    if(!matched.length) matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD);
+  }
+  if(!matched.length){
+    matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
+    if(!matched.length) matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD);
+  }
+  if(wagons.length){
+    const _nextD=addDays(packDate,1);
+    const _nextMatched=allThawing.filter(r=>String(r.date||'').slice(0,10)===_nextD&&wagons.includes(_normW(r.cart)));
+    const _curKg=r2(matched.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
+    const _nxtKg=r2(_nextMatched.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
+    if(_nextMatched.length && _nxtKg>_curKg*2) matched=_nextMatched;
+  }
+  const seen=new Set();
+  const deduped=matched.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
+  const byPart={};
+  deduped.forEach(r=>{
+    const part=String(r.type||'기타').trim()||'기타';
+    byPart[part]=(byPart[part]||0)+(parseFloat(r.totalKg)||0);
+  });
+  Object.keys(byPart).forEach(k=>{ byPart[k]=r2(byPart[k]); });
+  return byPart;
 }
 
 async function renderDaily(){
@@ -2549,7 +2594,16 @@ function renderPackingChart(dayEntries, opMap, ym) {
 
 // 일별 원육 사용량 차트
 var _moRmChart = null;
-function _moRenderRmChart(rmByDate, ym){
+var _moRmTab = '종합';  // 현재 선택된 탭
+// 부위별 색상 — 자동 깔끔하게 (부위 가나다순으로 매핑되도록 정렬해서 처리)
+var _MO_RM_PALETTE = ['#1D9E75','#7F77DD','#D85A30','#185FA5','#BA7517','#993556','#0F6E56','#534AB7'];
+function _moRmColorFor(part, allParts){
+  const idx = allParts.indexOf(part);
+  if(idx < 0) return '#888780';
+  return _MO_RM_PALETTE[idx % _MO_RM_PALETTE.length];
+}
+
+function _moRenderRmChart(rmByDate, ym, rmByDatePart){
   const canvas = document.getElementById('mo_rm_chart');
   if(!canvas) return;
   if(_moRmChart){_moRmChart.destroy();_moRmChart=null;}
@@ -2565,47 +2619,121 @@ function _moRenderRmChart(rmByDate, ym){
     ? _moChartWeekdays(ym, producedSet) : producedDates;
 
   const labels = weekdays.map((d,i) => [(i+1)+'일차', d.slice(5)]);
-  const rmVals = weekdays.map(d => rmByDate[d] && rmByDate[d] > 0 ? Math.round(rmByDate[d]) : null);
   const xLen = weekdays.length;
 
-  // 이번달 일평균 (생산한 날만)
-  const _curVals = rmVals.filter(v => v != null && v > 0);
-  const _curAvg = _curVals.length ? Math.round(_curVals.reduce((s,v)=>s+v,0) / _curVals.length) : null;
+  // 부위 목록 추출 (가나다 정렬, 동적)
+  const partSet = new Set();
+  if(rmByDatePart){
+    Object.values(rmByDatePart).forEach(byPart => {
+      Object.keys(byPart||{}).forEach(p => { if((byPart[p]||0) > 0) partSet.add(p); });
+    });
+  }
+  const allParts = [...partSet].sort();
 
-  const datasets = [
-    { type:'bar', label:'원육 사용량', data: rmVals, backgroundColor: '#1D9E75dd', borderRadius: 3 }
-  ];
+  // 탭 렌더 (종합 / 각 부위)
+  const tabsEl = document.getElementById('mo_rm_tabs');
+  if(tabsEl){
+    const tabs = ['종합', ...allParts];
+    if(!tabs.includes(_moRmTab)) _moRmTab = '종합';
+    tabsEl.innerHTML = tabs.map(t => {
+      const active = (t === _moRmTab);
+      const bg = active ? '#1D9E75' : '#fff';
+      const col = active ? '#fff' : '#475569';
+      const bd = active ? '#1D9E75' : '#cbd5e1';
+      return `<button type="button" onclick="_moSetRmTab('${t.replace(/'/g,"\\'")}')" style="padding:4px 10px;font-size:11px;border:1px solid ${bd};background:${bg};color:${col};border-radius:6px;cursor:pointer">${t}</button>`;
+    }).join('');
+  }
+
+  // 데이터셋 구성
+  const datasets = [];
+  let topNumVals;  // 막대 위 합계 라벨용
+  if(_moRmTab === '종합' && allParts.length > 0){
+    // 부위별 stacked
+    allParts.forEach(part => {
+      const data = weekdays.map(d => {
+        const byPart = (rmByDatePart||{})[d] || {};
+        const v = byPart[part] || 0;
+        return v > 0 ? Math.round(v) : null;
+      });
+      datasets.push({
+        type:'bar', label: part, data,
+        backgroundColor: _moRmColorFor(part, allParts),
+        borderRadius: 2, stack: 'rm'
+      });
+    });
+    topNumVals = weekdays.map(d => rmByDate[d] && rmByDate[d] > 0 ? Math.round(rmByDate[d]) : null);
+  } else if(_moRmTab !== '종합'){
+    // 특정 부위만
+    const part = _moRmTab;
+    const data = weekdays.map(d => {
+      const byPart = (rmByDatePart||{})[d] || {};
+      const v = byPart[part] || 0;
+      return v > 0 ? Math.round(v) : null;
+    });
+    datasets.push({
+      type:'bar', label: part, data,
+      backgroundColor: _moRmColorFor(part, allParts),
+      borderRadius: 3
+    });
+    topNumVals = data.slice();
+  } else {
+    // 부위 데이터 없음 — 옛 방식 단일 막대
+    const rmVals = weekdays.map(d => rmByDate[d] && rmByDate[d] > 0 ? Math.round(rmByDate[d]) : null);
+    datasets.push({ type:'bar', label:'원육 사용량', data: rmVals, backgroundColor: '#1D9E75dd', borderRadius: 3 });
+    topNumVals = rmVals;
+  }
+
+  // 평균선 — 현재 탭에 해당하는 값 기준
+  const _curVals = topNumVals.filter(v => v != null && v > 0);
+  const _curAvg = _curVals.length ? Math.round(_curVals.reduce((s,v)=>s+v,0) / _curVals.length) : null;
   if(_curAvg != null){
     datasets.push({
       type: 'line', label: '이번달 일평균',
       data: Array(xLen).fill(_curAvg),
       borderColor: '#7c3aed', borderDash: [2,3], pointRadius: 0, borderWidth: 1.5, fill: false,
-      _endLabel: _curAvg.toLocaleString()+'kg'
+      _endLabel: _curAvg.toLocaleString()+'kg', stack: undefined
     });
   }
   const _avgRm = window._moPrevAvgRmKg;
-  if(_avgRm != null){
+  if(_moRmTab === '종합' && _avgRm != null){
     datasets.push({
       type:'line', label:'전월 일평균',
       data: Array(xLen).fill(Math.round(_avgRm)),
       borderColor: '#94a3b8', borderDash: [5,4], pointRadius: 0, borderWidth: 1.5, fill: false,
-      _endLabel: Math.round(_avgRm).toLocaleString()+'kg'
+      _endLabel: Math.round(_avgRm).toLocaleString()+'kg', stack: undefined
     });
   }
+
+  // stacked 여부
+  const isStacked = (_moRmTab === '종합' && allParts.length > 0);
 
   _moRmChart = new Chart(canvas, {
     type: 'bar',
     plugins: [
       {id:'topNum',afterDatasetsDraw(chart){
         const {ctx} = chart; ctx.save();
-        const meta = chart.getDatasetMeta(0).data;
-        meta.forEach((bar, i) => {
-          const v = rmVals[i];
-          if(v == null || v <= 0) return;
+        // 막대 위 합계 라벨 — stacked일 때는 마지막 bar dataset의 top, 단일은 그냥 bar 위
+        // 가장 위에 있는 bar dataset의 meta를 기준으로 그림
+        const barMetas = chart.data.datasets
+          .map((d,i) => ({ds:d, meta: chart.getDatasetMeta(i)}))
+          .filter(x => x.meta.type === 'bar' || (x.ds.type||chart.config.type) === 'bar');
+        if(!barMetas.length) { ctx.restore(); return; }
+        // 같은 x에서 가장 작은 y (가장 위) 골라야 함
+        const xCount = topNumVals.length;
+        for(let i=0; i<xCount; i++){
+          const v = topNumVals[i];
+          if(v == null || v <= 0) continue;
+          let topY = Infinity, topX = null;
+          barMetas.forEach(({meta}) => {
+            const bar = meta.data[i];
+            if(!bar) return;
+            if(bar.y < topY){ topY = bar.y; topX = bar.x; }
+          });
+          if(topX == null) continue;
           ctx.fillStyle = '#1e293b'; ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.fillText(v.toLocaleString()+'kg', bar.x, bar.y - 4);
-        });
+          ctx.fillText(v.toLocaleString()+'kg', topX, topY - 4);
+        }
         ctx.restore();
       }},
       {id:'endLbl',afterDatasetsDraw(chart){
@@ -2641,17 +2769,34 @@ function _moRenderRmChart(rmByDate, ym){
       plugins: {
         legend: { display: true, position: 'top',
           labels: { font: {size:10}, boxWidth: 12, usePointStyle: true,
-            filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } },
+            filter: (item) => {
+              // stacked 종합 모드 = 부위 + 평균선 모두 노출
+              // 부위 단일 탭 = 평균선만
+              if(isStacked) return true;
+              return item.text === '이번달 일평균' || item.text === '전월 일평균';
+            } } },
         tooltip: { callbacks: {
-          label: ctx => ctx.datasetIndex === 0 ? ' '+(ctx.raw||0).toLocaleString()+'kg' : ''
+          label: ctx => {
+            const ds = ctx.dataset;
+            if(ds.type === 'line') return '';
+            return ' '+(ds.label||'')+' '+(ctx.raw||0).toLocaleString()+'kg';
+          }
         } }
       },
       scales: {
-        x: { ticks: { font: {size:9}, autoSkip: false, maxRotation: 0 }, grid: { display: false } },
-        y: { ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true }
+        x: { stacked: isStacked, ticks: { font: {size:9}, autoSkip: false, maxRotation: 0 }, grid: { display: false } },
+        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true }
       }
     }
   });
+}
+
+// 탭 클릭 핸들러
+function _moSetRmTab(tab){
+  _moRmTab = tab;
+  if(typeof _moRenderRmChart === 'function' && window._moRmByDate){
+    _moRenderRmChart(window._moRmByDate, window._moPackingArgs ? window._moPackingArgs.ym : (window._moYm||tod().slice(0,7)), window._moRmByDatePart);
+  }
 }
 
 async function downloadRmChart(){
