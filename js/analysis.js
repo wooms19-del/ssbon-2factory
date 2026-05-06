@@ -2164,16 +2164,34 @@ function renderTL(pp,ck,sh,pk){
 
   let bodyHtml = '';
   if(_tlMode === 'integrated'){
-    // 공정별 1줄, 같은 줄에 카트마다 별도 막대
+    // 공정별 1줄, 같은 줄에 카트마다 별도 막대 + 우측 요약
     const groups = [
       {lbl:'전처리', col:'#1a56db', rows: pp},
       {lbl:'자숙',   col:'#0e9f6e', rows: ck},
       {lbl:'파쇄',   col:'#c27803', rows: sh},
       {lbl:'포장',   col:'#7e3af2', rows: pk}
     ];
+    const _fmtDur = (mins) => {
+      if(mins<=0) return '-';
+      const h=Math.floor(mins/60), m=mins%60;
+      return h>0 ? (m>0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+    };
     bodyHtml = groups.filter(g=>g.rows && g.rows.length).map(g=>{
       const bars = g.rows.map(r=>_bar({...r, lbl:g.lbl, col:g.col})).join('');
-      return `<div class="tlr"><div class="tll">${g.lbl}</div><div class="tlt">${bars}</div></div>`;
+      // 우측 요약 계산
+      const validMins = g.rows.flatMap(r=>{
+        const s=toMin(r.start), e=toMin(r.end);
+        return (s===null||e===null) ? [] : [{s,e}];
+      });
+      let summary = '';
+      if(validMins.length){
+        const minS = Math.min(...validMins.map(x=>x.s));
+        const maxE = Math.max(...validMins.map(x=>x.e));
+        const totalDur = validMins.reduce((sum,x)=>sum+(x.e-x.s),0);
+        const _hm = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+        summary = `<div class="tlSum"><div class="tlSumTime">${_hm(minS)} ~ ${_hm(maxE)}</div><div class="tlSumMeta">${g.rows.length}건 · ${_fmtDur(totalDur)}</div></div>`;
+      }
+      return `<div class="tlr tlrInt"><div class="tll">${g.lbl}</div><div class="tlt">${bars}</div>${summary}</div>`;
     }).join('');
   } else {
     // 카트별 = 기존 동작 (각 row 1줄)
