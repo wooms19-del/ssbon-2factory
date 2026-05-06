@@ -870,8 +870,8 @@ function _moRedrawDefChart(){
       ctx.restore();
     }}
   ],data:{labels:labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,
-    layout:{padding:{right:60, top:20, bottom:14}},
-    plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,usePointStyle:true}},
+    layout:{padding:{right:90, top:20, bottom:14}},
+    plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,usePointStyle:true,padding:14}},
              tooltip:{callbacks:{label:v=>v.raw!=null?v.raw+'%':'—'}}},
     scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
             y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
@@ -970,8 +970,8 @@ function _moRenderYieldChart(dailyYields) {
     type:'line',
     data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,
-      layout:{padding:{right:60, top:20, bottom:14}},
-      plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,usePointStyle:true}},
+      layout:{padding:{right:90, top:20, bottom:14}},
+      plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,usePointStyle:true,padding:14}},
                tooltip:{callbacks:{label:v=>v.dataset.label+': '+v.raw+'%'}}},
       scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
               y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
@@ -2450,7 +2450,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
     return m[2].toUpperCase()==='KG' ? parseFloat(m[1])*1000 : parseFloat(m[1]);
   }
 
-  const COLORS = ['#1D9E75','#378ADD','#EF9F27','#D4537E','#8B5CF6','#64748B'];
+  const COLORS = ['#1D9E75','#378ADD','#EF9F27','#0EA5E9','#F472B6','#64748B'];
   const prodColorMap = {};
   let colorIdx = 0;
   function getColor(prod) {
@@ -2714,9 +2714,9 @@ function renderPackingChart(dayEntries, opMap, ym) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 20, bottom: 20, right: 70 } },
+      layout: { padding: { top: 20, bottom: 20, right: 100 } },
       plugins: {
-        legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
+        legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 14, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
         tooltip: {
           callbacks: {
             title: ctx => {
@@ -2930,10 +2930,10 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 25, right: 70 } },
+      layout: { padding: { top: 25, right: 100 } },
       plugins: {
         legend: { display: true, position: 'top',
-          labels: { font: {size:10}, boxWidth: 12, usePointStyle: true,
+          labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 14,
             filter: (item) => {
               // stacked 종합 모드 = 부위 + 평균선 모두 노출
               // 부위 단일 탭 = 평균선만
@@ -3218,7 +3218,7 @@ async function _buildChartSheet(mainBuf, y, m) {
   function dLabel(d){const[dy,dm,dd]=d.split('-').map(Number);return dd+'('+DOW[new Date(dy,dm-1,dd).getDay()]+')';}
   function colLetter(n){let r='';while(n>0){r=String.fromCharCode(65+(n-1)%26)+r;n=Math.floor((n-1)/26);}return r;}
   function ps(full){const mt=(full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);if(!mt)return full.slice(0,8);return mt[2].toUpperCase()==='KG'?mt[1]+'KG':mt[1]+'g';}
-  const PROD_COLORS={'시그니처 장조림 130g':'1D9E75','코스트코 장조림 170g':'378ADD','트레이더스 장조림 460g':'EF9F27','FC 장조림 3KG':'D4537E'};
+  const PROD_COLORS={'시그니처 장조림 130g':'1D9E75','코스트코 장조림 170g':'378ADD','트레이더스 장조림 460g':'EF9F27','FC 장조림 3KG':'0EA5E9'};
   function pColor(p){return PROD_COLORS[p]||'888888';}
 
   // 행 펼치기
