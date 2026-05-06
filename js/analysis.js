@@ -2682,11 +2682,15 @@ function renderPackingChart(dayEntries, opMap, ym) {
           ctx.strokeStyle = item.color;
           ctx.lineWidth = item.bw;
           ctx.setLineDash(item.dash);
+          // dashOffset = 점선 사이클(dash[0]+dash[1])에 fromX 맞춰 정렬 → 기존 점선과 자연스럽게 이어짐
+          const _cyc = (item.dash[0]||0) + (item.dash[1]||0);
+          ctx.lineDashOffset = _cyc>0 ? (item.fromX % _cyc) : 0;
           ctx.beginPath();
           ctx.moveTo(item.fromX, item.y);
           ctx.lineTo(item.x, item.y);
           ctx.stroke();
           ctx.setLineDash([]);
+          ctx.lineDashOffset = 0;
         });
         endItems.forEach(item => {
           ctx.fillStyle = item.color;
@@ -2897,11 +2901,15 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
           ctx.strokeStyle = item.color;
           ctx.lineWidth = item.bw;
           ctx.setLineDash(item.dash);
+          // dashOffset = 점선 사이클(dash[0]+dash[1])에 fromX 맞춰 정렬 → 기존 점선과 자연스럽게 이어짐
+          const _cyc = (item.dash[0]||0) + (item.dash[1]||0);
+          ctx.lineDashOffset = _cyc>0 ? (item.fromX % _cyc) : 0;
           ctx.beginPath();
           ctx.moveTo(item.fromX, item.y);
           ctx.lineTo(item.x, item.y);
           ctx.stroke();
           ctx.setLineDash([]);
+          ctx.lineDashOffset = 0;
         });
         endItems.forEach(item => {
           ctx.fillStyle = item.color;
