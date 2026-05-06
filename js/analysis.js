@@ -2102,7 +2102,28 @@ function renderDailyFromLocal_(d){
     '<div class="emp">데이터 없음 (전날 원육 검수)</div>';
 }
 
+var _tlMode = 'integrated';  // 'integrated' | 'byCart'
+var _tlData = null;          // 마지막 데이터 캐시 (pp,ck,sh,pk)
+
+function setTlMode(mode){
+  if(mode !== 'integrated' && mode !== 'byCart') return;
+  _tlMode = mode;
+  // 버튼 active 상태
+  const a=document.getElementById('tlModeIntegrated'), b=document.getElementById('tlModeByCart');
+  if(a) a.style.background = mode==='integrated' ? '#1a56db' : '';
+  if(a) a.style.color      = mode==='integrated' ? '#fff' : '';
+  if(b) b.style.background = mode==='byCart'     ? '#1a56db' : '';
+  if(b) b.style.color      = mode==='byCart'     ? '#fff' : '';
+  if(_tlData) renderTL(_tlData.pp, _tlData.ck, _tlData.sh, _tlData.pk);
+}
+
 function renderTL(pp,ck,sh,pk){
+  _tlData = {pp,ck,sh,pk};
+  // 버튼 active 동기화 (최초 진입 포함)
+  const _a=document.getElementById('tlModeIntegrated'), _b=document.getElementById('tlModeByCart');
+  if(_a){ _a.style.background = _tlMode==='integrated' ? '#1a56db' : ''; _a.style.color = _tlMode==='integrated' ? '#fff' : ''; }
+  if(_b){ _b.style.background = _tlMode==='byCart'     ? '#1a56db' : ''; _b.style.color = _tlMode==='byCart'     ? '#fff' : ''; }
+
   const el=document.getElementById('tlWrap');
   if(!el) return;
   const all=[...pp.map(r=>({...r,lbl:'전처리',col:'#1a56db'})),...ck.map(r=>({...r,lbl:'자숙',col:'#0e9f6e'})),...sh.map(r=>({...r,lbl:'파쇄',col:'#c27803'})),...pk.map(r=>({...r,lbl:'포장',col:'#7e3af2'}))];
@@ -2110,12 +2131,10 @@ function renderTL(pp,ck,sh,pk){
   const toMin=t=>{if(!t)return null;const p=t.slice(0,5).split(':');return+p[0]*60+(+p[1]||0);};
   const mins=all.flatMap(r=>[toMin(r.start),toMin(r.end)]).filter(v=>v!==null);
   const minT=Math.min(...mins), maxT=Math.max(...mins);
-  // 헤더 정시 단위 - 시작 정시(headStart)부터 끝 정시(headEnd)까지
   const headStart=Math.floor(minT/60)*60;
   const headEnd=Math.ceil(maxT/60)*60;
   const range=Math.max(60, headEnd-headStart);
   const hourCount=Math.ceil(maxT/60)-Math.floor(minT/60)+1;
-  // 헤더 라벨도 막대와 동일 좌표계(absolute %)로 배치 - 시간축과 정확히 정렬
   const headHtml=[];
   for(let i=0;i<hourCount;i++){
     const h=(Math.floor(minT/60)+i)%24;
@@ -2126,14 +2145,48 @@ function renderTL(pp,ck,sh,pk){
     else if(i===hourCount-1) tx='translateX(-100%)';
     headHtml.push(`<div class="tlhr" style="left:${leftPct}%;transform:${tx}">${String(h).padStart(2,'0')}:00</div>`);
   }
+
+  // 막대 한 줄 HTML 생성 헬퍼
+  const _bar=(r)=>{
+    const s=toMin(r.start),e=toMin(r.end);
+    if(s===null||e===null) return '';
+    const left=r2((s-headStart)/range*100), width=r2((e-s)/range*100);
+    const ts=r.start?r.start.slice(0,5):'', te=r.end?r.end.slice(0,5):'';
+    // 통합 모드 = 막대 안 텍스트 X (hover로만), 카트별 = 기존 텍스트
+    const inner = (_tlMode==='integrated') ? '' : `${ts}-${te}`;
+    const titleParts=[r.lbl, `${ts}~${te}`];
+    if(r.type) titleParts.push(r.type);
+    if(r.product) titleParts.push(r.product);
+    if(r.cart) titleParts.push('카트 '+r.cart);
+    else if(r.wagons) titleParts.push('카트 '+r.wagons);
+    return `<div class="tlb" title="${titleParts.join(' · ')}" style="left:${left}%;width:${Math.max(width,1.2)}%;background:${r.col}">${inner}</div>`;
+  };
+
+  let bodyHtml = '';
+  if(_tlMode === 'integrated'){
+    // 공정별 1줄, 같은 줄에 카트마다 별도 막대
+    const groups = [
+      {lbl:'전처리', col:'#1a56db', rows: pp},
+      {lbl:'자숙',   col:'#0e9f6e', rows: ck},
+      {lbl:'파쇄',   col:'#c27803', rows: sh},
+      {lbl:'포장',   col:'#7e3af2', rows: pk}
+    ];
+    bodyHtml = groups.filter(g=>g.rows && g.rows.length).map(g=>{
+      const bars = g.rows.map(r=>_bar({...r, lbl:g.lbl, col:g.col})).join('');
+      return `<div class="tlr"><div class="tll">${g.lbl}</div><div class="tlt">${bars}</div></div>`;
+    }).join('');
+  } else {
+    // 카트별 = 기존 동작 (각 row 1줄)
+    bodyHtml = all.map(r=>{
+      const bar=_bar(r);
+      if(!bar) return '';
+      return `<div class="tlr"><div class="tll">${r.lbl}</div><div class="tlt">${bar}</div></div>`;
+    }).join('');
+  }
+
   el.innerHTML=`<div class="tlw"><div class="tlg">
     <div class="tlh">${headHtml.join('')}</div>
-    ${all.map(r=>{
-      const s=toMin(r.start),e=toMin(r.end);
-      if(s===null||e===null) return '';
-      const left=r2((s-headStart)/range*100), width=r2((e-s)/range*100);
-      const ts=r.start?r.start.slice(0,5):'', te=r.end?r.end.slice(0,5):''; return `<div class="tlr"><div class="tll">${r.lbl}</div><div class="tlt"><div class="tlb" title="${r.lbl} ${ts}~${te}" style="left:${left}%;width:${Math.max(width,2)}%;background:${r.col}">${ts}-${te}</div></div></div>`;
-    }).join('')}
+    ${bodyHtml}
   </div></div>`;
 }
 

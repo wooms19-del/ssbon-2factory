@@ -507,7 +507,16 @@
       <tbody id="pkTbl"></tbody>
     </table></div>
   </div>
-  <div class="card"><div class="ct">공정 타임라인</div><div class="tlw" id="tlWrap"><div class="emp">데이터 없음</div></div></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="ct" style="margin:0">공정 타임라인</div>
+      <div id="tlMode" style="display:flex;gap:4px">
+        <button type="button" onclick="setTlMode('integrated')" id="tlModeIntegrated" class="btn bo bsm" style="font-size:11px;padding:3px 9px">통합</button>
+        <button type="button" onclick="setTlMode('byCart')" id="tlModeByCart" class="btn bo bsm" style="font-size:11px;padding:3px 9px">카트별</button>
+      </div>
+    </div>
+    <div class="tlw" id="tlWrap"><div class="emp">데이터 없음</div></div>
+  </div>
   </div>
 </div>
 
@@ -1025,7 +1034,7 @@
 <script src="js/packing.js?v=1778044749"></script>
 <script src="js/csv_upload.js?v=1777999449"></script>
 <script src="js/daily_report.js?v=1778039994"></script>
-<script src="js/analysis.js?v=1778074724"></script>
+<script src="js/analysis.js?v=1778075404"></script>
 <script src="js/ai_analysis.js?v=1778073418"></script>
 <script src="js/dashboard.js?v=1777999449"></script>
 <script src="js/trace.js?v=1777999449"></script>
