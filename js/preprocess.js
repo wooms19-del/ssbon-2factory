@@ -19,8 +19,9 @@ function updPpWagon(){
   const wagons=L.thawing.filter(t=>{
     const remain = t.remainKg!==undefined ? t.remainKg : t.totalKg;
     if(remain <= 0.01) return false;
+    // 진행중(end='') 대차도 전처리 가능 — 전처리 시작 시점에 자동 종료
     const e=String(t.end||'');
-    if(!e) return false;  // 진행중 → 전처리 불가
+    if(!e) return true;  // 진행중 → 전처리 가능 (시작 시 자동 종료)
     // end가 오늘 날짜로 종료
     if(e.length>=10 && e.slice(0,10)===_today) return true;
     // 'HH:MM' 옛 형식 → date가 오늘이어야
@@ -403,12 +404,14 @@ async function onPpStartBtn(){
     const cur=rec.remainKg!==undefined?rec.remainKg:rec.totalKg;
     const remain=r2(cur-deductKg);
     rec.remainKg=remain<0?0:remain;
-    if(remain<=0) rec.end=t;
+    // 방혈 종료 조건: (1) end 비어있으면 = 첫 전처리 시작 시점에 자동 종료, (2) 잔여 0 = 다 쓴 것
+    const wasOpen = !rec.end;
+    if(wasOpen || remain<=0) rec.end=t;
     saveL();
-    // ★ Firebase 업데이트 await + 실패 시 사용자 알림 (silent fail 방지)
     if(rec.fbId){
       const updateData={remainKg:rec.remainKg};
-      if(remain<=0) updateData.end=t;
+      // end가 방금 새로 박혔을 때만 Firebase 갱신
+      if(wasOpen || remain<=0) updateData.end=t;
       try {
         await fbUpdate('thawing', rec.fbId, updateData);
       } catch(e) {
