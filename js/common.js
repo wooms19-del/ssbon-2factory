@@ -34,6 +34,22 @@ db.collection('_config').doc('version').onSnapshot(function(snap){
 });
 
 // ============================================================
+// 🔄 BFCache 무효화 — 태블릿 잠금 풀고 페이지 부활 시 강제 reload
+// 문제: Chrome Android는 페이지를 메모리에 통째로 보존하는 BFCache 사용.
+//      잠금 풀 때 메모리에서 부활 → 옛 코드 그대로 실행.
+//      자동 reload listener도 1~2분 lag 있어 그 사이 옛 코드로 저장 가능.
+// 해결: pageshow 이벤트의 e.persisted=true (BFCache 부활) 시 즉시 reload.
+// 영향: 잠금 풀고 들어왔을 때 한 번 reload → 새 코드 보장.
+//      신규 페이지 진입은 영향 X (e.persisted=false).
+// ============================================================
+window.addEventListener('pageshow', function(e){
+  if(e.persisted){
+    console.log('[bfcache] 페이지 부활 감지 — reload (옛 코드 방지)');
+    location.reload();
+  }
+});
+
+// ============================================================
 // 🔧 STAGING MODE - production은 절대 영향받지 않음
 // ============================================================
 const _STAGING_MODE = false;
