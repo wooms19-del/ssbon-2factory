@@ -860,7 +860,7 @@ function _moRedrawDefChart(){
       endItems.forEach(item => {
         ctx.fillStyle = item.color;
         ctx.textAlign='left'; ctx.textBaseline='middle';
-        ctx.fillText(item.text, item.x+4, item.y);
+        ctx.fillText(item.text, item.x, item.y);
       });
       ctx.restore();
     }}
@@ -956,7 +956,7 @@ function _moRenderYieldChart(dailyYields) {
       endItems.forEach(item => {
         ctx.fillStyle = item.color;
         ctx.textAlign='left'; ctx.textBaseline='middle';
-        ctx.fillText(item.text, item.x+4, item.y);
+        ctx.fillText(item.text, item.x, item.y);
       });
       ctx.restore();
     }}
@@ -2679,7 +2679,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
         endItems.forEach(item => {
           ctx.fillStyle = item.color;
           ctx.textAlign='left'; ctx.textBaseline='middle';
-          ctx.fillText(item.text, item.x+4, item.y);
+          ctx.fillText(item.text, item.x, item.y);
         });
         ctx.restore();
       }}
@@ -2882,7 +2882,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
         endItems.forEach(item => {
           ctx.fillStyle = item.color;
           ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-          ctx.fillText(item.text, item.x+4, item.y);
+          ctx.fillText(item.text, item.x, item.y);
         });
         ctx.restore();
       }}
