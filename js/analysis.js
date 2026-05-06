@@ -811,17 +811,28 @@ function _moRedrawDefChart(){
   _moDefChart = new Chart(ctx2,{type:'line',plugins:[
     {id:'lineLbl',afterDatasetsDraw(chart){
       const {ctx}=chart; ctx.save();
-      chart.data.datasets.forEach((d,i)=>{
-        if(d.pointRadius===0) return;
-        chart.getDatasetMeta(i).data.forEach((pt,j)=>{
-          const v=d.data[j];
-          if(v==null) return;
-          const s=typeof v==='number'?v.toFixed(1)+'%':String(v);
-          ctx.fillStyle=d.borderColor||'#475569';
-          ctx.font='bold 9px sans-serif';
-          ctx.textAlign='center'; ctx.textBaseline='bottom';
-          ctx.fillText(s, pt.x, pt.y-5);
-        });
+      const ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
+      if(!ds || !meta) { ctx.restore(); return; }
+      ctx.font='bold 11px sans-serif';
+      meta.data.forEach((pt,j)=>{
+        const v=ds.data[j];
+        if(v==null) return;
+        const txt = (typeof v==='number'?v.toFixed(1):String(v))+'%';
+        const w = ctx.measureText(txt).width + 8;
+        const h = 16;
+        const goUp = (j % 2 === 0);
+        const cy = pt.y + (goUp ? -16 : 16);
+        const x = pt.x - w/2, y = cy - h/2;
+        const ptColor = (Array.isArray(ds.pointBackgroundColor) ? ds.pointBackgroundColor[j] : ds.pointBackgroundColor) || ds.borderColor || '#475569';
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = ptColor;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        if(ctx.roundRect) ctx.roundRect(x, y, w, h, 4); else ctx.rect(x, y, w, h);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = ptColor;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(txt, pt.x, cy);
       });
       ctx.restore();
     }},
@@ -854,7 +865,7 @@ function _moRedrawDefChart(){
       ctx.restore();
     }}
   ],data:{labels:labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,
-    layout:{padding:{right:60}},
+    layout:{padding:{right:60, top:20, bottom:14}},
     plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,usePointStyle:true}},
              tooltip:{callbacks:{label:v=>v.raw!=null?v.raw+'%':'—'}}},
     scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
@@ -899,17 +910,28 @@ function _moRenderYieldChart(dailyYields) {
   _moYieldChart=new Chart(canvas,{plugins:[
     {id:'lineLbl',afterDatasetsDraw(chart){
       const {ctx}=chart; ctx.save();
-      chart.data.datasets.forEach((ds,i)=>{
-        if(ds.pointRadius===0||ds.pointRadius===undefined&&ds.borderDash) return;
-        chart.getDatasetMeta(i).data.forEach((pt,j)=>{
-          const v=ds.data[j];
-          if(v==null) return;
-          const s=typeof v==='number'?v.toFixed(1)+'%':String(v);
-          ctx.fillStyle=ds.borderColor||'#475569';
-          ctx.font='bold 9px sans-serif';
-          ctx.textAlign='center'; ctx.textBaseline='bottom';
-          ctx.fillText(s, pt.x, pt.y-5);
-        });
+      const ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
+      if(!ds || !meta) { ctx.restore(); return; }
+      ctx.font='bold 11px sans-serif';
+      meta.data.forEach((pt,j)=>{
+        const v=ds.data[j];
+        if(v==null) return;
+        const txt = (typeof v==='number'?v.toFixed(1):String(v))+'%';
+        const w = ctx.measureText(txt).width + 8;
+        const h = 16;
+        const goUp = (j % 2 === 0);
+        const cy = pt.y + (goUp ? -16 : 16);
+        const x = pt.x - w/2, y = cy - h/2;
+        const ptColor = (Array.isArray(ds.pointBackgroundColor) ? ds.pointBackgroundColor[j] : ds.pointBackgroundColor) || ds.borderColor || '#475569';
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = ptColor;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        if(ctx.roundRect) ctx.roundRect(x, y, w, h, 4); else ctx.rect(x, y, w, h);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = ptColor;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(txt, pt.x, cy);
       });
       ctx.restore();
     }},
@@ -942,7 +964,7 @@ function _moRenderYieldChart(dailyYields) {
     type:'line',
     data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,
-      layout:{padding:{right:60}},
+      layout:{padding:{right:60, top:20, bottom:14}},
       plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,usePointStyle:true}},
                tooltip:{callbacks:{label:v=>v.dataset.label+': '+v.raw+'%'}}},
       scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
