@@ -2667,7 +2667,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
           const meta = chart.getDatasetMeta(i).data;
           if(!meta.length) return;
           const lastPt = meta[meta.length-1];
-          endItems.push({ y: lastPt.y, x: chartArea.right, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
+          endItems.push({ y: lastPt.y, x: chartArea.right, fromX: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
         });
         endItems.sort((a,b) => a.y - b.y);
         const MIN_GAP = 14;
@@ -2676,6 +2676,18 @@ function renderPackingChart(dayEntries, opMap, ym) {
             endItems[i].y = endItems[i-1].y + MIN_GAP;
           }
         }
+        // 점선 연장: bar 마지막 위치(fromX) → chartArea.right (item.x)
+        endItems.forEach(item => {
+          if(item.fromX >= item.x - 1) return;
+          ctx.strokeStyle = item.color;
+          ctx.lineWidth = item.bw;
+          ctx.setLineDash(item.dash);
+          ctx.beginPath();
+          ctx.moveTo(item.fromX, item.y);
+          ctx.lineTo(item.x, item.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        });
         endItems.forEach(item => {
           ctx.fillStyle = item.color;
           ctx.textAlign='left'; ctx.textBaseline='middle';
@@ -2870,7 +2882,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
           const meta = chart.getDatasetMeta(i).data;
           if(!meta.length) return;
           const lastPt = meta[meta.length-1];
-          endItems.push({ y: lastPt.y, x: chartArea.right, text: ' '+d._endLabel, color: d.borderColor || '#475569' });
+          endItems.push({ y: lastPt.y, x: chartArea.right, fromX: lastPt.x, text: ' '+d._endLabel, color: d.borderColor || '#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
         });
         endItems.sort((a,b) => a.y - b.y);
         const MIN_GAP = 14;
@@ -2879,6 +2891,18 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
             endItems[i].y = endItems[i-1].y + MIN_GAP;
           }
         }
+        // 점선 연장: bar 마지막 위치(fromX) → chartArea.right (item.x)
+        endItems.forEach(item => {
+          if(item.fromX >= item.x - 1) return;
+          ctx.strokeStyle = item.color;
+          ctx.lineWidth = item.bw;
+          ctx.setLineDash(item.dash);
+          ctx.beginPath();
+          ctx.moveTo(item.fromX, item.y);
+          ctx.lineTo(item.x, item.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        });
         endItems.forEach(item => {
           ctx.fillStyle = item.color;
           ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
