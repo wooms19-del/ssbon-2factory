@@ -1799,11 +1799,12 @@ function renderDailyFromLocal_(d){
   const _pkDone = _isPackingDone();
 
   // metric: 완료 + 최소량 모두 통과해야 분석 (= 알람) 표시
+  const _ppOYld = (_hasProduction && ppKg > 0 && rmKg > 0) ? r2(ppKg/rmKg*100) : null;
   const _ckOYld = (_hasProduction && ckKg >= _MIN_CK_KG && _ckDone) ? r2(ckKg/rmKg*100) : null;
   const _shOYld = (_hasProduction && shKg >= _MIN_SH_KG && _shDone) ? r2(shKg/rmKg*100) : null;
   const _pkOYld = (_hasProduction && pk.length > 0 && _pkDone) ? oYld : null;
   if(typeof renderDailyAlerts === 'function'){
-    renderDailyAlerts({ cooking: _ckOYld, shredding: _shOYld, packing: _pkOYld }, d);
+    renderDailyAlerts({ preprocess: _ppOYld, cooking: _ckOYld, shredding: _shOYld, packing: _pkOYld }, d);
   }
 
   // 공정별 현황 - 파쇄 원육타입: 연결된 자숙 레코드에서 type 가져오기
@@ -3377,28 +3378,26 @@ async function _buildChartSheet(mainBuf, y, m) {
 }
 
 // ============================================================
-// 일별 알람 카드 렌더링 (자숙/파쇄/포장 원육수율 이상 탐지)
-// 임계값은 LocalStorage에서 로드 (settings 페이지에서 조정 가능)
-// 기본값: 4월 30일치 데이터 기반 평균 ± nσ
+// 일별 알람 카드 렌더링 (전처리/자숙/파쇄/포장 원육수율 이상 탐지)
+// 임계값은 Firestore에서 로드 (settings 페이지에서 조정 가능)
+// 사용자가 노란/빨간 차감(%P) 직접 입력 — 평균에서 X%P 떨어지면 알람
 // ============================================================
 const ALARM_DEFAULTS_FALLBACK = {
-  cooking:   { mean: 54.50, std: 1.27, enabled: true },
-  shredding: { mean: 50.83, std: 2.77, enabled: true },
-  packing:   { mean: 50.67, std: 7.23, enabled: true }
+  preprocess: { mean: 0,     yel: 2, red: 3, enabled: true },
+  cooking:    { mean: 54.50, yel: 2, red: 3, enabled: true },
+  shredding:  { mean: 50.83, yel: 2, red: 3, enabled: true },
+  packing:    { mean: 50.67, yel: 2, red: 3, enabled: true }
 };
 const ALARM_LABEL = {
-  cooking:   '자숙 원육수율',
-  shredding: '파쇄 원육수율',
-  packing:   '포장 원육수율'
+  preprocess: '전처리 원육수율',
+  cooking:    '자숙 원육수율',
+  shredding:  '파쇄 원육수율',
+  packing:    '포장 원육수율'
 };
 
 function _getAlarmThresholds(){
-  // 우선순위: settings.js의 동기 헬퍼 → localStorage 캐시 → 기본값
+  // settings.js의 동기 헬퍼 → 기본값 (localStorage 사용 X)
   if(typeof getAlarmThresholdsSync === 'function') return getAlarmThresholdsSync();
-  try{
-    const s = localStorage.getItem('ssbon_v6_alarm_thresholds_cache');
-    if(s) return JSON.parse(s);
-  }catch(e){}
   return JSON.parse(JSON.stringify(ALARM_DEFAULTS_FALLBACK));
 }
 
@@ -3408,19 +3407,22 @@ function renderDailyAlerts(metrics, dateStr){
 
   const T = _getAlarmThresholds();
   const alerts = [];
-  ['cooking','shredding','packing'].forEach(k => {
+  ['preprocess','cooking','shredding','packing'].forEach(k => {
     const t = T[k];
     if(!t || !t.enabled) return;
     const v = metrics[k];
     if(v == null || isNaN(v)) return;
 
+    const yel = (typeof t.yel === 'number') ? t.yel : (t.std ? t.std*2 : 2);
+    const red = (typeof t.red === 'number') ? t.red : (t.std ? t.std*3 : 3);
+
     let level = 'green';
-    if(v <= t.mean - 3*t.std) level = 'red';
-    else if(v <= t.mean - 2*t.std) level = 'yellow';
+    if(v <= t.mean - red) level = 'red';
+    else if(v <= t.mean - yel) level = 'yellow';
 
     if(level !== 'green'){
-      const dev = ((v - t.mean) / t.std).toFixed(1);
-      alerts.push({ key: k, label: ALARM_LABEL[k], value: v, mean: t.mean, level, dev });
+      const diff = (v - t.mean).toFixed(2);  // 음수 (평소 대비 떨어진 %P)
+      alerts.push({ key: k, label: ALARM_LABEL[k], value: v, mean: t.mean, level, diff });
     }
   });
 
@@ -3441,7 +3443,7 @@ function renderDailyAlerts(metrics, dateStr){
       <span style="font-size:14px;color:${c.bd}">${c.icon}</span>
       <div style="flex:1">
         <div style="font-weight:600;font-size:13px">${a.label} ${c.word}</div>
-        <div style="font-size:11px;opacity:0.85">평소 ${a.mean.toFixed(2)}% · 오늘 <b>${a.value.toFixed(2)}%</b> (평소 대비 ${a.dev}σ)</div>
+        <div style="font-size:11px;opacity:0.85">평소 ${a.mean.toFixed(2)}% · 오늘 <b>${a.value.toFixed(2)}%</b> (평소 대비 ${a.diff}%P)</div>
       </div>
     </div>`;
   }).join('');

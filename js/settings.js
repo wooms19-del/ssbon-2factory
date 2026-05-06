@@ -357,18 +357,19 @@ function startEditProd(i){
 
 
 // ============================================================
-// 알람 임계값 관리 (Firebase + LocalStorage 캐시)
+// 알람 임계값 관리 (Firestore만 사용, localStorage X)
+// 룰: 사용자가 노란/빨간 차감(%P) 직접 입력. 임계 = 평균 - 차감
 // ============================================================
-const ALARM_LS_CACHE_KEY = 'ssbon_v6_alarm_thresholds_cache';
 const ALARM_FB_COL = 'config';
 const ALARM_FB_DOC = 'alarms';
 const ALARM_DEFAULTS = {
-  cooking:   { mean: 54.50, std: 1.27, enabled: true },
-  shredding: { mean: 50.83, std: 2.77, enabled: true },
-  packing:   { mean: 50.67, std: 7.23, enabled: true }
+  preprocess: { mean: 0,     yel: 2, red: 3, enabled: true },
+  cooking:    { mean: 54.50, yel: 2, red: 3, enabled: true },
+  shredding:  { mean: 50.83, yel: 2, red: 3, enabled: true },
+  packing:    { mean: 50.67, yel: 2, red: 3, enabled: true }
 };
 
-// 메모리 캐시 (페이지 시작 시 Firebase에서 로드된 값)
+// 메모리 캐시 (페이지 시작 시 Firestore에서 로드)
 window._alarmThresholdsCache = null;
 
 async function loadAlarmThresholdsFromFb(){
@@ -376,61 +377,54 @@ async function loadAlarmThresholdsFromFb(){
     const doc = await firebase.firestore().collection(ALARM_FB_COL).doc(ALARM_FB_DOC).get();
     if(doc.exists){
       const data = doc.data();
+      // 옛 σ 기반 데이터 자동 마이그레이션 (std → yel/red)
+      ['preprocess','cooking','shredding','packing'].forEach(k => {
+        if(data[k]){
+          if(typeof data[k].std === 'number' && typeof data[k].yel !== 'number'){
+            data[k].yel = +(data[k].std * 2).toFixed(2);
+            data[k].red = +(data[k].std * 3).toFixed(2);
+            delete data[k].std;
+          }
+          if(typeof data[k].yel !== 'number') data[k].yel = ALARM_DEFAULTS[k].yel;
+          if(typeof data[k].red !== 'number') data[k].red = ALARM_DEFAULTS[k].red;
+        } else {
+          data[k] = JSON.parse(JSON.stringify(ALARM_DEFAULTS[k]));
+        }
+      });
       window._alarmThresholdsCache = data;
-      // LocalStorage에도 백업
-      try{ localStorage.setItem(ALARM_LS_CACHE_KEY, JSON.stringify(data)); }catch(e){}
       return data;
     }
-  }catch(e){ console.warn('알람 임계값 Firebase 로드 실패:', e.message); }
-  // 폴백: LocalStorage 캐시 → 기본값
-  try{
-    const cached = localStorage.getItem(ALARM_LS_CACHE_KEY);
-    if(cached){
-      const data = JSON.parse(cached);
-      window._alarmThresholdsCache = data;
-      return data;
-    }
-  }catch(e){}
+  }catch(e){ console.warn('알람 임계값 Firestore 로드 실패:', e.message); }
+  // 폴백: 기본값 (localStorage 사용 X)
   window._alarmThresholdsCache = JSON.parse(JSON.stringify(ALARM_DEFAULTS));
   return window._alarmThresholdsCache;
 }
 
 function getAlarmThresholdsSync(){
-  // renderDailyAlerts 등에서 쓸 동기 버전
   if(window._alarmThresholdsCache) return window._alarmThresholdsCache;
-  try{
-    const cached = localStorage.getItem(ALARM_LS_CACHE_KEY);
-    if(cached) return JSON.parse(cached);
-  }catch(e){}
   return JSON.parse(JSON.stringify(ALARM_DEFAULTS));
 }
 
 async function saveAlarmThresholds(){
+  const readRow = (prefix) => ({
+    mean:    parseFloat(document.getElementById(prefix+'_mean').value)||0,
+    yel:     parseFloat(document.getElementById(prefix+'_yel').value)||0,
+    red:     parseFloat(document.getElementById(prefix+'_red').value)||0,
+    enabled: document.getElementById(prefix+'_on').checked
+  });
   const data = {
-    cooking: {
-      mean: parseFloat(document.getElementById('al_ck_mean').value)||ALARM_DEFAULTS.cooking.mean,
-      std:  parseFloat(document.getElementById('al_ck_std').value)||ALARM_DEFAULTS.cooking.std,
-      enabled: document.getElementById('al_ck_on').checked
-    },
-    shredding: {
-      mean: parseFloat(document.getElementById('al_sh_mean').value)||ALARM_DEFAULTS.shredding.mean,
-      std:  parseFloat(document.getElementById('al_sh_std').value)||ALARM_DEFAULTS.shredding.std,
-      enabled: document.getElementById('al_sh_on').checked
-    },
-    packing: {
-      mean: parseFloat(document.getElementById('al_pk_mean').value)||ALARM_DEFAULTS.packing.mean,
-      std:  parseFloat(document.getElementById('al_pk_std').value)||ALARM_DEFAULTS.packing.std,
-      enabled: document.getElementById('al_pk_on').checked
-    },
+    preprocess: readRow('al_pp'),
+    cooking:    readRow('al_ck'),
+    shredding:  readRow('al_sh'),
+    packing:    readRow('al_pk'),
     _updatedAt: new Date().toISOString()
   };
   try{
     await firebase.firestore().collection(ALARM_FB_COL).doc(ALARM_FB_DOC).set(data);
     window._alarmThresholdsCache = data;
-    try{ localStorage.setItem(ALARM_LS_CACHE_KEY, JSON.stringify(data)); }catch(e){}
     updAlarmThresholdLabels();
     const msg = document.getElementById('al_save_msg');
-    if(msg){ msg.textContent = '✓ Firebase 저장 완료. 모든 디바이스에 적용됨 (다음 새로고침 시).'; setTimeout(()=>{msg.textContent='';},5000); }
+    if(msg){ msg.textContent = '✓ 저장 완료. 모든 디바이스에 적용됨.'; setTimeout(()=>{msg.textContent='';},5000); }
     if(typeof toast === 'function') toast('알람 임계값 저장됨','s');
     if(typeof renderDaily === 'function') renderDaily();
   }catch(e){
@@ -440,53 +434,47 @@ async function saveAlarmThresholds(){
 }
 
 function resetAlarmThresholds(){
-  if(!confirm('4월 기본값으로 초기화하시겠습니까?')) return;
-  const d = ALARM_DEFAULTS;
-  document.getElementById('al_ck_mean').value = d.cooking.mean;
-  document.getElementById('al_ck_std').value = d.cooking.std;
-  document.getElementById('al_ck_on').checked = true;
-  document.getElementById('al_sh_mean').value = d.shredding.mean;
-  document.getElementById('al_sh_std').value = d.shredding.std;
-  document.getElementById('al_sh_on').checked = true;
-  document.getElementById('al_pk_mean').value = d.packing.mean;
-  document.getElementById('al_pk_std').value = d.packing.std;
-  document.getElementById('al_pk_on').checked = true;
-  saveAlarmThresholds();
+  // (사용 안 함 — UI에서 버튼 제거됨. 호환용 빈 껍질)
 }
 
 function updAlarmThresholdLabels(){
   const update = (prefix)=>{
     const m = parseFloat(document.getElementById(prefix+'_mean').value)||0;
-    const s = parseFloat(document.getElementById(prefix+'_std').value)||0;
+    const yel = parseFloat(document.getElementById(prefix+'_yel').value)||0;
+    const red = parseFloat(document.getElementById(prefix+'_red').value)||0;
     const yEl = document.getElementById(prefix+'_y');
     const rEl = document.getElementById(prefix+'_r');
-    if(yEl) yEl.textContent = (m-2*s).toFixed(2)+'%↓';
-    if(rEl) rEl.textContent = (m-3*s).toFixed(2)+'%↓';
+    if(yEl) yEl.textContent = (m-yel).toFixed(2)+'%↓';
+    if(rEl) rEl.textContent = (m-red).toFixed(2)+'%↓';
   };
-  update('al_ck'); update('al_sh'); update('al_pk');
+  update('al_pp'); update('al_ck'); update('al_sh'); update('al_pk');
 }
 
 async function loadAlarmThresholdsToUI(){
-  // settings 페이지 진입 시 호출 - Firebase에서 최신 가져와서 UI에 채움
   let t = window._alarmThresholdsCache;
-  if(!t){
-    t = await loadAlarmThresholdsFromFb();
-  }
+  if(!t){ t = await loadAlarmThresholdsFromFb(); }
   const set = (id, v)=>{ const el = document.getElementById(id); if(el && v != null) el.value = v; };
   const setChk = (id, v)=>{ const el = document.getElementById(id); if(el) el.checked = !!v; };
-  set('al_ck_mean', t.cooking?.mean); set('al_ck_std', t.cooking?.std); setChk('al_ck_on', t.cooking?.enabled);
-  set('al_sh_mean', t.shredding?.mean); set('al_sh_std', t.shredding?.std); setChk('al_sh_on', t.shredding?.enabled);
-  set('al_pk_mean', t.packing?.mean); set('al_pk_std', t.packing?.std); setChk('al_pk_on', t.packing?.enabled);
+  const fill = (prefix, key) => {
+    const r = t[key] || ALARM_DEFAULTS[key];
+    set(prefix+'_mean', r.mean);
+    set(prefix+'_yel', r.yel);
+    set(prefix+'_red', r.red);
+    setChk(prefix+'_on', r.enabled);
+  };
+  fill('al_pp','preprocess');
+  fill('al_ck','cooking');
+  fill('al_sh','shredding');
+  fill('al_pk','packing');
   updAlarmThresholdLabels();
-  // 입력 변경 시 라벨 자동 갱신 리스너 (1회만 등록)
-  ['al_ck_mean','al_ck_std','al_sh_mean','al_sh_std','al_pk_mean','al_pk_std'].forEach(id=>{
+  // 입력 변경 시 라벨 자동 갱신
+  ['al_pp_mean','al_pp_yel','al_pp_red','al_ck_mean','al_ck_yel','al_ck_red','al_sh_mean','al_sh_yel','al_sh_red','al_pk_mean','al_pk_yel','al_pk_red'].forEach(id=>{
     const el = document.getElementById(id);
     if(el && !el._alarmListenerSet){
       el.addEventListener('input', updAlarmThresholdLabels);
       el._alarmListenerSet = true;
     }
   });
-  // 마지막 저장 시각 표시
   if(t._updatedAt){
     const msg = document.getElementById('al_save_msg');
     if(msg){
@@ -498,7 +486,7 @@ async function loadAlarmThresholdsToUI(){
 }
 
 async function recalcAlarmFromData(){
-  if(!confirm('최근 30일 데이터로 평균과 편차를 자동 계산하시겠습니까?')) return;
+  if(!confirm('최근 30일 데이터로 평균을 자동 계산하시겠습니까? (차감값은 그대로 유지)')) return;
   if(typeof toast==='function') toast('계산 중...','i');
   const today = new Date();
   const start = new Date(today); start.setDate(start.getDate()-30);
@@ -521,10 +509,10 @@ async function recalcAlarmFromData(){
   };
 
   try{
-    const [th, ck, sh, pk] = await Promise.all([fetchCol('thawing'),fetchCol('cooking'),fetchCol('shredding'),fetchCol('packing')]);
+    const [th, pp, ck, sh, pk] = await Promise.all([fetchCol('thawing'),fetchCol('preprocess'),fetchCol('cooking'),fetchCol('shredding'),fetchCol('packing')]);
     const byDate = (recs, key='kg')=>{ const m={}; recs.forEach(r=>{if(r.date){m[r.date]=(m[r.date]||0)+(parseFloat(r[key])||0);}}); return m; };
     const rmBy = byDate(th, 'totalKg');
-    const ckBy = byDate(ck), shBy = byDate(sh);
+    const ppBy = byDate(pp), ckBy = byDate(ck), shBy = byDate(sh);
 
     const pkRawBy = {};
     pk.forEach(r=>{
@@ -534,29 +522,29 @@ async function recalcAlarmFromData(){
       pkRawBy[r.date] = (pkRawBy[r.date]||0) + (parseFloat(r.ea)||0)*kgea;
     });
 
-    const ckYields=[], shYields=[], pkYields=[];
+    const ppYields=[], ckYields=[], shYields=[], pkYields=[];
     Object.keys(rmBy).forEach(d=>{
       const rm = rmBy[d]; if(rm < 100) return;
+      if(ppBy[d]>0){ const y = ppBy[d]/rm*100; if(20<y && y<100) ppYields.push(y); }
       if(ckBy[d]>0){ const y = ckBy[d]/rm*100; if(20<y && y<100) ckYields.push(y); }
       if(shBy[d]>0){ const y = shBy[d]/rm*100; if(20<y && y<100) shYields.push(y); }
       if(pkRawBy[d]>0){ const y = pkRawBy[d]/rm*100; if(20<y && y<100) pkYields.push(y); }
     });
 
-    const stat = arr=>{
+    const meanOf = arr=>{
       if(arr.length<3) return null;
-      const m = arr.reduce((a,b)=>a+b,0)/arr.length;
-      const v = arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length;
-      return {mean: m, std: Math.sqrt(v), n: arr.length};
+      return { mean: arr.reduce((a,b)=>a+b,0)/arr.length, n: arr.length };
     };
-    const sCk = stat(ckYields), sSh = stat(shYields), sPk = stat(pkYields);
+    const sPp = meanOf(ppYields), sCk = meanOf(ckYields), sSh = meanOf(shYields), sPk = meanOf(pkYields);
 
-    if(sCk){ document.getElementById('al_ck_mean').value = sCk.mean.toFixed(2); document.getElementById('al_ck_std').value = sCk.std.toFixed(2); }
-    if(sSh){ document.getElementById('al_sh_mean').value = sSh.mean.toFixed(2); document.getElementById('al_sh_std').value = sSh.std.toFixed(2); }
-    if(sPk){ document.getElementById('al_pk_mean').value = sPk.mean.toFixed(2); document.getElementById('al_pk_std').value = sPk.std.toFixed(2); }
+    if(sPp){ document.getElementById('al_pp_mean').value = sPp.mean.toFixed(2); }
+    if(sCk){ document.getElementById('al_ck_mean').value = sCk.mean.toFixed(2); }
+    if(sSh){ document.getElementById('al_sh_mean').value = sSh.mean.toFixed(2); }
+    if(sPk){ document.getElementById('al_pk_mean').value = sPk.mean.toFixed(2); }
     updAlarmThresholdLabels();
     const msg = document.getElementById('al_save_msg');
-    if(msg){ msg.textContent = `✓ 자동계산 완료 (자숙 n=${sCk?.n||0}, 파쇄 n=${sSh?.n||0}, 포장 n=${sPk?.n||0}). 저장 버튼을 눌러야 적용됩니다.`; msg.style.color='var(--s)'; }
-    if(typeof toast==='function') toast('자동계산 완료. 저장 누르세요.','s');
+    if(msg){ msg.textContent = `✓ 평균 자동계산 완료 (전처리 n=${sPp?.n||0}, 자숙 n=${sCk?.n||0}, 파쇄 n=${sSh?.n||0}, 포장 n=${sPk?.n||0}). 저장 버튼을 눌러야 적용됩니다.`; msg.style.color='var(--s)'; }
+    if(typeof toast==='function') toast('평균 자동계산 완료. 저장 누르세요.','s');
   }catch(e){
     if(typeof toast==='function') toast('자동계산 실패: '+e.message,'d');
     console.error(e);

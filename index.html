@@ -867,49 +867,62 @@
     <div class="acc-body closed" id="acc-alarm">
       <div style="padding-top:1rem">
         <div style="font-size:11.5px;color:var(--g5);margin-bottom:12px;line-height:1.5">
-          공정별 원육수율이 평소 평균에서 ±N표준편차(σ) 만큼 벗어나면 알람이 울립니다.<br>
-          기본값은 <b>4월 데이터 30일치</b>로 자동 산출됨. 운영하면서 조정 가능.
+          공정별 평소 평균에서 <b>입력한 %P만큼 떨어지면</b> 알람이 울립니다.<br>
+          예: 평균 54.5% / 노란 -2 / 빨간 -3 → 노란 임계 52.5% / 빨간 임계 51.5%<br>
+          평균은 <b>최근 30일 데이터로 자동 계산</b>. 차감값은 운영하면서 조정하세요.
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="background:var(--g1)">
             <th style="text-align:left;padding:6px 8px;width:80px">공정</th>
             <th style="text-align:right;padding:6px 8px">평균(%)</th>
-            <th style="text-align:right;padding:6px 8px">편차σ(%)</th>
+            <th style="text-align:right;padding:6px 8px">노란 차감(%P)</th>
+            <th style="text-align:right;padding:6px 8px">빨간 차감(%P)</th>
             <th style="text-align:right;padding:6px 8px">노란 임계</th>
             <th style="text-align:right;padding:6px 8px">빨간 임계</th>
             <th style="text-align:center;padding:6px 8px;width:50px">사용</th>
           </tr></thead>
           <tbody>
             <tr>
+              <td style="padding:6px 8px;font-weight:600;color:#1D4ED8">전처리</td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_pp_mean" style="width:100%;text-align:right" value="0"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_pp_yel" style="width:100%;text-align:right" value="2"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_pp_red" style="width:100%;text-align:right" value="3"></td>
+              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_pp_y">—</td>
+              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_pp_r">—</td>
+              <td style="padding:6px 8px;text-align:center"><input type="checkbox" id="al_pp_on" checked style="width:16px;height:16px"></td>
+            </tr>
+            <tr>
               <td style="padding:6px 8px;font-weight:600;color:#0D9488">자숙</td>
               <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_ck_mean" style="width:100%;text-align:right" value="54.50"></td>
-              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_ck_std" style="width:100%;text-align:right" value="1.27"></td>
-              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_ck_y">51.97%↓</td>
-              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_ck_r">50.71%↓</td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_ck_yel" style="width:100%;text-align:right" value="2"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_ck_red" style="width:100%;text-align:right" value="3"></td>
+              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_ck_y">—</td>
+              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_ck_r">—</td>
               <td style="padding:6px 8px;text-align:center"><input type="checkbox" id="al_ck_on" checked style="width:16px;height:16px"></td>
             </tr>
             <tr>
               <td style="padding:6px 8px;font-weight:600;color:#B45309">파쇄</td>
               <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_sh_mean" style="width:100%;text-align:right" value="50.83"></td>
-              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_sh_std" style="width:100%;text-align:right" value="2.77"></td>
-              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_sh_y">45.29%↓</td>
-              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_sh_r">42.53%↓</td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_sh_yel" style="width:100%;text-align:right" value="2"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_sh_red" style="width:100%;text-align:right" value="3"></td>
+              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_sh_y">—</td>
+              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_sh_r">—</td>
               <td style="padding:6px 8px;text-align:center"><input type="checkbox" id="al_sh_on" checked style="width:16px;height:16px"></td>
             </tr>
             <tr>
-              <td style="padding:6px 8px;font-weight:600;color:#B45309">포장</td>
+              <td style="padding:6px 8px;font-weight:600;color:#7C3AED">포장</td>
               <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_pk_mean" style="width:100%;text-align:right" value="50.67"></td>
-              <td style="padding:6px 8px"><input class="fc" type="number" step="0.01" id="al_pk_std" style="width:100%;text-align:right" value="7.23"></td>
-              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_pk_y">36.20%↓</td>
-              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_pk_r">28.97%↓</td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_pk_yel" style="width:100%;text-align:right" value="2"></td>
+              <td style="padding:6px 8px"><input class="fc" type="number" step="0.1" id="al_pk_red" style="width:100%;text-align:right" value="3"></td>
+              <td style="padding:6px 8px;text-align:right;color:#92400E;font-family:monospace" id="al_pk_y">—</td>
+              <td style="padding:6px 8px;text-align:right;color:#991B1B;font-family:monospace" id="al_pk_r">—</td>
               <td style="padding:6px 8px;text-align:center"><input type="checkbox" id="al_pk_on" checked style="width:16px;height:16px"></td>
             </tr>
           </tbody>
         </table>
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn bs bsm" onclick="saveAlarmThresholds()">💾 저장</button>
-          <button class="btn bo bsm" onclick="resetAlarmThresholds()">⟲ 4월 기본값으로</button>
-          <button class="btn bo bsm" onclick="recalcAlarmFromData()">🔄 최근 30일로 자동계산</button>
+          <button class="btn bo bsm" onclick="recalcAlarmFromData()">🔄 평균 자동계산 (최근 30일)</button>
         </div>
         <div id="al_save_msg" style="margin-top:8px;font-size:11px;color:var(--s)"></div>
       </div>
@@ -1058,12 +1071,12 @@
 <script src="js/packing.js?v=1778044749"></script>
 <script src="js/csv_upload.js?v=1777999449"></script>
 <script src="js/daily_report.js?v=1778039994"></script>
-<script src="js/analysis.js?v=1778078750"></script>
+<script src="js/analysis.js?v=1778079314"></script>
 <script src="js/ai_analysis.js?v=1778073418"></script>
 <script src="js/dashboard.js?v=1778078750"></script>
 <script src="js/trace.js?v=1777999449"></script>
 <script src="js/outerpacking.js?v=1778041719"></script>
-<script src="js/settings.js?v=1778078750"></script>
+<script src="js/settings.js?v=1778079314"></script>
 <script src="js/kakao.js?v=1777999449"></script>
 <script src="js/app.js?v=1777999449"></script>
 <script src="js/schedule.js?v=1777999449"></script>
