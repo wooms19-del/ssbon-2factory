@@ -2105,6 +2105,32 @@ function renderDailyFromLocal_(d){
 var _tlMode = 'integrated';  // 'integrated' | 'byCart'
 var _tlData = null;          // 마지막 데이터 캐시 (pp,ck,sh,pk)
 
+// 막대 클릭 = 스티커 고정 토글. 한 번에 한 개만.
+function tlPin(barEl){
+  if(!barEl) return;
+  const wrap = document.getElementById('tlWrap');
+  if(!wrap) return;
+  // 이미 핀되어 있던 막대?
+  const wasPinned = barEl.classList.contains('tlPinned');
+  // 기존 핀/스티커 모두 제거
+  wrap.querySelectorAll('.tlPinned').forEach(el => el.classList.remove('tlPinned'));
+  wrap.querySelectorAll('.tlSticker').forEach(el => el.remove());
+  if(wasPinned) return;  // 같은 막대 다시 클릭 = 해제
+  // 새로 핀
+  barEl.classList.add('tlPinned');
+  const txt = barEl.getAttribute('data-sticker') || '';
+  const sticker = document.createElement('div');
+  sticker.className = 'tlSticker';
+  sticker.textContent = txt;
+  // 막대 부모(.tlt)에 붙여서 X 좌표 동일선상에 위치
+  const parent = barEl.parentElement;
+  if(!parent) return;
+  // 막대의 left%를 그대로 사용
+  const left = barEl.style.left || '0%';
+  sticker.style.left = left;
+  parent.appendChild(sticker);
+}
+
 function setTlMode(mode){
   if(mode !== 'integrated' && mode !== 'byCart') return;
   _tlMode = mode;
@@ -2159,7 +2185,13 @@ function renderTL(pp,ck,sh,pk){
     if(r.product) titleParts.push(r.product);
     if(r.cart) titleParts.push('카트 '+r.cart);
     else if(r.wagons) titleParts.push('카트 '+r.wagons);
-    return `<div class="tlb" title="${titleParts.join(' · ')}" style="left:${left}%;width:${Math.max(width,1.2)}%;background:${r.col}">${inner}</div>`;
+    // 스티커용 라벨 (시간 + 부위/제품 등)
+    const stickerParts=[`${ts}~${te}`];
+    if(r.type) stickerParts.push(r.type);
+    if(r.product) stickerParts.push(r.product);
+    const stickerText = stickerParts.join(' · ').replace(/"/g,'&quot;');
+    const clickAttr = (_tlMode==='integrated') ? ` onclick="tlPin(this)" data-sticker="${stickerText}"` : '';
+    return `<div class="tlb" title="${titleParts.join(' · ')}"${clickAttr} style="left:${left}%;width:${Math.max(width,1.2)}%;background:${r.col}">${inner}</div>`;
   };
 
   let bodyHtml = '';
