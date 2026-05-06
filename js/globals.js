@@ -1,6 +1,9 @@
 // 모든 함수가 로드된 후 window 등록
 document.addEventListener('DOMContentLoaded', function() {
   window.saveSettings = saveSettings;
+  window.saveTargets = saveTargets;
+  window.getTargets = getTargets;
+  window.renderTargetsForm = renderTargetsForm;
   window.showTab = showTab;
   window.savePkEdit = savePkEdit;
   window.chMonth = chMonth;

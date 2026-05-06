@@ -403,6 +403,8 @@ async function renderDbWeekChart(from,to,period){
 
 function renderSettings(){
   updateAccCounts();
+  // 분석 목표 form 채우기
+  if(typeof renderTargetsForm === 'function') renderTargetsForm();
   // 제품 목록
   const pdEl = document.getElementById('pdList');
   if(pdEl){

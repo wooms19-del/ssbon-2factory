@@ -715,13 +715,17 @@ window._moClearFilter = function() {
 function _moRenderYieldKPI(totRm, totPkKg, avgYld, workDays, goodDays, lossKg) {
   const el=document.getElementById('mo_yield_kpi');
   if(!el) return;
-  const yldColor=avgYld>=55?'#047857':avgYld>=52?'#1d4ed8':avgYld>=50?'#c2410c':'#b91c1c';
-  const yldBg=avgYld>=55?'#ecfdf5':avgYld>=52?'#eff6ff':avgYld>=50?'#fff7ed':'#fef2f2';
+  const _T = (typeof getTargets === 'function') ? getTargets() : {yieldGoal:55, yieldDanger:50};
+  const _G = _T.yieldGoal;  // 목표 (예: 55)
+  const _D = _T.yieldDanger;  // 위험 (예: 50)
+  const _W = _G - 3;  // 주의 (목표-3, 예: 52)
+  const yldColor=avgYld>=_G?'#047857':avgYld>=_W?'#1d4ed8':avgYld>=_D?'#c2410c':'#b91c1c';
+  const yldBg=avgYld>=_G?'#ecfdf5':avgYld>=_W?'#eff6ff':avgYld>=_D?'#fff7ed':'#fef2f2';
   const lossIsGain=lossKg<=0;
   const lossColor=lossIsGain?'#047857':'#b91c1c';
   const lossIcon=lossIsGain?'▲':'▼';
   const lossLabel=lossIsGain?'목표 초과 절감':'목표 대비 손실';
-  const pct=Math.min(100,avgYld>0?avgYld/55*100:0);
+  const pct=Math.min(100,avgYld>0?avgYld/_G*100:0);
   const fmt=v=>v>0?v.toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1}):'—';
   el.innerHTML=`
     <div class="card" style="text-align:center;padding:16px 10px">
@@ -735,15 +739,15 @@ function _moRenderYieldKPI(totRm, totPkKg, avgYld, workDays, goodDays, lossKg) {
       <div style="margin-top:8px;background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden">
         <div style="height:100%;width:${pct.toFixed(1)}%;background:${yldColor};border-radius:4px"></div>
       </div>
-      <div style="font-size:10px;color:#94a3b8;margin-top:3px;text-align:right">목표 55% 기준 ${pct.toFixed(0)}%</div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:3px;text-align:right">목표 ${_G}% 기준 ${pct.toFixed(0)}%</div>
     </div>
     <div class="card" style="text-align:center;padding:16px 10px">
       <div style="font-size:11px;color:var(--g5);margin-bottom:6px">${lossLabel}</div>
       <div style="font-size:24px;font-weight:700;color:${lossColor}">${lossIcon}${fmt(Math.abs(lossKg))}</div>
-      <div style="font-size:11px;color:var(--g4);margin-top:3px">KG (55% 기준 대비)</div>
+      <div style="font-size:11px;color:var(--g4);margin-top:3px">KG (${_G}% 기준 대비)</div>
     </div>
     <div class="card" style="text-align:center;padding:16px 10px">
-      <div style="font-size:11px;color:var(--g5);margin-bottom:6px">수율 52% 이상 달성</div>
+      <div style="font-size:11px;color:var(--g5);margin-bottom:6px">수율 ${_W}% 이상 달성</div>
       <div style="font-size:24px;font-weight:700;color:#1e293b">${goodDays}<span style="font-size:14px;color:var(--g4)"> / ${workDays}일</span></div>
       <div style="font-size:11px;color:var(--g4);margin-top:3px">${workDays>0?(goodDays/workDays*100).toFixed(0)+'% 달성':''}</div>
     </div>`;
@@ -806,7 +810,8 @@ function _moRedrawDefChart(){
   if(_avgDef!=null){
     ds.push({label:'전월 일평균',data:Array(xLen).fill(parseFloat(_avgDef.toFixed(2))),borderColor:'#94a3b8',borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:_avgDef.toFixed(2)+'%'});
   }
-  ds.push({label:'목표 2%',data:Array(xLen).fill(2),borderColor:'#f59e0b',borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:'2.00%'});
+  const _T_def = (typeof getTargets === 'function') ? getTargets() : {defGoal:2};
+  ds.push({label:'목표',data:Array(xLen).fill(_T_def.defGoal),borderColor:'#f59e0b',borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:_T_def.defGoal.toFixed(2)+'%'});
   if(_moDefChart){_moDefChart.destroy();_moDefChart=null;}
   _moDefChart = new Chart(ctx2,{type:'line',plugins:[
     {id:'lineLbl',afterDatasetsDraw(chart){
@@ -903,9 +908,10 @@ function _moRenderYieldChart(dailyYields) {
   if(_avgYld!=null){
     datasets.push({label:'전월 일평균',data:Array(xLen).fill(parseFloat(_avgYld.toFixed(1))),borderColor:'#94a3b8',borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:_avgYld.toFixed(1)+'%'});
   }
+  const _T_y = (typeof getTargets === 'function') ? getTargets() : {yieldGoal:55, yieldDanger:50};
   datasets.push(
-    {label:'목표 55%',data:Array(xLen).fill(55),borderColor:'#047857',borderDash:[6,3],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:'55%'},
-    {label:'위험 50%',data:Array(xLen).fill(50),borderColor:'#ef4444',borderDash:[4,3],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:'50%'}
+    {label:'목표',data:Array(xLen).fill(_T_y.yieldGoal),borderColor:'#047857',borderDash:[6,3],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:_T_y.yieldGoal.toFixed(0)+'%'},
+    {label:'위험',data:Array(xLen).fill(_T_y.yieldDanger),borderColor:'#ef4444',borderDash:[4,3],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:_T_y.yieldDanger.toFixed(0)+'%'}
   );
   _moYieldChart=new Chart(canvas,{plugins:[
     {id:'lineLbl',afterDatasetsDraw(chart){
@@ -2359,13 +2365,14 @@ async function renderTrend(){
       data:{labels:lbl,datasets:[{label:'손실률',data:wasteData,backgroundColor:'rgba(107,114,128,.6)',borderRadius:4,borderSkipped:false}]},
       options:{...baseOpts(v=>v!=null?v+'%':'')} }); }
 
-  // ⑤ 포장 불량률 + 2% 기준선
+  // ⑤ 포장 불량률 + 목표 기준선
   const c5=document.getElementById('c_def');
   if(c5){ if(window._defChart) window._defChart.destroy();
+    const _Tt = (typeof getTargets === 'function') ? getTargets() : {defGoal:2};
     window._defChart=new Chart(c5,{ type:'line',
       data:{labels:lbl,datasets:[
         {label:'불량률',data:defData,borderColor:'#e24b4a',backgroundColor:'rgba(226,75,74,0.1)',fill:true,tension:.3,pointRadius:4,spanGaps:true},
-        {label:'기준(2%)',data:Array(lbl.length).fill(2),borderColor:'#f59e0b',borderDash:[4,3],pointRadius:0,borderWidth:1.5,fill:false}
+        {label:'목표',data:Array(lbl.length).fill(_Tt.defGoal),borderColor:'#f59e0b',borderDash:[4,3],pointRadius:0,borderWidth:1.5,fill:false}
       ]},
       options:{...lineOpts(v=>v+'%'),scales:{...baseOpts().scales,y:{...baseOpts().scales.y,min:0,ticks:{color:'#888',font:{size:10},callback:v=>v+'%'}}}} }); }
 

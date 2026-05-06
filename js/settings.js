@@ -11,6 +11,7 @@ async function saveSettings() {
       submats: L.submats || [],
       gtinMap: L.gtinMap || {},
       recipes: L.recipes || [],
+      targets: L.targets || {},
       _updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     await db.collection('settings').doc('config').set(cfg);
@@ -30,6 +31,7 @@ async function loadSettings_(){
       if(data.submats && data.submats.length) L.submats = data.submats;
       if(data.gtinMap && Object.keys(data.gtinMap).length) L.gtinMap = data.gtinMap;
       if(data.recipes) L.recipes = data.recipes;
+      if(data.targets) L.targets = data.targets;
       saveL();
       updDD();
       renderSettings();
@@ -559,4 +561,56 @@ async function recalcAlarmFromData(){
     if(typeof toast==='function') toast('자동계산 실패: '+e.message,'d');
     console.error(e);
   }
+}
+
+// ============================================================
+// 분석 목표 (차트 기준선)
+// ============================================================
+
+// 기본값
+function _getDefaultTargets(){
+  return { yieldGoal: 55, yieldDanger: 50, defGoal: 2 };
+}
+
+// 현재 설정값 가져오기 (기본값 fallback)
+function getTargets(){
+  const def = _getDefaultTargets();
+  const t = (L && L.targets) || {};
+  return {
+    yieldGoal:   (typeof t.yieldGoal   === 'number') ? t.yieldGoal   : def.yieldGoal,
+    yieldDanger: (typeof t.yieldDanger === 'number') ? t.yieldDanger : def.yieldDanger,
+    defGoal:     (typeof t.defGoal     === 'number') ? t.defGoal     : def.defGoal
+  };
+}
+
+// 설정 화면 input 채우기
+function renderTargetsForm(){
+  const t = getTargets();
+  const yg = document.getElementById('tg_yield_goal');
+  const yd = document.getElementById('tg_yield_danger');
+  const dg = document.getElementById('tg_def_goal');
+  if(yg) yg.value = t.yieldGoal;
+  if(yd) yd.value = t.yieldDanger;
+  if(dg) dg.value = t.defGoal;
+}
+
+// 저장
+async function saveTargets(){
+  const yg = parseFloat(document.getElementById('tg_yield_goal').value);
+  const yd = parseFloat(document.getElementById('tg_yield_danger').value);
+  const dg = parseFloat(document.getElementById('tg_def_goal').value);
+  if(!isFinite(yg) || !isFinite(yd) || !isFinite(dg)){
+    const msg = document.getElementById('tg_msg');
+    if(msg){ msg.textContent='⚠ 모든 값을 숫자로 입력해주세요'; msg.style.color='var(--d)'; }
+    return;
+  }
+  if(!L.targets) L.targets = {};
+  L.targets.yieldGoal = yg;
+  L.targets.yieldDanger = yd;
+  L.targets.defGoal = dg;
+  saveL();
+  await saveSettings();
+  const msg = document.getElementById('tg_msg');
+  if(msg){ msg.textContent='✓ 저장됨. 분석 차트에 반영됩니다.'; msg.style.color='var(--s)'; }
+  if(typeof toast==='function') toast('분석 목표 저장됨','s');
 }
