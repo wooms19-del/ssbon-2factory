@@ -391,8 +391,39 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     if(isNoMeat){
       return {bx:{}, kg:{}, poolKey:'NOMEAT-'+product, status:'NOMEAT'};
     }
-    // fallback: 그날 thClean 합계 + poolKey도 그날 thClean 기준 (trace 성공 제품과 같은 풀이면 같은 poolKey가 됨)
-    // ★ packing.type이 명시되어 있으면 그 type만으로 좁힘 (다른 부위 잘못 박는 것 방지)
+
+    // ★ 월별생산량 방식 — packing.type 우선 (사용자 입력 신뢰)
+    // chain 역추적은 packing.type 빈값일 때만 fallback
+    var pkD = pkClean.filter(function(r){ return d(r)===date && r.product===product; });
+    var pkTypes = new Set();
+    pkD.forEach(function(r){
+      var t = String(r.type||'').trim();
+      if(t) pkTypes.add(t);
+    });
+
+    // packing.type 명시되어 있으면 그 type만 thawing에서 가져옴
+    if(pkTypes.size > 0){
+      var thDay = thClean.filter(function(r){
+        if(d(r)!==date) return false;
+        var p = (r.part||r.type||'').trim();
+        return pkTypes.has(p);
+      });
+      var seen = new Set(); var ded = [];
+      thDay.forEach(function(r){
+        var k = (r.cart||'')+'|'+d(r)+'|'+(r.type||'');
+        if(seen.has(k)) return; seen.add(k); ded.push(r);
+      });
+      var bx={}, kg={};
+      ded.forEach(function(r){
+        var p = r.part||r.type||'';
+        bx[p] = (bx[p]||0) + (parseInt(r.boxes)||0);
+        kg[p] = (kg[p]||0) + (parseFloat(r.totalKg)||0);
+      });
+      var poolKey = 'PKTYPE-'+date+'-'+product+'-'+Array.from(pkTypes).sort().join(',');
+      return {bx:bx, kg:kg, poolKey:poolKey, status:'PK_TYPE'};
+    }
+
+    // packing.type 빈값 → 기존 chain 역추적 fallback
     var _fallback = function(status){
       var thDay = thClean.filter(function(r){ return d(r)===date; });
       var seen = new Set(); var ded = [];
@@ -400,27 +431,16 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
         var k = (r.cart||'')+'|'+d(r)+'|'+(r.type||'');
         if(seen.has(k)) return; seen.add(k); ded.push(r);
       });
-      // ★ 해당 product의 packing record들의 type 모음 → 있으면 그 type만 사용
-      var pkD = pkClean.filter(function(r){ return d(r)===date && r.product===product; });
-      var pkTypes = new Set();
-      pkD.forEach(function(r){
-        var t = String(r.type||'').trim();
-        if(t) pkTypes.add(t);
-      });
       var bx={}, kg={};
       ded.forEach(function(r){
         var p = r.part||r.type||'';
-        // pkTypes 명시되어 있으면 그 type만 누적
-        if(pkTypes.size && !pkTypes.has(p)) return;
         bx[p] = (bx[p]||0) + (parseInt(r.boxes)||0);
         kg[p] = (kg[p]||0) + (parseFloat(r.totalKg)||0);
       });
       var poolKey = ded.map(function(r){ return d(r)+'|'+r.cart+'|'+(r.part||r.type); }).sort().join(';');
-      // 그날 thClean도 0건이면 정말 빈칸 (poolKey 고유로)
       if(!ded.length) poolKey = status+'-'+date+'-'+product;
       return {bx:bx, kg:kg, poolKey:poolKey, status:status, fallback:true};
     };
-    var pkD = pkClean.filter(function(r){ return d(r)===date && r.product===product; });
     if(!pkD.length) return {bx:{}, kg:{}, poolKey:'NODATA-'+date+'-'+product, status:'NODATA'};
     var pkW = new Set(); var pkC = new Set();
     pkD.forEach(function(r){
