@@ -334,12 +334,20 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
   function _shTypeFor(r){
     var t = String(r.type||'').trim();
     if(t) return t;
+    var dt = d(r);
     // shredding의 wagonIn으로 cooking 찾아서 cooking type 사용
     var winList = _perfSplit(r.wagonIn);
     for(var i=0;i<winList.length;i++){
       var win = winList[i];
-      var match = ck.find(function(c){return _perfSplit(c.wagonOut).indexOf(win)>=0;});
-      if(match && match.type) return String(match.type).trim();
+      // ★ 같은 날짜 cooking 우선 매칭 (다른 날짜의 같은 wagon 번호 잘못 잡는 것 방지)
+      var sameDay = ck.find(function(c){return d(c)===dt && _perfSplit(c.wagonOut).indexOf(win)>=0;});
+      if(sameDay && sameDay.type) return String(sameDay.type).trim();
+    }
+    // 같은 날 매칭 실패 시 전체 검색 (전날에서 넘어온 케이스)
+    for(var j=0;j<winList.length;j++){
+      var win2 = winList[j];
+      var any = ck.find(function(c){return _perfSplit(c.wagonOut).indexOf(win2)>=0;});
+      if(any && any.type) return String(any.type).trim();
     }
     return '_';
   }
