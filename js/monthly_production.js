@@ -1331,6 +1331,17 @@
     function nf(v, dec){ if(!isFinite(v)) return '-'; return v.toLocaleString(undefined,{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0}); }
     function diffColor(d){ return d>0?'#15803d':(d<0?'#b91c1c':'#475569'); }
     function arr(d){ return d>0?'▲':(d<0?'▼':''); }
+    // 수율 행 헬퍼: 원료육 대비 (kg/원육kg) — 차이는 percentage point 표시
+    function yieldRow(label, key){
+      var thisP = sum.rmKg ? sum[key]/sum.rmKg*100 : 0;
+      var prevP = prevSum.rmKg ? prevSum[key]/prevSum.rmKg*100 : 0;
+      var dp = thisP - prevP;
+      return '<tr><td><strong>'+label+'</strong></td>'
+        +'<td>'+nf(thisP,1)+'%</td>'
+        +'<td>'+nf(prevP,1)+'%</td>'
+        +'<td style="color:'+diffColor(dp)+';font-weight:600">'+arr(dp)+' '+nf(Math.abs(dp),1)+'%p</td>'
+        +'<td>—</td></tr>';
+    }
     cmp.innerHTML = '<h3>📊 전월 대비 비교</h3>'
       + '<table>'
       + '<thead><tr><th>구분</th><th>'+ymThis.replace('-','년 ')+'월</th><th>'+ymPrev.replace('-','년 ')+'월</th><th>차이</th><th>증감율</th></tr></thead>'
@@ -1346,6 +1357,10 @@
       +   '<td style="color:'+diffColor(sum.pkEa-prevSum.pkEa)+';font-weight:600">'+arr(sum.pkEa-prevSum.pkEa)+' '+nf(Math.abs(sum.pkEa-prevSum.pkEa),0)+'</td><td>—</td></tr>'
       + '<tr><td><strong>완제품 고기중량</strong></td><td>'+nf(sum.meatKg,2)+' kg</td><td>'+nf(prevSum.meatKg,2)+' kg</td>'
       +   '<td style="color:'+diffColor(sum.meatKg-prevSum.meatKg)+';font-weight:600">'+arr(sum.meatKg-prevSum.meatKg)+' '+nf(Math.abs(sum.meatKg-prevSum.meatKg),2)+' kg</td><td>—</td></tr>'
+      + yieldRow('전처리 수율', 'ppKg')
+      + yieldRow('자숙 수율', 'ckKg')
+      + yieldRow('파쇄 수율', 'shKg')
+      + yieldRow('최종 수율', 'meatKg')
       + '</tbody></table>';
     cmp.style.display='';
   }
