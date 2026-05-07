@@ -2,16 +2,27 @@ rules_version = '2';
 
 // 순수본 2공장 — Firebase Firestore 보안 룰
 // 작성일: 2026-05-01
-// 정책: 만료 없는 무제한 허용 (내부 시스템 가정)
-//       기본 test mode와 동일한 동작이지만 만료일 없음
+// 갱신일: 2026-05-07 — thawing create 무결성 검증 추가
+// 정책: thawing 컬렉션은 create 시만 검증 (옛 wagon-only 형식 차단)
+//       그 외 모든 컬렉션·서브컬렉션은 무제한 허용 (기존 정책 유지)
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 모든 컬렉션: 누구나 read/write 가능
-    // 만료일 없음 (영구 적용)
-    match /{document=**} {
-      allow read, write: if true;
+    // thawing: 새 record 생성 시 cart 필수, wagon 필드 금지, start datetime 형식 강제
+    // update/delete/read는 무제한 (기존 record 흐름 보존)
+    match /thawing/{docId} {
+      allow read, update, delete: if true;
+      allow create: if request.resource.data.cart is string
+                    && request.resource.data.cart.size() > 0
+                    && !('wagon' in request.resource.data)
+                    && request.resource.data.start is string
+                    && request.resource.data.start.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}.*');
+    }
+
+    // 그 외 모든 컬렉션·서브컬렉션: 무제한 허용 (thawing 제외)
+    match /{prefix}/{document=**} {
+      allow read, write: if prefix != 'thawing';
     }
   }
 }
