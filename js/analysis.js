@@ -2886,7 +2886,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       type: 'line', label: '이번달 일평균',
       data: Array(xLen).fill(_curAvg),
       borderColor: '#7c3aed', borderDash: [2,3], pointRadius: 0, borderWidth: 1.5, fill: false,
-      _endLabel: _curAvg.toLocaleString()+'kg', stack: '_avg_cur', xAxisID: 'x', yAxisID: 'y'
+      _endLabel: _curAvg.toLocaleString()+'kg', stack: '_avg_cur', xAxisID: 'x', yAxisID: 'y_avg'
     });
   }
   const _avgRm = window._moPrevAvgRmKg;
@@ -2895,7 +2895,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       type:'line', label:'전월 일평균',
       data: Array(xLen).fill(Math.round(_avgRm)),
       borderColor: '#94a3b8', borderDash: [5,4], pointRadius: 0, borderWidth: 1.5, fill: false,
-      _endLabel: Math.round(_avgRm).toLocaleString()+'kg', stack: '_avg_prev', xAxisID: 'x', yAxisID: 'y'
+      _endLabel: Math.round(_avgRm).toLocaleString()+'kg', stack: '_avg_prev', xAxisID: 'x', yAxisID: 'y_avg'
     });
   }
 
@@ -2996,7 +2996,14 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       },
       scales: {
         x: { stacked: isStacked, ticks: { font: {size:9}, autoSkip: false, maxRotation: 0 }, grid: { display: false } },
-        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '20%' }
+        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '20%' },
+        // 평균선 전용 — stacked 영향 안 받게 별도 축 (display:false). y와 같은 범위 사용.
+        y_avg: { display: false, stacked: false, beginAtZero: true, grace: '20%',
+          afterFit: function(scale){
+            const yScale = scale.chart.scales.y;
+            if(yScale){ scale.min = yScale.min; scale.max = yScale.max; }
+          }
+        }
       }
     }
   });
