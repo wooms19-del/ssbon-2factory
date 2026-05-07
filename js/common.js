@@ -17,16 +17,76 @@ var db = firebase.firestore();
 // 🔄 자동 reload — 새 코드 배포 시 모든 디바이스 즉시 reload
 // 사용 예: deploy 후 _config/version 문서의 value를 새 timestamp로 set
 // 태블릿이 며칠 켜져있어도 자동 갱신됨
+//
+// 입력 중 가드: 사용자가 input/textarea에 값 적고 있거나 focus되어 있으면
+//             reload 미루고 토스트로 알림. 입력 끝나면 자동 reload.
 // ============================================================
+
+// 입력 중 여부 판단
+function _isUserBusy(){
+  // 1. 현재 focus된 요소가 input/textarea/select?
+  const ae = document.activeElement;
+  if(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')){
+    if(!ae.disabled && !ae.readOnly) return true;
+  }
+  // 2. 어떤 input/textarea에 값이 들어가 있는데 비워지지 않은 상태?
+  const inputs = document.querySelectorAll('input[type="text"], input[type="number"], input[type="time"], input[type="date"], textarea');
+  for(const el of inputs){
+    if(el.disabled || el.readOnly) continue;
+    if(el.value && el.value.trim() !== '' && el.value !== el.defaultValue){
+      // placeholder만 있는 빈 입력칸이 아니라, 사용자가 뭔가 적어둠
+      return true;
+    }
+  }
+  return false;
+}
+
+// 대기 중인 새 버전
+window._pendingNewVer = null;
+
+// 토스트 한 번만 띄움
+window._reloadToastShown = false;
+function _showReloadToast(newVer){
+  if(window._reloadToastShown) return;
+  window._reloadToastShown = true;
+  // 기존 toast 함수 있으면 사용, 없으면 직접 div 띄움
+  const div = document.createElement('div');
+  div.id = '_reloadBanner';
+  div.style.cssText = 'position:fixed;top:60px;right:16px;z-index:9999;background:#1d4ed8;color:#fff;padding:12px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);font-size:13px;max-width:320px';
+  div.innerHTML = '🔄 새 버전 있음<div style="font-size:11px;opacity:0.85;margin-top:4px">작업 중인 입력이 있어 자동 적용을 기다리고 있습니다</div><div style="margin-top:8px;display:flex;gap:6px"><button onclick="_applyReloadNow()" style="background:#fff;color:#1d4ed8;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">지금 적용</button><button onclick="document.getElementById(\'_reloadBanner\').remove();window._reloadToastShown=false" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px">나중에</button></div>';
+  document.body.appendChild(div);
+}
+
+window._applyReloadNow = function(){
+  console.log('[auto-reload] 사용자가 즉시 적용 선택');
+  location.reload(true);
+};
+
+// 1초마다 입력 비었는지 체크 → 비었으면 reload (자동)
+setInterval(function(){
+  if(!window._pendingNewVer) return;
+  if(!_isUserBusy()){
+    console.log('[auto-reload] 입력 종료 감지 — reload');
+    location.reload(true);
+  }
+}, 1000);
+
 db.collection('_config').doc('version').onSnapshot(function(snap){
   if(!snap.exists) return;
   var v = snap.data() && snap.data().value;
   if(!v) return;
   if(window._appVer && window._appVer !== v){
-    console.log('[auto-reload] 새 버전 감지 — reload:', window._appVer, '→', v);
-    location.reload(true);
+    if(_isUserBusy()){
+      console.log('[auto-reload] 입력 중 — reload 대기:', window._appVer, '→', v);
+      window._pendingNewVer = v;
+      _showReloadToast(v);
+      // _appVer 갱신 안 함 → 다음 onSnapshot도 같은 비교 가능
+    } else {
+      console.log('[auto-reload] 새 버전 감지 — 즉시 reload:', window._appVer, '→', v);
+      location.reload(true);
+    }
   }
-  window._appVer = v;
+  if(!window._pendingNewVer) window._appVer = v;
 }, function(err){
   console.warn('[auto-reload] listener 오류 (무시):', err && err.message);
 });
