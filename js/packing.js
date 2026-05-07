@@ -493,6 +493,8 @@ function pkRefreshWagonRemain(){
     const remEl = btn.querySelector('.pk-w-rem');
     const isDone = remain < 0.01 && total > 0;
     const label = kind === 'cart' ? '카트' : '와건';
+    const idx = btn.dataset.idx;
+    const baseColor = kind === 'cart' ? '#1a56db' : '#72243E';
     // 완료 상태 동적 갱신 (완전 소진되면 즉시 차단)
     if(isDone && btn.dataset.done !== 'true'){
       btn.dataset.done = 'true';
@@ -501,6 +503,15 @@ function pkRefreshWagonRemain(){
       btn.style.cursor = 'not-allowed';
       btn.style.textDecoration = 'line-through';
       btn.onclick = () => toast(w+'번 '+label+'은 이미 포장 완료됨','d');
+    } else if(!isDone && btn.dataset.done === 'true'){
+      // done 상태 해제 (사용량 줄어듦 — 예: dist 행 삭제로 used=0)
+      btn.dataset.done = 'false';
+      btn.style.background = '#fff';
+      btn.style.color = baseColor;
+      btn.style.borderColor = baseColor;
+      btn.style.cursor = 'pointer';
+      btn.style.textDecoration = '';
+      btn.onclick = () => togglePkWagon(idx, w, kind);
     }
     if(remEl){
       if(isDone) remEl.textContent = '(완료)';
