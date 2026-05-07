@@ -287,11 +287,11 @@ async function renderMonthly() {
     return true;
   });
   // ─────────────────────────────────────────────────────────────────────────────
-  renderMonthlyReport(pkReport, from, effectiveTo, ppMonthClean, thMonthClean, opReal);
+  renderMonthlyReport(pkReport, from, effectiveTo, ppMonthClean, thMonthClean, opReal, ckMonth, shMonth);
 }
 
 // 월간 생산 일보 렌더
-async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opData) {
+async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opData, ckMonth, shMonth) {
   const tbody = document.getElementById('mo_report_tbl');
   const tfoot = document.getElementById('mo_report_total');
   if(!tbody) return;
