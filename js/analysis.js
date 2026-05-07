@@ -378,6 +378,27 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
     const moLossKg=r2(moTotRm*(0.55-moAvgYld/100));
     _moRenderYieldKPI(moTotRm, moTotPkKg, moAvgYld, moDays, moGoodDays, moLossKg);
     _moRenderYieldChart(dailyYields);
+
+    // ★ 동일 작업일 탭용 — cur 일별 공정 합계 (전처리/자숙/파쇄/완제품 + 원육)
+    const _curWorkDates = dayEntries.map(([d]) => d).filter(d => rmByDate[d]).sort();
+    const _curByWorkDay = _curWorkDates.map((date, i) => {
+      const rm = r2(rmByDate[date]||0);
+      const ppKg = (ppMonth||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
+      const ckKg = (ckMonth||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
+      const shKg = (shMonth||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
+      // 완제품 = dayEntries에서 이미 계산
+      const dayEntry = dayEntries.find(([d]) => d === date);
+      const allR = dayEntry ? dayEntry[1] : [];
+      const effPkM = {};
+      allR.forEach(row=>{
+        const oe = opMap[date+'|'+row.product]||0;
+        const p = L.products.find(x=>x.name===row.product);
+        effPkM[row.product] = oe>0&&p ? r2(oe*p.kgea) : row.pkKg;
+      });
+      const pkKg = r2(allR.reduce((s,r)=>s+(effPkM[r.product]||0),0));
+      return { idx:i+1, date, rm, ppKg, ckKg, shKg, pkKg };
+    });
+    window._moCurByWorkDay = _curByWorkDay;
     _moLoadAndRenderPrevCmp(moAvgYld, moTotRm, moTotPkKg, moDays);
     // KPI 일평균 원육 사용량
     setText('mo_avg', moDays>0?(moTotRm/moDays).toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1}):'—');
@@ -1002,11 +1023,13 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
   const prevTo=prevYm+'-'+String(prevLastDay).padStart(2,'0');
   const prevPrevFrom=(()=>{const dt=new Date(prevY,prevM-2,1);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-01`;})();
   try {
-    const [prevPk,prevPp,prevTh,prevOp]=await Promise.all([
+    const [prevPk,prevPp,prevTh,prevOp,prevCk,prevSh]=await Promise.all([
       fbGetRange('packing',prevFrom,prevTo),
       fbGetRange('preprocess',prevFrom,prevTo),
       fbGetRange('thawing',prevPrevFrom,prevTo),
-      fbGetRange('outerpacking',prevFrom,prevTo)
+      fbGetRange('outerpacking',prevFrom,prevTo),
+      fbGetRange('cooking',prevFrom,prevTo),
+      fbGetRange('shredding',prevFrom,prevTo)
     ]);
     const prevOpMap={};
     prevOp.filter(r=>!r.testRun&&!r.isTest).forEach(r=>{
@@ -1078,6 +1101,31 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     window._moPrevByIdx = prevByIdx;
     window._moPrevYldByIdx = _pYldByIdx;
     window._moPrevYm = prevYm;
+
+    // ★ 동일 작업일 탭용 — prev 일별 공정 합계 (전처리/자숙/파쇄/완제품 + 원육)
+    // 작업일 = 생산한 날 (prevGrouped 키, 정렬)
+    const _prevWorkDates = Object.keys(prevGrouped).sort();
+    const _prevByWorkDay = _prevWorkDates.map((date, i) => {
+      // 그날 원육
+      const ppDay = (prevPp||[]).filter(r=>String(r.date||'').slice(0,10)===date);
+      const rm = r2(getThKgByPP_(ppDay,prevTh||[],date));
+      // 그날 전처리/자숙/파쇄 합계
+      const ppKg = ppDay.reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
+      const ckKg = (prevCk||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
+      const shKg = (prevSh||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
+      // 그날 완제품 (effM에서 계산된 값)
+      const allR = prevGrouped[date] || [];
+      const effM = {};
+      allR.forEach(row=>{
+        const oe = prevOpMap[date+'|'+row.product]||0;
+        const p = L.products.find(x=>x.name===row.product);
+        effM[row.product] = oe>0&&p ? r2(oe*p.kgea) : row.pkKg;
+      });
+      const pkKg = r2(allR.reduce((s,r)=>s+(effM[r.product]||0),0));
+      return { idx:i+1, date, rm, ppKg, ckKg, shKg, pkKg };
+    });
+    window._moPrevByWorkDay = _prevByWorkDay;
+
     // 4월 평균값 (한 줄 가로선용)
     const _avgDef = prevByIdx.length ? (prevByIdx.reduce((s,r)=>s+(r.defectPct||0),0)/prevByIdx.length) : null;
     const _avgYld = _pYldByIdx.length ? (_pYldByIdx.reduce((s,r)=>s+(r.yld||0),0)/_pYldByIdx.length) : null;
@@ -1188,53 +1236,51 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
         </tbody>
       </table>`;
   } else if(tab === 'sameday'){
-    // ── 2) 동일 작업일 — N일차 매칭 ────────────────────
-    const prevByIdx = window._moPrevByIdx || [];
-    const prevYldByIdx = window._moPrevYldByIdx || [];
-    const curYldDays = window._moCurYldDays || [];
-    const curByDate = window._moCurByDate || {};
-    // 이번달 일별 (생산한 날만, 정렬)
-    const curDates = Object.keys(curByDate).sort().filter(d => {
-      const v = curByDate[d];
-      return v && (v.ea > 0 || v.kg > 0);
-    });
-    const N = Math.min(curDates.length, prevByIdx.length);
+    // ── 2) 동일 작업일 — N일차 매칭, 공정별 누적 수율 4행 ──
+    const prevByWD = window._moPrevByWorkDay || [];
+    const curByWD  = window._moCurByWorkDay  || [];
+    const N = Math.min(prevByWD.length, curByWD.length);
     if(N === 0){
-      bodyHtml = `<div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">비교 가능한 일자 없음</div>`;
+      bodyHtml = `<div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">비교 가능한 작업일 없음</div>`;
     } else {
-      let rows = '';
-      let sumPrevYld = 0, sumCurYld = 0, cntYld = 0;
+      // N일치 합계
+      const sumPrev = { rm:0, pp:0, ck:0, sh:0, pk:0 };
+      const sumCur  = { rm:0, pp:0, ck:0, sh:0, pk:0 };
       for(let i=0; i<N; i++){
-        const cd = curDates[i];
-        const pYld = prevYldByIdx[i] ? prevYldByIdx[i].yld : 0;
-        const cYldRow = curYldDays.find(x => String(x.date||'').slice(0,10) === cd);
-        const cYld = cYldRow ? cYldRow.yld : 0;
-        if(pYld>0 && cYld>0){ sumPrevYld+=pYld; sumCurYld+=cYld; cntYld++; }
-        const yldDelta = (pYld>0 && cYld>0) ? delta(cYld, pYld, true) : '<span style="color:#94a3b8">—</span>';
-        rows += `<tr style="border-top:1px solid #f1f5f9">
-          <td style="padding:6px 6px;color:#64748b;font-weight:600">${i+1}일차</td>
-          <td style="padding:6px 6px;text-align:center;background:#f8fafc">${pYld>0?pYld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:6px 6px;text-align:center;font-weight:600">${cYld>0?cYld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:6px 6px;text-align:center">${yldDelta}</td>
-        </tr>`;
+        sumPrev.rm += prevByWD[i].rm||0; sumPrev.pp += prevByWD[i].ppKg||0;
+        sumPrev.ck += prevByWD[i].ckKg||0; sumPrev.sh += prevByWD[i].shKg||0;
+        sumPrev.pk += prevByWD[i].pkKg||0;
+        sumCur.rm += curByWD[i].rm||0; sumCur.pp += curByWD[i].ppKg||0;
+        sumCur.ck += curByWD[i].ckKg||0; sumCur.sh += curByWD[i].shKg||0;
+        sumCur.pk += curByWD[i].pkKg||0;
       }
-      const avgRow = (cntYld>0) ? `
-        <tr style="border-top:2px solid #cbd5e1;background:#eff6ff">
-          <td style="padding:8px 6px;font-weight:700">평균<span style="font-size:10px;color:#94a3b8;font-weight:400"> · 매칭 ${cntYld}일</span></td>
-          <td style="padding:8px 6px;text-align:center;font-weight:700;background:#dbeafe">${(sumPrevYld/cntYld).toFixed(1)}%</td>
-          <td style="padding:8px 6px;text-align:center;font-weight:700;color:#1d4ed8">${(sumCurYld/cntYld).toFixed(1)}%</td>
-          <td style="padding:8px 6px;text-align:center">${delta(sumCurYld/cntYld, sumPrevYld/cntYld, true)}</td>
-        </tr>` : '';
+      const pct = (a,b) => b>0 ? (a/b*100) : 0;
+      const stages = [
+        { label:'전처리 후',     p:pct(sumPrev.pp, sumPrev.rm), c:pct(sumCur.pp, sumCur.rm) },
+        { label:'자숙 후',       p:pct(sumPrev.ck, sumPrev.rm), c:pct(sumCur.ck, sumCur.rm) },
+        { label:'파쇄 후',       p:pct(sumPrev.sh, sumPrev.rm), c:pct(sumCur.sh, sumCur.rm) },
+        { label:'완제품 (최종)', p:pct(sumPrev.pk, sumPrev.rm), c:pct(sumCur.pk, sumCur.rm) }
+      ];
+      const rows = stages.map((s,idx) => {
+        const isFinal = idx === stages.length-1;
+        const yldDelta = (s.p>0 && s.c>0) ? delta(s.c, s.p, true) : '<span style="color:#94a3b8">—</span>';
+        return `<tr style="border-top:1px solid #f1f5f9;${isFinal?'background:#eff6ff':''}">
+          <td style="padding:8px 6px;color:#64748b;${isFinal?'font-weight:700;color:#1e293b':''}">${s.label}</td>
+          <td style="padding:8px 6px;text-align:center;background:#f8fafc">${s.p>0?s.p.toFixed(1)+'%':'—'}</td>
+          <td style="padding:8px 6px;text-align:center;font-weight:600${isFinal?';color:#1d4ed8':''}">${s.c>0?s.c.toFixed(1)+'%':'—'}</td>
+          <td style="padding:8px 6px;text-align:center">${yldDelta}</td>
+        </tr>`;
+      }).join('');
       bodyHtml = `
-        <div style="font-size:10px;color:#94a3b8;margin-bottom:6px">N일차끼리 매칭 — 작업일 수가 다를 때 평등 비교</div>
+        <div style="font-size:10px;color:#94a3b8;margin-bottom:6px">N일차끼리 매칭 (${N}일) — 공정별 누적 수율 = 산출 ÷ 원육</div>
         <table style="width:100%;font-size:12px;border-collapse:collapse">
           <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #e2e8f0">
-            <td style="padding:6px 6px;text-align:left">차수</td>
+            <td style="padding:6px 6px;text-align:left">공정 단계</td>
             <td style="padding:6px 6px;text-align:center;background:#f8fafc;font-weight:600;color:#64748b">${prevLbl}</td>
             <td style="padding:6px 6px;text-align:center;font-weight:600;color:#1e293b">${curLbl}</td>
             <td style="padding:6px 6px;text-align:center">증감</td>
           </tr></thead>
-          <tbody>${rows}${avgRow}</tbody>
+          <tbody>${rows}</tbody>
         </table>`;
     }
   } else if(tab === 'target'){
