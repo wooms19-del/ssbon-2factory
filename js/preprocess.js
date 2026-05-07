@@ -23,9 +23,9 @@ function updPpWagon(){
     if(remain <= 0.01) return false;
     const e=String(t.end||'');
     const tDate=String(t.date||'').slice(0,10);
-    // 진행중(end='') → 어제 또는 오늘 시작한 것만 표시 (옛 좀비 데이터 제외)
+    // 진행중(end='') → 어제 시작한 것만 표시 (오늘 시작한 방혈은 내일 전처리 대상)
     if(!e){
-      return tDate===_today || tDate===_yesterday;
+      return tDate===_yesterday;
     }
     // 종료된 것 → 오늘 종료된 것만
     if(e.length>=10 && e.slice(0,10)===_today) return true;
