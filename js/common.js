@@ -24,6 +24,8 @@ var db = firebase.firestore();
 
 // 입력 중 여부 판단
 function _isUserBusy(){
+  // -1. 비동기 저장/삭제/갱신 진행 중이면 busy (race condition 차단)
+  if((window._inProgress||0) > 0) return true;
   // 0. 최근 30초 내 사용자 활동 (마우스/터치/키보드) 있으면 busy
   //    "시작" 같은 액션 직후 폼이 비워져도 reload 미루기 위함
   if(window._lastActivityAt && (Date.now() - window._lastActivityAt) < 30000) return true;
@@ -408,6 +410,7 @@ function makeDocId(colName) {
 
 // 저장
 async function fbSave(colName, data, customDocId) {
+  window._inProgress = (window._inProgress||0) + 1;
   try {
     let docId = customDocId || makeDocId(colName);
     // thawing 저장 시 무결성 검증·보정
@@ -476,11 +479,14 @@ async function fbSave(colName, data, customDocId) {
   } catch(e) {
     console.error('Firebase 저장 오류:', e);
     return null;
+  } finally {
+    window._inProgress--;
   }
 }
 
 // 업데이트
 async function fbUpdate(colName, fbId, data) {
+  window._inProgress = (window._inProgress||0) + 1;
   try {
     await db.collection(colName).doc(fbId).update( data);
     fbClearCache(colName); // 업데이트 후 캐시 무효화
@@ -488,11 +494,14 @@ async function fbUpdate(colName, fbId, data) {
   } catch(e) {
     console.error('Firebase 업데이트 오류:', e);
     return false;
+  } finally {
+    window._inProgress--;
   }
 }
 
 // 삭제
 async function fbDelete(colName, fbId) {
+  window._inProgress = (window._inProgress||0) + 1;
   try {
     await db.collection(colName).doc(fbId).delete();
     fbClearCache(colName); // 삭제 후 캐시 무효화
@@ -500,6 +509,8 @@ async function fbDelete(colName, fbId) {
   } catch(e) {
     console.error('Firebase 삭제 오류:', e);
     return false;
+  } finally {
+    window._inProgress--;
   }
 }
 
