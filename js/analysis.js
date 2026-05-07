@@ -1109,6 +1109,9 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     el.innerHTML=`<div class="ct">전월 비교</div><div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">전월 데이터 없음</div>`;
   }
 }
+// 전월 비교 — 탭 모드: 'month'(월 전체, 디폴트), 'sameday'(동일 작업일), 'target'(목표 대비), 'yoy'(전년 동월)
+window._moPrevCmpTab = window._moPrevCmpTab || 'month';
+
 function _moRenderPrevCmp(el, cur, prev, prevYm) {
   const [py,pm]=prevYm.split('-');
   const months=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
@@ -1122,47 +1125,192 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
     const color=good?'#1a56db':'#e53935', icon=d>=0?'▲':'▼';
     return `<span style="color:${color};font-weight:600">${icon}${Math.abs(d).toFixed(1)}</span>`;
   };
-  el.innerHTML=`<div class="ct">전월 비교</div>
-    <table style="width:100%;font-size:12px;border-collapse:collapse">
-      <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #f1f5f9">
-        <td style="padding:5px 3px;text-align:center">항목</td>
-        <td style="padding:5px 3px;text-align:center">${prevLbl}</td>
-        <td style="padding:5px 3px;text-align:center">${curLbl}</td>
-        <td style="padding:5px 3px;text-align:center">증감</td>
-      </tr></thead>
-      <tbody>
-        <tr style="border-top:1px solid #f1f5f9">
-          <td style="padding:7px 3px;color:#64748b">원육 사용량</td>
-          <td style="padding:7px 3px;text-align:center">${fmt(prev.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:center;font-weight:600">${fmt(cur.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:center">${delta(cur.rm,prev.rm,true)}</td>
-        </tr>
-        <tr style="border-top:1px solid #f1f5f9">
-          <td style="padding:7px 3px;color:#64748b">완제품 중량</td>
-          <td style="padding:7px 3px;text-align:center">${fmt(prev.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:center;font-weight:600">${fmt(cur.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:center">${delta(cur.pkKg,prev.pkKg,true)}</td>
-        </tr>
-        <tr style="border-top:1px solid #f1f5f9;background:#f8fafc">
-          <td style="padding:7px 3px;font-weight:700">평균 수율</td>
-          <td style="padding:7px 3px;text-align:center">${prev.yld>0?prev.yld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:7px 3px;text-align:center;font-weight:700;color:${cur.yld>=52?'#1d4ed8':cur.yld>=50?'#c2410c':'#b91c1c'}">${cur.yld>0?cur.yld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:7px 3px;text-align:center">${delta(cur.yld,prev.yld,true)}</td>
-        </tr>
-        <tr style="border-top:1px solid #f1f5f9">
-          <td style="padding:7px 3px;color:#64748b">작업일수</td>
-          <td style="padding:7px 3px;text-align:center">${prev.days}일</td>
-          <td style="padding:7px 3px;text-align:center;font-weight:600">${cur.days}일</td>
-          <td style="padding:7px 3px;text-align:center">${delta(cur.days,prev.days,true)}</td>
-        </tr>
-        <tr style="border-top:1px solid #f1f5f9">
-          <td style="padding:7px 3px;color:#64748b">일평균 원육</td>
-          <td style="padding:7px 3px;text-align:center">${prev.days>0?fmt(prev.rm/prev.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:center;font-weight:600">${cur.days>0?fmt(cur.rm/cur.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
-          <td style="padding:7px 3px;text-align:center">${cur.days>0&&prev.days>0?delta(cur.rm/cur.days,prev.rm/prev.days,true):'—'}</td>
-        </tr>
-      </tbody>
-    </table>`;
+  // 캐시 (탭 전환 시 재사용)
+  window._moPrevCmpCache = { cur, prev, prevYm, prevLbl, curLbl };
+
+  // 탭 헤더 (4개)
+  const tab = window._moPrevCmpTab || 'month';
+  const tabBtn = (id, label) => {
+    const active = (tab===id);
+    return `<button onclick="_moSetPrevCmpTab('${id}')" style="padding:5px 10px;font-size:11px;border:none;border-radius:4px;cursor:pointer;font-weight:${active?600:500};background:${active?'#fff':'transparent'};color:${active?'#1e293b':'#64748b'};box-shadow:${active?'0 1px 2px rgba(0,0,0,0.08)':'none'}">${label}</button>`;
+  };
+  const tabsHtml = `
+    <div style="display:inline-flex;background:#f1f5f9;padding:3px;border-radius:6px;gap:2px;margin-bottom:10px;flex-wrap:wrap">
+      ${tabBtn('month','📅 월 전체')}
+      ${tabBtn('sameday','⚖️ 동일 작업일')}
+      ${tabBtn('target','🎯 목표 대비')}
+      ${tabBtn('yoy','📈 전년 동월')}
+    </div>`;
+
+  // 모드별 본문
+  let bodyHtml = '';
+  if(tab === 'month'){
+    // ── 1) 월 전체 (현재 동작 그대로) ─────────────────
+    bodyHtml = `
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #f1f5f9">
+          <td style="padding:5px 3px;text-align:center">항목</td>
+          <td style="padding:5px 3px;text-align:center">${prevLbl}</td>
+          <td style="padding:5px 3px;text-align:center">${curLbl}</td>
+          <td style="padding:5px 3px;text-align:center">증감</td>
+        </tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f1f5f9">
+            <td style="padding:7px 3px;color:#64748b">원육 사용량</td>
+            <td style="padding:7px 3px;text-align:center">${fmt(prev.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+            <td style="padding:7px 3px;text-align:center;font-weight:600">${fmt(cur.rm)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+            <td style="padding:7px 3px;text-align:center">${delta(cur.rm,prev.rm,true)}</td>
+          </tr>
+          <tr style="border-top:1px solid #f1f5f9">
+            <td style="padding:7px 3px;color:#64748b">완제품 중량</td>
+            <td style="padding:7px 3px;text-align:center">${fmt(prev.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+            <td style="padding:7px 3px;text-align:center;font-weight:600">${fmt(cur.pkKg)}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+            <td style="padding:7px 3px;text-align:center">${delta(cur.pkKg,prev.pkKg,true)}</td>
+          </tr>
+          <tr style="border-top:1px solid #f1f5f9;background:#f8fafc">
+            <td style="padding:7px 3px;font-weight:700">평균 수율</td>
+            <td style="padding:7px 3px;text-align:center">${prev.yld>0?prev.yld.toFixed(1)+'%':'—'}</td>
+            <td style="padding:7px 3px;text-align:center;font-weight:700;color:${cur.yld>=52?'#1d4ed8':cur.yld>=50?'#c2410c':'#b91c1c'}">${cur.yld>0?cur.yld.toFixed(1)+'%':'—'}</td>
+            <td style="padding:7px 3px;text-align:center">${delta(cur.yld,prev.yld,true)}</td>
+          </tr>
+          <tr style="border-top:1px solid #f1f5f9">
+            <td style="padding:7px 3px;color:#64748b">작업일수</td>
+            <td style="padding:7px 3px;text-align:center">${prev.days}일</td>
+            <td style="padding:7px 3px;text-align:center;font-weight:600">${cur.days}일</td>
+            <td style="padding:7px 3px;text-align:center">${delta(cur.days,prev.days,true)}</td>
+          </tr>
+          <tr style="border-top:1px solid #f1f5f9">
+            <td style="padding:7px 3px;color:#64748b">일평균 원육</td>
+            <td style="padding:7px 3px;text-align:center">${prev.days>0?fmt(prev.rm/prev.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+            <td style="padding:7px 3px;text-align:center;font-weight:600">${cur.days>0?fmt(cur.rm/cur.days):'—'}<span style="font-size:9px;color:#94a3b8">kg</span></td>
+            <td style="padding:7px 3px;text-align:center">${cur.days>0&&prev.days>0?delta(cur.rm/cur.days,prev.rm/prev.days,true):'—'}</td>
+          </tr>
+        </tbody>
+      </table>`;
+  } else if(tab === 'sameday'){
+    // ── 2) 동일 작업일 — N일차 매칭 ────────────────────
+    const prevByIdx = window._moPrevByIdx || [];
+    const prevYldByIdx = window._moPrevYldByIdx || [];
+    const curYldDays = window._moCurYldDays || [];
+    const curByDate = window._moCurByDate || {};
+    // 이번달 일별 (생산한 날만, 정렬)
+    const curDates = Object.keys(curByDate).sort().filter(d => {
+      const v = curByDate[d];
+      return v && (v.ea > 0 || v.kg > 0);
+    });
+    const N = Math.min(curDates.length, prevByIdx.length);
+    if(N === 0){
+      bodyHtml = `<div style="text-align:center;color:#94a3b8;font-size:12px;padding:1.5rem">비교 가능한 일자 없음</div>`;
+    } else {
+      let rows = '';
+      let sumPrevYld = 0, sumCurYld = 0, cntYld = 0;
+      for(let i=0; i<N; i++){
+        const cd = curDates[i];
+        const pd = prevByIdx[i] && prevByIdx[i].date;
+        const pYld = prevYldByIdx[i] ? prevYldByIdx[i].yld : 0;
+        const cYldRow = curYldDays.find(x => String(x.date||'').slice(0,10) === cd);
+        const cYld = cYldRow ? cYldRow.yld : 0;
+        if(pYld>0 && cYld>0){ sumPrevYld+=pYld; sumCurYld+=cYld; cntYld++; }
+        const yldDelta = (pYld>0 && cYld>0) ? delta(cYld, pYld, true) : '<span style="color:#94a3b8">—</span>';
+        rows += `<tr style="border-top:1px solid #f1f5f9">
+          <td style="padding:6px 3px;color:#64748b">${i+1}일차</td>
+          <td style="padding:6px 3px;text-align:center;font-size:11px;color:#94a3b8">${pd?pd.slice(5):'—'}</td>
+          <td style="padding:6px 3px;text-align:center">${pYld>0?pYld.toFixed(1)+'%':'—'}</td>
+          <td style="padding:6px 3px;text-align:center;font-size:11px;color:#94a3b8">${cd.slice(5)}</td>
+          <td style="padding:6px 3px;text-align:center;font-weight:600">${cYld>0?cYld.toFixed(1)+'%':'—'}</td>
+          <td style="padding:6px 3px;text-align:center">${yldDelta}</td>
+        </tr>`;
+      }
+      const avgRow = (cntYld>0) ? `
+        <tr style="border-top:2px solid #cbd5e1;background:#f8fafc">
+          <td style="padding:7px 3px;font-weight:700" colspan="2">평균 수율 (매칭 ${cntYld}일)</td>
+          <td style="padding:7px 3px;text-align:center;font-weight:700">${(sumPrevYld/cntYld).toFixed(1)}%</td>
+          <td colspan="1"></td>
+          <td style="padding:7px 3px;text-align:center;font-weight:700;color:#1d4ed8">${(sumCurYld/cntYld).toFixed(1)}%</td>
+          <td style="padding:7px 3px;text-align:center">${delta(sumCurYld/cntYld, sumPrevYld/cntYld, true)}</td>
+        </tr>` : '';
+      bodyHtml = `
+        <div style="font-size:10px;color:#94a3b8;margin-bottom:6px">N일차끼리 매칭 — 작업일 수가 다를 때 평등 비교</div>
+        <table style="width:100%;font-size:11px;border-collapse:collapse">
+          <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #f1f5f9">
+            <td style="padding:5px 3px;text-align:center">차수</td>
+            <td style="padding:5px 3px;text-align:center" colspan="2">${prevLbl}</td>
+            <td style="padding:5px 3px;text-align:center" colspan="2">${curLbl}</td>
+            <td style="padding:5px 3px;text-align:center">증감</td>
+          </tr></thead>
+          <tbody>${rows}${avgRow}</tbody>
+        </table>`;
+    }
+  } else if(tab === 'target'){
+    // ── 3) 목표 대비 ──────────────────────────────────
+    const t = (typeof getTargets === 'function') ? getTargets() : {yieldGoal:55, yieldDanger:48, defGoal:2};
+    const yldAch = t.yieldGoal>0 ? (cur.yld/t.yieldGoal*100) : 0;
+    // 이번달 평균 불량률 (window._moCurAvgDef 또는 _moCurByDate에서 계산)
+    const curByDate = window._moCurByDate || {};
+    let totEa=0, totDef=0;
+    Object.values(curByDate).forEach(v => { totEa += v.ea||0; totDef += v.def||0; });
+    const curDef = (totEa+totDef)>0 ? (totDef/(totEa+totDef)*100) : 0;
+    const defAch = t.defGoal>0 ? (curDef/t.defGoal*100) : 0;
+    const status = (val, goal, up) => {
+      if(!val) return '<span style="color:#94a3b8">데이터 없음</span>';
+      const ok = up ? (val >= goal) : (val <= goal);
+      return ok
+        ? '<span style="color:#1d4ed8;font-weight:700">✓ 달성</span>'
+        : '<span style="color:#b91c1c;font-weight:700">✗ 미달</span>';
+    };
+    bodyHtml = `
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:6px">설정한 목표값 기준 (설정 → 분석 목표에서 변경)</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #f1f5f9">
+          <td style="padding:5px 3px;text-align:center">항목</td>
+          <td style="padding:5px 3px;text-align:center">목표</td>
+          <td style="padding:5px 3px;text-align:center">${curLbl}</td>
+          <td style="padding:5px 3px;text-align:center">상태</td>
+        </tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f1f5f9;background:#f8fafc">
+            <td style="padding:7px 3px;font-weight:700">평균 수율</td>
+            <td style="padding:7px 3px;text-align:center">${t.yieldGoal.toFixed(1)}% 이상</td>
+            <td style="padding:7px 3px;text-align:center;font-weight:700">${cur.yld>0?cur.yld.toFixed(1)+'%':'—'}</td>
+            <td style="padding:7px 3px;text-align:center">${status(cur.yld, t.yieldGoal, true)}</td>
+          </tr>
+          <tr style="border-top:1px solid #f1f5f9">
+            <td style="padding:7px 3px;color:#64748b">달성률</td>
+            <td colspan="2" style="padding:7px 3px;text-align:center;color:#1e293b;font-weight:600">${yldAch>0?yldAch.toFixed(1)+'% (목표 대비)':'—'}</td>
+            <td></td>
+          </tr>
+          <tr style="border-top:1px solid #f1f5f9;background:#f8fafc">
+            <td style="padding:7px 3px;font-weight:700">평균 불량률</td>
+            <td style="padding:7px 3px;text-align:center">${t.defGoal.toFixed(2)}% 이하</td>
+            <td style="padding:7px 3px;text-align:center;font-weight:700">${curDef>0?curDef.toFixed(2)+'%':'—'}</td>
+            <td style="padding:7px 3px;text-align:center">${status(curDef, t.defGoal, false)}</td>
+          </tr>
+          <tr style="border-top:1px solid #f1f5f9">
+            <td style="padding:7px 3px;color:#64748b">위험선 (수율)</td>
+            <td colspan="3" style="padding:7px 3px;text-align:center;color:#94a3b8;font-size:11px">${t.yieldDanger.toFixed(1)}% 미만 시 위험</td>
+          </tr>
+        </tbody>
+      </table>`;
+  } else if(tab === 'yoy'){
+    // ── 4) 전년 동월 ─────────────────────────────────
+    bodyHtml = `
+      <div style="text-align:center;padding:2rem 1rem">
+        <div style="font-size:32px;margin-bottom:8px">📊</div>
+        <div style="font-size:13px;color:#64748b;font-weight:600;margin-bottom:6px">전년 동월 데이터 부족</div>
+        <div style="font-size:11px;color:#94a3b8;line-height:1.5">계절성 분석을 위해서는<br>1년 이상의 데이터가 필요합니다.<br>내년부터 자동으로 비교 가능해집니다.</div>
+      </div>`;
+  }
+
+  el.innerHTML = `<div class="ct">전월 비교</div>${tabsHtml}${bodyHtml}`;
+}
+
+// 탭 전환 핸들러
+function _moSetPrevCmpTab(tab){
+  window._moPrevCmpTab = tab;
+  const cache = window._moPrevCmpCache;
+  const el = document.getElementById('mo_prev_cmp');
+  if(!cache || !el) return;
+  _moRenderPrevCmp(el, cache.cur, cache.prev, cache.prevYm);
 }
 
 async function exportMonthlyReport() {
@@ -3507,3 +3655,7 @@ function renderDailyAlerts(metrics, dateStr){
     autoSendKakaoAlerts(redAlerts, dateStr || (new Date().toISOString().slice(0,10)));
   }
 }
+
+// 탭 핸들러 글로벌 노출 (onclick에서 사용)
+window._moSetPrevCmpTab = _moSetPrevCmpTab;
+
