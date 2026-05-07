@@ -880,7 +880,7 @@ function _moRedrawDefChart(){
              tooltip:{callbacks:{label:v=>v.raw!=null?v.raw+'%':'—'}}},
     scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
             y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
-               grid:{color:'rgba(128,128,128,0.1)'},min:0,grace:'30%'}}}});
+               grid:{color:'rgba(128,128,128,0.1)'},min:0,grace:'15%'}}}});
 }
 
 function _moRenderYieldChart(dailyYields) {
@@ -985,7 +985,7 @@ function _moRenderYieldChart(dailyYields) {
                tooltip:{callbacks:{label:v=>v.dataset.label+': '+v.raw+'%'}}},
       scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
               y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
-                 grid:{color:'rgba(128,128,128,0.1)'},min:44,suggestedMax:70}}}
+                 grid:{color:'rgba(128,128,128,0.1)'},min:44,suggestedMax:60}}}
   });
 }
 
@@ -1206,40 +1206,33 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
       let sumPrevYld = 0, sumCurYld = 0, cntYld = 0;
       for(let i=0; i<N; i++){
         const cd = curDates[i];
-        const pd = prevByIdx[i] && prevByIdx[i].date;
         const pYld = prevYldByIdx[i] ? prevYldByIdx[i].yld : 0;
         const cYldRow = curYldDays.find(x => String(x.date||'').slice(0,10) === cd);
         const cYld = cYldRow ? cYldRow.yld : 0;
         if(pYld>0 && cYld>0){ sumPrevYld+=pYld; sumCurYld+=cYld; cntYld++; }
         const yldDelta = (pYld>0 && cYld>0) ? delta(cYld, pYld, true) : '<span style="color:#94a3b8">—</span>';
         rows += `<tr style="border-top:1px solid #f1f5f9">
-          <td style="padding:6px 3px;color:#64748b">${i+1}일차</td>
-          <td style="padding:6px 3px;text-align:center;font-size:11px;color:#94a3b8">${pd?pd.slice(5):'—'}</td>
-          <td style="padding:6px 3px;text-align:center">${pYld>0?pYld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:6px 3px;text-align:center;font-size:11px;color:#94a3b8">${cd.slice(5)}</td>
-          <td style="padding:6px 3px;text-align:center;font-weight:600">${cYld>0?cYld.toFixed(1)+'%':'—'}</td>
-          <td style="padding:6px 3px;text-align:center">${yldDelta}</td>
+          <td style="padding:6px 6px;color:#64748b;font-weight:600">${i+1}일차</td>
+          <td style="padding:6px 6px;text-align:center;background:#f8fafc">${pYld>0?pYld.toFixed(1)+'%':'—'}</td>
+          <td style="padding:6px 6px;text-align:center;font-weight:600">${cYld>0?cYld.toFixed(1)+'%':'—'}</td>
+          <td style="padding:6px 6px;text-align:center">${yldDelta}</td>
         </tr>`;
       }
       const avgRow = (cntYld>0) ? `
-        <tr style="border-top:2px solid #cbd5e1;background:#f8fafc">
-          <td style="padding:7px 3px;font-weight:700">평균</td>
-          <td style="padding:7px 3px;text-align:center;color:#94a3b8;font-size:10px">매칭 ${cntYld}일</td>
-          <td style="padding:7px 3px;text-align:center;font-weight:700">${(sumPrevYld/cntYld).toFixed(1)}%</td>
-          <td></td>
-          <td style="padding:7px 3px;text-align:center;font-weight:700;color:#1d4ed8">${(sumCurYld/cntYld).toFixed(1)}%</td>
-          <td style="padding:7px 3px;text-align:center">${delta(sumCurYld/cntYld, sumPrevYld/cntYld, true)}</td>
+        <tr style="border-top:2px solid #cbd5e1;background:#eff6ff">
+          <td style="padding:8px 6px;font-weight:700">평균<span style="font-size:10px;color:#94a3b8;font-weight:400"> · 매칭 ${cntYld}일</span></td>
+          <td style="padding:8px 6px;text-align:center;font-weight:700;background:#dbeafe">${(sumPrevYld/cntYld).toFixed(1)}%</td>
+          <td style="padding:8px 6px;text-align:center;font-weight:700;color:#1d4ed8">${(sumCurYld/cntYld).toFixed(1)}%</td>
+          <td style="padding:8px 6px;text-align:center">${delta(sumCurYld/cntYld, sumPrevYld/cntYld, true)}</td>
         </tr>` : '';
       bodyHtml = `
         <div style="font-size:10px;color:#94a3b8;margin-bottom:6px">N일차끼리 매칭 — 작업일 수가 다를 때 평등 비교</div>
-        <table style="width:100%;font-size:11px;border-collapse:collapse">
-          <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #f1f5f9">
-            <td style="padding:5px 3px;text-align:center">차수</td>
-            <td style="padding:5px 3px;text-align:center;color:#94a3b8">${prevLbl} 일자</td>
-            <td style="padding:5px 3px;text-align:center">${prevLbl}</td>
-            <td style="padding:5px 3px;text-align:center;color:#94a3b8">${curLbl} 일자</td>
-            <td style="padding:5px 3px;text-align:center">${curLbl}</td>
-            <td style="padding:5px 3px;text-align:center">증감</td>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #e2e8f0">
+            <td style="padding:6px 6px;text-align:left">차수</td>
+            <td style="padding:6px 6px;text-align:center;background:#f8fafc;font-weight:600;color:#64748b">${prevLbl}</td>
+            <td style="padding:6px 6px;text-align:center;font-weight:600;color:#1e293b">${curLbl}</td>
+            <td style="padding:6px 6px;text-align:center">증감</td>
           </tr></thead>
           <tbody>${rows}${avgRow}</tbody>
         </table>`;
@@ -2904,7 +2897,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: 'var(--g5)', font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
-        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '40%' }
+        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '20%' }
       }
     }
   });
@@ -3119,9 +3112,9 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       },
       scales: {
         x: { stacked: isStacked, ticks: { font: {size:9}, autoSkip: false, maxRotation: 0 }, grid: { display: false } },
-        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '40%' },
+        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '20%' },
         // 평균선 전용 — stacked 영향 안 받게 별도 축 (display:false). y와 같은 범위 사용.
-        y_avg: { display: false, stacked: false, beginAtZero: true, grace: '40%',
+        y_avg: { display: false, stacked: false, beginAtZero: true, grace: '20%',
           afterFit: function(scale){
             const yScale = scale.chart.scales.y;
             if(yScale){ scale.min = yScale.min; scale.max = yScale.max; }
