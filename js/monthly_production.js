@@ -1104,7 +1104,10 @@
 
     // 같은 날짜 행 수 계산 (병합용)
     var dateCntMap = {};
-    calcRows.forEach(function(r){ dateCntMap[r.date] = (dateCntMap[r.date]||0)+1; });
+    // 그룹 모드일 땐 dateCntMap 빌드 X (모든 row가 자기 행에 표시)
+    if(_mpGroupMode === 'none'){
+      calcRows.forEach(function(r){ dateCntMap[r.date] = (dateCntMap[r.date]||0)+1; });
+    }
 
     // ★ 부위 컬럼 (그룹 단위로 rowspan 처리) — 제품별이 아닌 컬럼
     var __PART_COLS = {
