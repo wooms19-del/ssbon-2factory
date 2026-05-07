@@ -866,21 +866,7 @@ function _moRedrawDefChart(){
         }
       }
       // 3) 그리기
-      // 점선 라벨까지 연장 (bar 차트와 동일 — dashOffset 정렬)
-      endItems.forEach(item => {
-        if(!item.dash) return;
-        const _cyc = (item.dash[0]||0) + (item.dash[1]||0);
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = item.bw || 1.5;
-        ctx.setLineDash(item.dash);
-        ctx.lineDashOffset = _cyc>0 ? (item.fromX % _cyc) : 0;
-        ctx.beginPath();
-        ctx.moveTo(item.fromX, item.y);
-        ctx.lineTo(item.x, item.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.lineDashOffset = 0;
-      });
+      // 점선 연장 X — Chart.js가 그린 원래 점선만 사용 (계단 효과 방지)
       endItems.forEach(item => {
         ctx.fillStyle = item.color;
         ctx.textAlign='left'; ctx.textBaseline='middle';
@@ -982,21 +968,7 @@ function _moRenderYieldChart(dailyYields) {
           endItems[i].y = endItems[i-1].y + MIN_GAP;
         }
       }
-      // 점선 라벨까지 연장 (bar 차트와 동일 — dashOffset 정렬)
-      endItems.forEach(item => {
-        if(!item.dash) return;
-        const _cyc = (item.dash[0]||0) + (item.dash[1]||0);
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = item.bw || 1.5;
-        ctx.setLineDash(item.dash);
-        ctx.lineDashOffset = _cyc>0 ? (item.fromX % _cyc) : 0;
-        ctx.beginPath();
-        ctx.moveTo(item.fromX, item.y);
-        ctx.lineTo(item.x, item.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.lineDashOffset = 0;
-      });
+      // 점선 연장 X — Chart.js가 그린 원래 점선만 사용 (계단 효과 방지)
       endItems.forEach(item => {
         ctx.fillStyle = item.color;
         ctx.textAlign='left'; ctx.textBaseline='middle';
