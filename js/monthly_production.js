@@ -19,6 +19,9 @@
   var _mpGrp = {
     inout: true, workers: false, hours: false, prod: false, yield: false, usage: false
   };
+  // 그룹 모드: 'none'(디폴트) / 'product'(제품별) / 'part'(원육별)
+  // 디바이스간 동일성 룰 — localStorage 안 씀 (메모리만)
+  var _mpGroupMode = 'none';
   try {
     var saved = localStorage.getItem('ssbon_v6_mpGrp');
     if(saved) _mpGrp = Object.assign(_mpGrp, JSON.parse(saved));
@@ -186,6 +189,12 @@
       + _grpChip('yield','수율')
       + _grpChip('usage','사용량')
       + '</div>'
+      + '<div id="mpToolbar3" style="padding:8px 14px;background:#fafafa;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #e5e7eb">'
+      + '<span style="font-size:12px;color:#555;font-weight:600">그룹:</span>'
+      + _modeChip('none','없음')
+      + _modeChip('product','제품별')
+      + _modeChip('part','원육별')
+      + '</div>'
       + '<div id="mpStatus">데이터 불러오는 중…</div>'
       + '<div id="mpTblWrap" style="display:none"><table id="mpTbl"></table></div>'
       + '<div id="mpCmp" style="display:none"></div>';
@@ -196,6 +205,18 @@
     var on = _mpGrp[key];
     return '<label class="grp'+(on?' on':'')+'" onclick="mpToggleGrp(\''+key+'\')">'
          + '<input type="checkbox" '+(on?'checked':'')+' onclick="event.stopPropagation()" onchange="mpToggleGrp(\''+key+'\')">'+lbl+'</label>';
+  }
+
+  // 그룹 모드 라디오 버튼 (없음/제품별/원육별)
+  function _modeChip(val, lbl){
+    var on = (_mpGroupMode === val);
+    return '<label class="grp'+(on?' on':'')+'" onclick="mpSetGroupMode(\''+val+'\')" style="cursor:pointer">'
+         + '<input type="radio" name="_mpgrpmode" '+(on?'checked':'')+' onclick="event.stopPropagation()" onchange="mpSetGroupMode(\''+val+'\')">'+lbl+'</label>';
+  }
+  function mpSetGroupMode(val){
+    _mpGroupMode = val;
+    _mpRenderShell();
+    if(_mpData) _mpRenderTable();
   }
 
   /* ===== 데이터 로드 ===== */
@@ -886,6 +907,80 @@
       });
     });
 
+    // ★ 그룹 모드별 집계 (제품별 / 원육별 / 없음)
+    if(_mpGroupMode === 'product' || _mpGroupMode === 'part'){
+      var grouped = {};
+      var groupOrder = [];
+      calcRows.forEach(function(r){
+        var key;
+        if(_mpGroupMode === 'product'){
+          key = r.product || '?';
+        } else {
+          key = r.type || (r.isNoMeat?'무육':'?');
+        }
+        if(!grouped[key]){
+          grouped[key] = {
+            product: (_mpGroupMode === 'product') ? key : '',
+            type: (_mpGroupMode === 'part') ? key : '',
+            typeList: (_mpGroupMode === 'part') ? [key] : [],
+            isNoMeat: (key==='무육'),
+            date: '',
+            dayNo: '',
+            dateRowIdx: 0,
+            rmKg:0, ppKg:0, ppHours:0, ppPersonHours:0,
+            ckKg:0, ckHours:0, ckPersonHours:0,
+            shKg:0, shHours:0, shPersonHours:0,
+            pkEa:0, pkHours:0, pkPersonHours:0,
+            meatKg:0, prodKg:0,
+            pouchUsed:0, sauceKgUsed:0, subKgUsed:0, boxUsed:0,
+            kgea: r.kgea, kgTot: r.kgTot,
+            _workDays: new Set()
+          };
+          groupOrder.push(key);
+        }
+        var g = grouped[key];
+        g.rmKg += r.rmKg||0;
+        g.ppKg += r.ppKg||0; g.ppHours += r.ppHours||0; g.ppPersonHours += r.ppPersonHours||0;
+        g.ckKg += r.ckKg||0; g.ckHours += r.ckHours||0; g.ckPersonHours += r.ckPersonHours||0;
+        g.shKg += r.shKg||0; g.shHours += r.shHours||0; g.shPersonHours += r.shPersonHours||0;
+        g.pkEa += r.pkEa||0; g.pkHours += r.pkHours||0; g.pkPersonHours += r.pkPersonHours||0;
+        g.meatKg += r.meatKg||0; g.prodKg += r.prodKg||0;
+        g.pouchUsed += r.pouchUsed||0;
+        g.sauceKgUsed += r.sauceKgUsed||0;
+        g.subKgUsed += r.subKgUsed||0;
+        g.boxUsed += r.boxUsed||0;
+        if(r.date) g._workDays.add(r.date);
+      });
+      // 집계 후 비율 계산
+      calcRows = groupOrder.map(function(k, i){
+        var g = grouped[k];
+        var rm = g.rmKg;
+        var ppT = g.ppPersonHours, ckT = g.ckPersonHours, shT = g.shPersonHours, pkT = g.pkPersonHours;
+        g.dayNo = i+1;
+        g.date = g._workDays.size + '일';  // 작업일 수 표시
+        delete g._workDays;
+        return Object.assign(g, {
+          rmKg: _r2(rm),
+          ppKg: _r2(g.ppKg), ckKg: _r2(g.ckKg), shKg: _r2(g.shKg),
+          meatKg: _r2(g.meatKg), prodKg: _r2(g.prodKg),
+          prodPp: rm&&ppT?_r2(rm/ppT):0,
+          prodCk: rm&&ckT?_r2(rm/ckT):0,
+          prodSh: rm&&shT?_r2(rm/shT):0,
+          prodPk: rm&&pkT?_r2(rm/pkT):0,
+          prodAll: rm&&(ppT+ckT+shT+pkT)?_r2(rm/(ppT+ckT+shT+pkT)):0,
+          yieldRmPp: rm?_r2(g.ppKg/rm*100)/100:0,
+          yieldRmCk: rm?_r2(g.ckKg/rm*100)/100:0,
+          yieldRmSh: rm?_r2(g.shKg/rm*100)/100:0,
+          yieldRmPk: rm?_r2(g.meatKg/rm*100)/100:0,
+          yieldPp:   rm?_r2(g.ppKg/rm*100)/100:0,
+          yieldCk:   g.ppKg?_r2(g.ckKg/g.ppKg*100)/100:0,
+          yieldSh:   g.ckKg?_r2(g.shKg/g.ckKg*100)/100:0,
+          yieldPk:   g.shKg?_r2(g.meatKg/g.shKg*100)/100:0,
+          _grpSize: 1, _grpFirst: true
+        });
+      });
+    }
+
     var sum = _mpAggregate(calcRows);
     var prevRows = (_mpPrevData && _mpPrevData.rows) || [];
     var prevSum = _mpAggregate(prevRows.map(function(r){
@@ -1519,6 +1614,7 @@
   window.mpPickMonth    = mpPickMonth;
   window.mpDownload     = _mpDownload;
   window.mpToggleGrp    = mpToggleGrp;
+  window.mpSetGroupMode = mpSetGroupMode;
 
   ['setMode','setModeSchedule','setModeAtt'].forEach(function(fn){
     var orig = window[fn];
