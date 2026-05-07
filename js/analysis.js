@@ -870,7 +870,7 @@ function _moRedrawDefChart(){
       ctx.restore();
     }}
   ],data:{labels:labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,
-    layout:{padding:{right:90, top:20, bottom:14}},
+    layout:{padding:{right:130, top:36, bottom:14}},
     plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,usePointStyle:true,padding:14}},
              tooltip:{callbacks:{label:v=>v.raw!=null?v.raw+'%':'—'}}},
     scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
@@ -970,7 +970,7 @@ function _moRenderYieldChart(dailyYields) {
     type:'line',
     data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,
-      layout:{padding:{right:90, top:20, bottom:14}},
+      layout:{padding:{right:130, top:36, bottom:14}},
       plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,usePointStyle:true,padding:14}},
                tooltip:{callbacks:{label:v=>v.dataset.label+': '+v.raw+'%'}}},
       scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
@@ -2714,7 +2714,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 20, bottom: 20, right: 100 } },
+      layout: { padding: { top: 36, bottom: 20, right: 130 } },
       plugins: {
         legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 14, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
         tooltip: {
@@ -2930,7 +2930,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 25, right: 100 } },
+      layout: { padding: { top: 36, right: 130 } },
       plugins: {
         legend: { display: true, position: 'top',
           labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 14,
