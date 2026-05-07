@@ -2544,6 +2544,14 @@ function renderPackingChart(dayEntries, opMap, ym) {
   if (titleEl) {
     const [ty,tm] = ym.split('-');
     titleEl.textContent = '운영팀 ' + parseInt(tm) + '월 내포장 수량';
+    // 다른 3개 차트 제목도 같은 월로 갱신
+    const _mNum = parseInt(tm);
+    const rmT = document.getElementById('mo_rm_title');
+    if (rmT) rmT.textContent = '운영팀 ' + _mNum + '월 일별 원육 사용량';
+    const defT = document.getElementById('mo_def_title');
+    if (defT) defT.textContent = '운영팀 ' + _mNum + '월 불량률 추이';
+    const yldT = document.getElementById('mo_yield_title');
+    if (yldT) yldT.textContent = '운영팀 ' + _mNum + '월 원육수율 일별 추이';
   }
 
   // 부제목 (모드별 안내 문구)

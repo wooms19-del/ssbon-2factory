@@ -578,7 +578,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div>
           <div style="font-size:10px;color:var(--g4);margin-bottom:1px">순수본 2공장</div>
-          <div class="ct" style="margin:0">일별 원육 사용량</div>
+          <div class="ct" style="margin:0" id="mo_rm_title">운영팀 일별 원육 사용량</div>
           <div style="font-size:11px;color:var(--g5);margin-top:2px">막대 = 그날 사용된 원육(kg)</div>
         </div>
         <button class="btn bo bsm" onclick="downloadRmChart()" style="font-size:11px">📥 저장</button>
@@ -604,8 +604,11 @@
       <div style="position:relative;height:280px"><canvas id="mo_bar_chart"></canvas></div>
     </div>
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="ct">불량률 추이</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:10px;color:var(--g4);margin-bottom:1px">순수본 2공장</div>
+          <div class="ct" style="margin:0" id="mo_def_title">운영팀 불량률 추이</div>
+        </div>
         <button class="btn bo bsm" onclick="downloadDefChart()" style="font-size:11px">📥 저장</button>
       </div>
       <div style="position:relative;height:220px"><canvas id="mo_def_chart"></canvas></div>
@@ -615,8 +618,11 @@
   <!-- 수율 추이 + 전월 비교 -->
   <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:12px">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="ct">원육수율 일별 추이</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:10px;color:var(--g4);margin-bottom:1px">순수본 2공장</div>
+          <div class="ct" style="margin:0" id="mo_yield_title">운영팀 원육수율 일별 추이</div>
+        </div>
         <button class="btn bo bsm" onclick="downloadYieldChart()" style="font-size:11px">📥 저장</button>
       </div>
       <div style="position:relative;height:200px"><canvas id="mo_yield_chart"></canvas></div>
@@ -1071,7 +1077,7 @@
 <script src="js/packing.js?v=1778044749"></script>
 <script src="js/csv_upload.js?v=1777999449"></script>
 <script src="js/daily_report.js?v=1778039994"></script>
-<script src="js/analysis.js?v=1778114877"></script>
+<script src="js/analysis.js?v=1778114969"></script>
 <script src="js/ai_analysis.js?v=1778073418"></script>
 <script src="js/dashboard.js?v=1778078750"></script>
 <script src="js/trace.js?v=1777999449"></script>
