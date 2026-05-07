@@ -868,7 +868,8 @@ function _perfRenderTable(rows){
     var cells=[
       (r.dayNo>0 && r.dayRowIdx===0 && !isSubRow) ? r.dayNo : '',
       (r.dayRowIdx===0 && !isSubRow) ? r.date.slice(5) : '',
-      (r.dayRowIdx===0 && !isSubRow && r.expDate) ? r.expDate.slice(2).replace(/-/g,'.') : '',
+      // 소비기한: 각 제품의 첫 행마다 표시 (sub-row일 땐 첫 sub-row에만)
+      ((!isSubRow || r.subRowIdx===0) && r.expDate) ? r.expDate.slice(2).replace(/-/g,'.') : '',
       !isSubRow ? r.product : '',
       r.rmType||'',
       fmt(r.rmKg), r.boxSeoldo||'', r.boxHongdu||'', r.boxUdun||'',
