@@ -942,7 +942,7 @@ function _moRenderYieldChart(dailyYields) {
       ctx.restore();
     }},
     {id:'endLbl',afterDatasetsDraw(chart){
-      const {ctx}=chart; ctx.save();
+      const {ctx, chartArea}=chart; ctx.save();
       ctx.font='bold 11px sans-serif';
       const endItems = [];
       chart.data.datasets.forEach((d,i)=>{
