@@ -851,7 +851,7 @@ function _moRedrawDefChart(){
         const meta = chart.getDatasetMeta(i).data;
         if(!meta.length) return;
         const lastPt = meta[meta.length-1];
-        endItems.push({ y: lastPt.y, x: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
+        endItems.push({ y: lastPt.y, x: chartArea.right, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
       });
       // 2) Y 기준 정렬 후 겹침 방지 (최소 간격 14px)
       endItems.sort((a,b) => a.y - b.y);
@@ -950,7 +950,7 @@ function _moRenderYieldChart(dailyYields) {
         const meta = chart.getDatasetMeta(i).data;
         if(!meta.length) return;
         const lastPt = meta[meta.length-1];
-        endItems.push({ y: lastPt.y, x: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
+        endItems.push({ y: lastPt.y, x: chartArea.right, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
       });
       endItems.sort((a,b) => a.y - b.y);
       const MIN_GAP = 18;
