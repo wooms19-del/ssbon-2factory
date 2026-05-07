@@ -1223,9 +1223,10 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
       }
       const avgRow = (cntYld>0) ? `
         <tr style="border-top:2px solid #cbd5e1;background:#f8fafc">
-          <td style="padding:7px 3px;font-weight:700" colspan="2">평균 수율 (매칭 ${cntYld}일)</td>
+          <td style="padding:7px 3px;font-weight:700">평균</td>
+          <td style="padding:7px 3px;text-align:center;color:#94a3b8;font-size:10px">매칭 ${cntYld}일</td>
           <td style="padding:7px 3px;text-align:center;font-weight:700">${(sumPrevYld/cntYld).toFixed(1)}%</td>
-          <td colspan="1"></td>
+          <td></td>
           <td style="padding:7px 3px;text-align:center;font-weight:700;color:#1d4ed8">${(sumCurYld/cntYld).toFixed(1)}%</td>
           <td style="padding:7px 3px;text-align:center">${delta(sumCurYld/cntYld, sumPrevYld/cntYld, true)}</td>
         </tr>` : '';
@@ -1234,8 +1235,10 @@ function _moRenderPrevCmp(el, cur, prev, prevYm) {
         <table style="width:100%;font-size:11px;border-collapse:collapse">
           <thead><tr style="font-size:10px;color:#94a3b8;border-bottom:1px solid #f1f5f9">
             <td style="padding:5px 3px;text-align:center">차수</td>
-            <td style="padding:5px 3px;text-align:center" colspan="2">${prevLbl}</td>
-            <td style="padding:5px 3px;text-align:center" colspan="2">${curLbl}</td>
+            <td style="padding:5px 3px;text-align:center;color:#94a3b8">${prevLbl} 일자</td>
+            <td style="padding:5px 3px;text-align:center">${prevLbl}</td>
+            <td style="padding:5px 3px;text-align:center;color:#94a3b8">${curLbl} 일자</td>
+            <td style="padding:5px 3px;text-align:center">${curLbl}</td>
             <td style="padding:5px 3px;text-align:center">증감</td>
           </tr></thead>
           <tbody>${rows}${avgRow}</tbody>
