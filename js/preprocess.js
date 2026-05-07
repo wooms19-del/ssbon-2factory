@@ -17,6 +17,8 @@ function updPpWagon(){
   const _yesterday=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
   // 잔여중량 ≤ 0인 건 제외 (이미 다 쓴 것)
   const wagons=L.thawing.filter(t=>{
+    // cart 없는 thawing record는 전처리 입력 대상에서 제외 (옛 wagon-only 잔재 record 차단)
+    if(!t.cart || String(t.cart).trim()==='') return false;
     const remain = t.remainKg!==undefined ? t.remainKg : t.totalKg;
     if(remain <= 0.01) return false;
     const e=String(t.end||'');
