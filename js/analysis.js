@@ -855,7 +855,7 @@ function _moRedrawDefChart(){
       });
       // 2) Y 기준 정렬 후 겹침 방지 (최소 간격 14px)
       endItems.sort((a,b) => a.y - b.y);
-      const MIN_GAP = 14;
+      const MIN_GAP = 18;
       for(let i=1; i<endItems.length; i++){
         if(endItems[i].y - endItems[i-1].y < MIN_GAP){
           endItems[i].y = endItems[i-1].y + MIN_GAP;
@@ -870,7 +870,7 @@ function _moRedrawDefChart(){
       ctx.restore();
     }}
   ],data:{labels:labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,
-    layout:{padding:{right:130, top:36, bottom:14}},
+    layout:{padding:{right:170, top:36, bottom:14}},
     plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,usePointStyle:true,padding:14}},
              tooltip:{callbacks:{label:v=>v.raw!=null?v.raw+'%':'—'}}},
     scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
@@ -953,7 +953,7 @@ function _moRenderYieldChart(dailyYields) {
         endItems.push({ y: lastPt.y, x: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
       });
       endItems.sort((a,b) => a.y - b.y);
-      const MIN_GAP = 14;
+      const MIN_GAP = 18;
       for(let i=1; i<endItems.length; i++){
         if(endItems[i].y - endItems[i-1].y < MIN_GAP){
           endItems[i].y = endItems[i-1].y + MIN_GAP;
@@ -970,7 +970,7 @@ function _moRenderYieldChart(dailyYields) {
     type:'line',
     data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,
-      layout:{padding:{right:130, top:36, bottom:14}},
+      layout:{padding:{right:170, top:36, bottom:14}},
       plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,usePointStyle:true,padding:14}},
                tooltip:{callbacks:{label:v=>v.dataset.label+': '+v.raw+'%'}}},
       scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
@@ -2678,7 +2678,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
           endItems.push({ y: lastPt.y, x: chartArea.right, fromX: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
         });
         endItems.sort((a,b) => a.y - b.y);
-        const MIN_GAP = 14;
+        const MIN_GAP = 18;
         for(let i=1; i<endItems.length; i++){
           if(endItems[i].y - endItems[i-1].y < MIN_GAP){
             endItems[i].y = endItems[i-1].y + MIN_GAP;
@@ -2714,7 +2714,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 36, bottom: 60, right: 130 } },
+      layout: { padding: { top: 36, bottom: 60, right: 170 } },
       plugins: {
         legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 14, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
         tooltip: {
@@ -2897,7 +2897,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
           endItems.push({ y: lastPt.y, x: chartArea.right, fromX: lastPt.x, text: ' '+d._endLabel, color: d.borderColor || '#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
         });
         endItems.sort((a,b) => a.y - b.y);
-        const MIN_GAP = 14;
+        const MIN_GAP = 18;
         for(let i=1; i<endItems.length; i++){
           if(endItems[i].y - endItems[i-1].y < MIN_GAP){
             endItems[i].y = endItems[i-1].y + MIN_GAP;
@@ -2930,7 +2930,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 36, right: 130 } },
+      layout: { padding: { top: 36, right: 170 } },
       plugins: {
         legend: { display: true, position: 'top',
           labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 14,
