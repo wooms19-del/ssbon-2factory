@@ -1365,12 +1365,13 @@
       var sameP = prevSumSame.rmKg ? prevSumSame[key]/prevSumSame.rmKg*100 : 0;
       var fullP = prevSum.rmKg ? prevSum[key]/prevSum.rmKg*100 : 0;
       var dp = thisP - sameP;
+      var dpct = sameP ? (dp/sameP*100) : 0;
       return '<tr><td><strong>'+label+'</strong></td>'
         +'<td>'+nf(thisP,1)+'%</td>'
         +'<td>'+nf(sameP,1)+'%</td>'
         +'<td>'+nf(fullP,1)+'%</td>'
         +'<td style="color:'+diffColor(dp)+';font-weight:600">'+arr(dp)+' '+nf(Math.abs(dp),1)+'%p</td>'
-        +'<td>—</td></tr>';
+        +'<td style="color:'+diffColor(dpct)+';font-weight:600">'+arr(dpct)+' '+nf(Math.abs(dpct),1)+'%</td></tr>';
     }
     cmp.innerHTML = '<h3>📊 전월 대비 비교</h3>'
       + '<table>'
