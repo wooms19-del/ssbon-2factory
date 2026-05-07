@@ -2965,7 +2965,7 @@ function _moSetRmTab(tab){
 }
 
 async function downloadRmChart(){
-  await _downloadGenericChart('mo_rm_chart', _moRmChart, '일별원육사용량');
+  await _downloadGenericChart('mo_rm_chart', _moRmChart, '일별 원육 사용량');
 }
 
 // 일반 차트(불량률/수율) 고화질 다운로드
@@ -3004,7 +3004,7 @@ async function _downloadGenericChart(canvasId, chart, title){
   ctx.fillText('순수본 2공장', 24*S, 28*S);
   ctx.fillStyle = '#1E293B';
   ctx.font = 'bold ' + (22*S) + 'px sans-serif';
-  ctx.fillText(parseInt(m) + '월 ' + title, 24*S, 60*S);
+  ctx.fillText('운영팀 ' + parseInt(m) + '월 ' + title, 24*S, 60*S);
 
   // 차트 그리기
   ctx.drawImage(canvas, 0, HD, W, H - HD);
@@ -3021,11 +3021,11 @@ async function _downloadGenericChart(canvasId, chart, title){
 }
 
 async function downloadDefChart(){
-  await _downloadGenericChart('mo_def_chart', _moDefChart, '불량률추이');
+  await _downloadGenericChart('mo_def_chart', _moDefChart, '불량률 추이');
 }
 
 async function downloadYieldChart(){
-  await _downloadGenericChart('mo_yield_chart', _moYieldChart, '원육수율일별추이');
+  await _downloadGenericChart('mo_yield_chart', _moYieldChart, '원육수율 일별 추이');
 }
 
 async function downloadPackingChart() {
