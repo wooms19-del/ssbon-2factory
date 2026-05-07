@@ -14,18 +14,20 @@ function updPpWagon(){
   const container=document.getElementById('pp_wagonChecks');
   if(!container) return;
   const _today=tod();
-  // 방혈 종료된 cart만 전처리 가능. end가 오늘 날짜로 종료된 것 (또는 옛 'HH:MM' 형식의 today)
+  const _yesterday=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
   // 잔여중량 ≤ 0인 건 제외 (이미 다 쓴 것)
   const wagons=L.thawing.filter(t=>{
     const remain = t.remainKg!==undefined ? t.remainKg : t.totalKg;
     if(remain <= 0.01) return false;
-    // 진행중(end='') 대차도 전처리 가능 — 전처리 시작 시점에 자동 종료
     const e=String(t.end||'');
-    if(!e) return true;  // 진행중 → 전처리 가능 (시작 시 자동 종료)
-    // end가 오늘 날짜로 종료
+    const tDate=String(t.date||'').slice(0,10);
+    // 진행중(end='') → 어제 또는 오늘 시작한 것만 표시 (옛 좀비 데이터 제외)
+    if(!e){
+      return tDate===_today || tDate===_yesterday;
+    }
+    // 종료된 것 → 오늘 종료된 것만
     if(e.length>=10 && e.slice(0,10)===_today) return true;
-    // 'HH:MM' 옛 형식 → date가 오늘이어야
-    if(e.length<=5 && String(t.date||'').slice(0,10)===_today) return true;
+    if(e.length<=5 && tDate===_today) return true;
     return false;
   });
   if(!wagons.length){
