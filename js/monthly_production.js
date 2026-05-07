@@ -174,6 +174,7 @@
       + '#mpCmp th,#mpCmp td{border:1px solid #d1d5db;padding:8px 14px;text-align:center}'
       + '#mpCmp th{background:#374151;color:#fff;font-weight:600}'
       + '#mpCmp tr:nth-child(even) td{background:#fafbfc}'
+      + '#mpCmp tbody tr:hover td{background:#fef9c3}'
       + '</style>'
       + '<div id="mpToolbar">'
       + '<button class="btn" onclick="mpPrevMonth()">◀</button>'
