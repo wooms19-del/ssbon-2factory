@@ -875,8 +875,8 @@ function _moRedrawDefChart(){
       ctx.restore();
     }}
   ],data:{labels:labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,
-    layout:{padding:{right:170, top:36, bottom:14}},
-    plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,usePointStyle:true,padding:24}},
+    layout:{padding:{right:170, top:50, bottom:14}},
+    plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,usePointStyle:true,padding:30}},
              tooltip:{callbacks:{label:v=>v.raw!=null?v.raw+'%':'—'}}},
     scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
             y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
@@ -980,8 +980,8 @@ function _moRenderYieldChart(dailyYields) {
     type:'line',
     data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,
-      layout:{padding:{right:170, top:36, bottom:14}},
-      plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,usePointStyle:true,padding:24}},
+      layout:{padding:{right:170, top:50, bottom:14}},
+      plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,usePointStyle:true,padding:30}},
                tooltip:{callbacks:{label:v=>v.dataset.label+': '+v.raw+'%'}}},
       scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
               y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
@@ -2732,9 +2732,9 @@ function renderPackingChart(dayEntries, opMap, ym) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 36, bottom: 60, right: 170 } },
+      layout: { padding: { top: 50, bottom: 60, right: 170 } },
       plugins: {
-        legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 24, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
+        legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 30, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
         tooltip: {
           callbacks: {
             title: ctx => {
@@ -2948,10 +2948,10 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 36, right: 170 } },
+      layout: { padding: { top: 50, right: 170 } },
       plugins: {
         legend: { display: true, position: 'top',
-          labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 24,
+          labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 30,
             filter: (item) => {
               // stacked 종합 모드 = 부위 + 평균선 모두 노출
               // 부위 단일 탭 = 평균선만
