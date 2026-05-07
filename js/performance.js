@@ -832,7 +832,7 @@ function _perfRenderTable(rows){
   // 13~20: 내포장~출고박스  21~22: FP·FC소스  23: 메추리알  24~25: 파우치·박스합계
   var MCOLS=new Set([0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]);
   // 날짜별 공유 병합 대상 (일수·날짜·소비기한)
-  var DAY_MCOLS=new Set([0,1,2]);
+  var DAY_MCOLS=new Set([0,1]);  // 일수, 날짜만 그날 단위 병합 (소비기한은 제품마다 다를 수 있어 제외)
   // 무육 제외 병합 대상 (전처리·자숙·파쇄 — meat 행만 묶고 noMeat는 빈셀)
   var DAY_MEAT_COLS=new Set([9,10,11]);
 
