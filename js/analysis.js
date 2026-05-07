@@ -880,7 +880,7 @@ function _moRedrawDefChart(){
              tooltip:{callbacks:{label:v=>v.raw!=null?v.raw+'%':'—'}}},
     scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
             y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
-               grid:{color:'rgba(128,128,128,0.1)'},min:0}}}});
+               grid:{color:'rgba(128,128,128,0.1)'},min:0,grace:'30%'}}}});
 }
 
 function _moRenderYieldChart(dailyYields) {
@@ -985,7 +985,7 @@ function _moRenderYieldChart(dailyYields) {
                tooltip:{callbacks:{label:v=>v.dataset.label+': '+v.raw+'%'}}},
       scales:{x:{ticks:{color:'#888',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
               y:{ticks:{color:'#888',font:{size:10},callback:v=>v+'%'},
-                 grid:{color:'rgba(128,128,128,0.1)'},min:44,suggestedMax:60}}}
+                 grid:{color:'rgba(128,128,128,0.1)'},min:44,suggestedMax:70}}}
   });
 }
 
@@ -2904,7 +2904,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: 'var(--g5)', font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
-        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '20%' }
+        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '40%' }
       }
     }
   });
@@ -3119,9 +3119,9 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       },
       scales: {
         x: { stacked: isStacked, ticks: { font: {size:9}, autoSkip: false, maxRotation: 0 }, grid: { display: false } },
-        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '20%' },
+        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '40%' },
         // 평균선 전용 — stacked 영향 안 받게 별도 축 (display:false). y와 같은 범위 사용.
-        y_avg: { display: false, stacked: false, beginAtZero: true, grace: '20%',
+        y_avg: { display: false, stacked: false, beginAtZero: true, grace: '40%',
           afterFit: function(scale){
             const yScale = scale.chart.scales.y;
             if(yScale){ scale.min = yScale.min; scale.max = yScale.max; }
