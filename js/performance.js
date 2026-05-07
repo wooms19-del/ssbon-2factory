@@ -517,11 +517,30 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
 
     // packing.type 명시되어 있으면 그 type만 thawing에서 가져옴
     if(pkTypes.size > 0){
+      // thawing.date = 입고일이므로 date 만 보면 당일 입고됐지만 아직 안 풀린 박스도 매칭됨.
+      // 정확한 매칭: end 가 작업일 date 와 매칭되는 record (= 실제 그날 풀린 박스)
+      var prevD0 = _perfPrevD(date);
+      var _endsOnDay = function(r,day){
+        var e = String(r.end||'');
+        if(!e) return false;
+        if(e.length>=10 && e.slice(0,10)===day) return true;
+        if(e.length<=5 && d(r)===day) return true;
+        return false;
+      };
       var thDay = thClean.filter(function(r){
-        if(d(r)!==date) return false;
+        if(d(r)!==date && d(r)!==prevD0) return false;
+        if(!_endsOnDay(r,date)) return false;
         var p = (r.part||r.type||'').trim();
         return pkTypes.has(p);
       });
+      // 폴백: end 매칭 0 → 옛 동작 (date==date 매칭) — 옛 데이터 호환
+      if(!thDay.length){
+        thDay = thClean.filter(function(r){
+          if(d(r)!==date) return false;
+          var p = (r.part||r.type||'').trim();
+          return pkTypes.has(p);
+        });
+      }
       var seen = new Set(); var ded = [];
       thDay.forEach(function(r){
         var k = (r.cart||'')+'|'+d(r)+'|'+(r.type||'');
