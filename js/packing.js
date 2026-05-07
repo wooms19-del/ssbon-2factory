@@ -42,12 +42,13 @@ function addPkMachRow(){
   const shWagons = Object.keys(shWagonsMap);
   const shCarts  = Object.keys(shCartsMap);
   // 완료/사용중 판정 - 잔여 ≤ 0 이면 차단
-  // (today + yesterday 둘 다 봐야 어제 포장된 건도 잡힘)
+  // (오늘 shredding output 와건만 보여주므로 사용량도 오늘 packing 만 차감.
+  //  와건 번호는 매일 재사용되므로 어제 와건 6번 ≠ 오늘 와건 6번.)
   const usedMap = {};      // 와건 사용량
   const usedCartMap = {};  // 카트 사용량
   (L.packing||[]).filter(p => {
     const d = String(p.date||'').slice(0,10);
-    return d===today || d===yesterday;
+    return d===today;
   }).forEach(p => {
     if(p.wagonDist){
       Object.entries(p.wagonDist).forEach(([w,kg])=>{ usedMap[w]=(usedMap[w]||0)+(parseFloat(kg)||0); });
@@ -67,7 +68,7 @@ function addPkMachRow(){
   });
   (L.packing_pending||[]).filter(p => {
     const d = String(p.date||'').slice(0,10);
-    return d===today || d===yesterday;
+    return d===today;
   }).forEach(p => {
     if(p.wagonDist){
       Object.entries(p.wagonDist).forEach(([w,kg])=>{ usedMap[w]=(usedMap[w]||0)+(parseFloat(kg)||0); });
