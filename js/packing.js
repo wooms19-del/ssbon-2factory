@@ -426,12 +426,12 @@ function pkGetWagonGlobalUsed(){
   };
   (L.packing_pending||[]).filter(r => {
     const d = String(r.date||'').slice(0,10);
-    return d===today || d===yesterday;
+    return d===today;
   }).forEach(accumPending);
-  // 3) 완료된 packing - today+yesterday
+  // 3) 완료된 packing - today만 (와건 번호는 매일 재사용 — 어제 6번 ≠ 오늘 6번)
   (L.packing||[]).filter(r => {
     const d = String(r.date||'').slice(0,10);
-    return d===today || d===yesterday;
+    return d===today;
   }).forEach(p => {
     if(p.wagonDist){
       Object.entries(p.wagonDist).forEach(([w,kg])=>{
