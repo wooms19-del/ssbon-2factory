@@ -1834,29 +1834,33 @@ function renderDailyFromLocal_(d){
     });
   });
 
-  // 원육 계산: 전처리 wagons → 해동 매칭 (중복 와건 제거)
-  // wagon 번호 정규화: "7호"/"7번대차"/"7" → 모두 "7"로 통일
+  // 원육 계산: 전처리 wagons → 방혈 매칭
+  // thawing.date = 입고일이므로 date 만 보면 당일 입고됐지만 아직 안 풀린 박스도 잡힘.
+  // 정확한 매칭: end 가 작업일 d 와 매칭되는 record (= 실제 그날 풀린 박스)
   const _normW=w=>String(w||'').replace(/[^0-9]/g,'')||String(w||'').trim();
   const _ppWagons=[...new Set(pp.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
-  const _thMatchFn=(r,date)=>String(r.date||'').slice(0,10)===date&&!_testPpW.has((r.cart||'').trim())&&_ppWagons.includes(_normW(r.cart));
+  // end 가 작업일 d 와 매칭되는지 (datetime 'YYYY-MM-DD HH:MM' 또는 옛 'HH:MM' + date=d)
+  const _endsOnDay=(r,day)=>{
+    const e=String(r.end||'');
+    if(!e) return false; // 진행중 박스 제외
+    if(e.length>=10 && e.slice(0,10)===day) return true;
+    if(e.length<=5 && String(r.date||'').slice(0,10)===day) return true;
+    return false;
+  };
   let _rawTh=[];
   if(_ppWagons.length){
-    const _st=L.thawing.filter(r=>_thMatchFn(r,d));
-    if(_st.length){
-      _rawTh=_st;
-    } else {
-      // 오늘 wagon 매칭 실패 → 오늘 방혈 존재 여부 확인
-      const _todayAny=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||'').trim()));
-      const _yt=L.thawing.filter(r=>_thMatchFn(r,prevD));
-      if(_todayAny.length){
-        // 오늘 방혈은 있으나 wagon 포맷 불일치 → 오늘 전체 방혈 사용 (어제 wagon 오염 방지)
-        _rawTh=_todayAny;
-      } else if(_yt.length){
-        // 오늘 방혈 없음(새벽 전처리) → 어제 wagon 매칭 사용
-        _rawTh=_yt;
-      }
+    // 후보: 전날 입고(date=d-1) + 당일 입고(date=d) 합집합
+    // 그 중 end 가 d 와 매칭 + cart 가 ppWagons 와 매칭 + 테스트 cart 제외
+    const candidates = L.thawing.filter(r=>{
+      const rDate = String(r.date||'').slice(0,10);
+      return (rDate===d || rDate===prevD) && !_testPpW.has((r.cart||'').trim());
+    });
+    _rawTh = candidates.filter(r => _endsOnDay(r,d) && _ppWagons.includes(_normW(r.cart)));
+    // 폴백 1: end 매칭 0 → cart 매칭만 (옛 데이터 호환, end 비어있는 경우)
+    if(!_rawTh.length){
+      _rawTh = candidates.filter(r => _ppWagons.includes(_normW(r.cart)));
     }
-    // 모두 실패 시 최후 폴백 → 당일 전체, 없으면 전날 전체
+    // 폴백 2: 그래도 0 → 당일 전체 → 전날 전체
     if(!_rawTh.length){
       _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===d&&!_testPpW.has((r.cart||'').trim()));
       if(!_rawTh.length) _rawTh=L.thawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&!_testPpW.has((r.cart||'').trim()));
