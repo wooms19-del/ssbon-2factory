@@ -2856,7 +2856,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       type: 'line', label: '이번달 일평균',
       data: Array(xLen).fill(_curAvg),
       borderColor: '#7c3aed', borderDash: [2,3], pointRadius: 0, borderWidth: 1.5, fill: false,
-      _endLabel: _curAvg.toLocaleString()+'kg', stack: undefined
+      _endLabel: _curAvg.toLocaleString()+'kg', stack: '_avg_cur', xAxisID: 'x', yAxisID: 'y'
     });
   }
   const _avgRm = window._moPrevAvgRmKg;
@@ -2865,7 +2865,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       type:'line', label:'전월 일평균',
       data: Array(xLen).fill(Math.round(_avgRm)),
       borderColor: '#94a3b8', borderDash: [5,4], pointRadius: 0, borderWidth: 1.5, fill: false,
-      _endLabel: Math.round(_avgRm).toLocaleString()+'kg', stack: undefined
+      _endLabel: Math.round(_avgRm).toLocaleString()+'kg', stack: '_avg_prev', xAxisID: 'x', yAxisID: 'y'
     });
   }
 
