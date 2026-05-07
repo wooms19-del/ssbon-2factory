@@ -24,6 +24,9 @@ var db = firebase.firestore();
 
 // 입력 중 여부 판단
 function _isUserBusy(){
+  // 0. 최근 30초 내 사용자 활동 (마우스/터치/키보드) 있으면 busy
+  //    "시작" 같은 액션 직후 폼이 비워져도 reload 미루기 위함
+  if(window._lastActivityAt && (Date.now() - window._lastActivityAt) < 30000) return true;
   // 1. 현재 focus된 요소가 input/textarea/select?
   const ae = document.activeElement;
   if(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')){
@@ -40,6 +43,12 @@ function _isUserBusy(){
   }
   return false;
 }
+
+// 사용자 활동 추적 — _isUserBusy 의 "최근 30초" 체크용
+window._lastActivityAt = Date.now();
+['mousemove','click','keydown','touchstart','scroll'].forEach(function(ev){
+  document.addEventListener(ev, function(){ window._lastActivityAt = Date.now(); }, {passive:true, capture:true});
+});
 
 // 대기 중인 새 버전
 window._pendingNewVer = null;
