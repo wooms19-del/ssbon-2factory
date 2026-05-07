@@ -135,18 +135,34 @@ async function doTrace(){
   const thAllD = dedupeRec(thAll, r=>(r.cart||'')+'|'+r.type+'|'+String(r.date||'').slice(0,10)+'|'+r.totalKg); thAll.length=0; thAll.push(...thAllD);
   let th = thAll;
 
-  // ⑥ 바코드: 해동 전날 스캔 우선, 전날 없으면 당일 (배치 혼입 방지)
-  const _thDates = new Set(th.map(r=>String(r.date||'').slice(0,10)));
-  const _prevDates = new Set([..._thDates].map(d=>addDays(d,-1)));
-  const _bcLoadDates = new Set([..._thDates, ..._prevDates]);
+  // ⑥ 바코드: 방혈 record 의 importCodes 와 importCode 매칭 (정확)
+  // 옛 동작 (날짜만 매칭) 은 다른 배치 박스가 섞일 수 있음 → importCode 우선
+  const _thImportCodes = new Set();
+  th.forEach(r => { (r.importCodes||[]).forEach(c => { if(c) _thImportCodes.add(c); }); });
   let bc = [];
-  for(const d of [..._bcLoadDates]){
-    bc.push(...await fbGetByDate('barcode', d));
+  if(_thImportCodes.size > 0){
+    // 방혈 date + 전날 후보 (barcode 는 입고 시 스캔)
+    const _thDates = new Set(th.map(r=>String(r.date||'').slice(0,10)));
+    const _candidateDates = new Set();
+    _thDates.forEach(d=>{ _candidateDates.add(d); _candidateDates.add(addDays(d,-1)); });
+    const _allBc = [];
+    for(const d of [..._candidateDates]){
+      _allBc.push(...await fbGetByDate('barcode', d));
+    }
+    bc = _allBc.filter(r => _thImportCodes.has(r.importCode));
   }
-  // 전날 바코드가 있으면 전날만, 없으면 당일
-  const _prevBc = bc.filter(r=>_prevDates.has(String(r.date||'').slice(0,10)));
-  const _sameBc = bc.filter(r=>_thDates.has(String(r.date||'').slice(0,10)));
-  bc = _prevBc.length > 0 ? _prevBc : _sameBc;
+  // 폴백: importCode 매칭 0 (옛 thawing record 에 importCodes 없음) → 옛 날짜 매칭
+  if(!bc.length){
+    const _thDates = new Set(th.map(r=>String(r.date||'').slice(0,10)));
+    const _prevDates = new Set([..._thDates].map(d=>addDays(d,-1)));
+    const _bcLoadDates = new Set([..._thDates, ..._prevDates]);
+    for(const d of [..._bcLoadDates]){
+      bc.push(...await fbGetByDate('barcode', d));
+    }
+    const _prevBc = bc.filter(r=>_prevDates.has(String(r.date||'').slice(0,10)));
+    const _sameBc = bc.filter(r=>_thDates.has(String(r.date||'').slice(0,10)));
+    bc = _prevBc.length > 0 ? _prevBc : _sameBc;
+  }
   const bcMap = new Map();
   bc.forEach(r=>{ if(!bcMap.has(r.importCode)) bcMap.set(r.importCode, r); });
   bc = [...bcMap.values()];

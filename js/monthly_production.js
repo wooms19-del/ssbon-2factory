@@ -475,12 +475,19 @@
     }
 
     // thawing은 일자별·부위별 totalKg
+    // ★ 작업일 = end 의 날짜 (= 박스가 풀린 날). thawing.date 는 입고일이라 부정확.
+    //   진행중 박스 (end='') 는 아직 작업 안 됐으므로 제외.
     var thByDateType = {};
     thClean.forEach(function(r){
-      var dt = String(r.date||'').slice(0,10);
+      var e = String(r.end||'');
+      var workDay = '';
+      if(e){
+        if(e.length>=10) workDay = e.slice(0,10);                     // datetime 'YYYY-MM-DD HH:MM'
+        else if(e.length<=5) workDay = String(r.date||'').slice(0,10); // 옛 'HH:MM' 형식
+      }
+      if(!workDay) return; // 진행중 박스 누락 (정상)
       var t = recType(r) || '_';
-      if(!dt) return;
-      var k = dt+'|'+t;
+      var k = workDay+'|'+t;
       thByDateType[k] = (thByDateType[k]||0) + _num(r.totalKg);
     });
 
