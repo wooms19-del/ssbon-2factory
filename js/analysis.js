@@ -2252,7 +2252,18 @@ function renderDailyFromLocal_(d){
     const pkInKg = isNoMeat ? 0 : (pkInKgMap[key] || r2(shKg / Object.keys(pkMap).length));
     const pkOrig = isNoMeat ? 0 : (pkOrigMap[key] || r2(rmKg / Object.keys(pkMap).length));
     const label = v.type ? v.type+' · '+v.product : v.product;
-    const pkWorkers = (v._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0);
+    // 같은 호기(machine) 의 record 들은 같은 인원이 연속 작업한 것 → 평균.
+    // 호기끼리는 합 (다른 호기 = 다른 사람). machine 빈값은 각자 별도 그룹 (옛 동작 유지).
+    const _wByMachine = {};
+    (v._recs||[]).forEach((r, idx) => {
+      const m = String(r.machine||'').trim() || ('_no_'+idx);
+      if(!_wByMachine[m]) _wByMachine[m] = [];
+      _wByMachine[m].push(parseFloat(r.workers)||0);
+    });
+    const pkWorkers = Object.values(_wByMachine).reduce((s, ws) => {
+      const avg = ws.length ? ws.reduce((a,b)=>a+b,0)/ws.length : 0;
+      return s + avg;
+    }, 0);
     procRows.push({name:'포장', type:label, origKg: isNoMeat ? 0 : (pkOrig||rmKg), in:pkInKg, out:r2(v.kg), waste:0, ea:v.ea||0, mh:r2(v.mh), h:calcActualHours(v._recs||[])||r2(v.h), workers:pkWorkers, noMeat:isNoMeat});
   });
 
