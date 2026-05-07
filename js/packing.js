@@ -241,8 +241,39 @@ function pkAddWagonRow(idx, prefilledW, kind){
       <input class="fc pk-wd-kg" type="number" step="0.01" value="${defaultKg}" placeholder="0" oninput="pkWagonSumChange(${idx})" style="padding:5px 7px;font-size:12px;box-sizing:border-box;flex:1;text-align:right">
       <span style="font-size:11px;color:var(--g5)">kg</span>
     </div>
-    <button onclick="this.closest('.pk-wd-row').remove();pkWagonSumChange(${idx})" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
+    <button onclick="pkRemoveWagonRow(this,${idx})" style="width:24px;height:28px;border:1px solid var(--g3);border-radius:4px;background:#fff;color:var(--d);font-size:13px;cursor:pointer;padding:0">−</button>`;
   c.appendChild(row);
+  pkWagonSumChange(idx);
+}
+
+// dist 행 삭제 시 매칭 와건/카트 버튼 상태도 같이 unselected 로 풀기
+function pkRemoveWagonRow(btnEl, idx){
+  const row = btnEl.closest('.pk-wd-row');
+  if(!row) return;
+  const w = row.dataset.w || '';
+  const kind = row.dataset.kind === 'cart' ? 'cart' : 'wagon';
+  // 매칭 와건/카트 버튼 색상/상태 reset
+  if(w){
+    const wagonBtn = document.querySelector(`#pkRow_${idx} .pk-wagon-btn[data-w="${w}"][data-kind="${kind}"]`);
+    if(wagonBtn){
+      const baseColor = kind === 'cart' ? '#1a56db' : '#72243E';
+      wagonBtn.style.background = '#fff';
+      wagonBtn.style.color = baseColor;
+      wagonBtn.style.borderColor = baseColor;
+      wagonBtn.style.textDecoration = '';
+      wagonBtn.style.cursor = '';
+      wagonBtn.dataset.done = 'false';
+      wagonBtn.onclick = function(){ togglePkWagon(idx, w, kind); };
+    }
+  }
+  row.remove();
+  // hidden wagon 필드 갱신 (와건만)
+  const distC = document.getElementById('pkWagonDist_'+idx);
+  const hidden = document.querySelector(`#pkRow_${idx} .pk-row-wagon`);
+  if(hidden && distC){
+    const wagonRows = [...distC.querySelectorAll('.pk-wd-row[data-kind="wagon"]')];
+    hidden.value = wagonRows.map(r => r.dataset.w).filter(Boolean).join(',');
+  }
   pkWagonSumChange(idx);
 }
 
