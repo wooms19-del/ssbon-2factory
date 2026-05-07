@@ -855,7 +855,7 @@ function _moRedrawDefChart(){
         const meta = chart.getDatasetMeta(i).data;
         if(!meta.length) return;
         const lastPt = meta[meta.length-1];
-        endItems.push({ y: lastPt.y, x: chartArea.right + 30, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
+        endItems.push({ y: lastPt.y, x: chartArea.right + 10, fromX: chartArea.right, text: ' '+d._endLabel, color: d.borderColor||'#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
       });
       // 2) Y 기준 정렬 후 겹침 방지 (최소 간격 14px)
       endItems.sort((a,b) => a.y - b.y);
@@ -866,6 +866,21 @@ function _moRedrawDefChart(){
         }
       }
       // 3) 그리기
+      // 점선 라벨까지 연장 (bar 차트와 동일 — dashOffset 정렬)
+      endItems.forEach(item => {
+        if(!item.dash) return;
+        const _cyc = (item.dash[0]||0) + (item.dash[1]||0);
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = item.bw || 1.5;
+        ctx.setLineDash(item.dash);
+        ctx.lineDashOffset = _cyc>0 ? (item.fromX % _cyc) : 0;
+        ctx.beginPath();
+        ctx.moveTo(item.fromX, item.y);
+        ctx.lineTo(item.x, item.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineDashOffset = 0;
+      });
       endItems.forEach(item => {
         ctx.fillStyle = item.color;
         ctx.textAlign='left'; ctx.textBaseline='middle';
@@ -958,7 +973,7 @@ function _moRenderYieldChart(dailyYields) {
         const meta = chart.getDatasetMeta(i).data;
         if(!meta.length) return;
         const lastPt = meta[meta.length-1];
-        endItems.push({ y: lastPt.y, x: chartArea.right + 30, text: ' '+d._endLabel, color: d.borderColor||'#475569' });
+        endItems.push({ y: lastPt.y, x: chartArea.right + 10, fromX: chartArea.right, text: ' '+d._endLabel, color: d.borderColor||'#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
       });
       endItems.sort((a,b) => a.y - b.y);
       const MIN_GAP = 18;
@@ -967,6 +982,21 @@ function _moRenderYieldChart(dailyYields) {
           endItems[i].y = endItems[i-1].y + MIN_GAP;
         }
       }
+      // 점선 라벨까지 연장 (bar 차트와 동일 — dashOffset 정렬)
+      endItems.forEach(item => {
+        if(!item.dash) return;
+        const _cyc = (item.dash[0]||0) + (item.dash[1]||0);
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = item.bw || 1.5;
+        ctx.setLineDash(item.dash);
+        ctx.lineDashOffset = _cyc>0 ? (item.fromX % _cyc) : 0;
+        ctx.beginPath();
+        ctx.moveTo(item.fromX, item.y);
+        ctx.lineTo(item.x, item.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineDashOffset = 0;
+      });
       endItems.forEach(item => {
         ctx.fillStyle = item.color;
         ctx.textAlign='left'; ctx.textBaseline='middle';
