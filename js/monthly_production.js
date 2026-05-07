@@ -243,15 +243,24 @@
     if(_mpGroupMode === 'none') return '';
     var items = [];
     var lbl = '';
+    var rows = (_mpData && _mpData.rows) || [];
     if(_mpGroupMode === 'product'){
       lbl = '제품 선택:';
-      // L.products에서 제품명 목록
-      var prodList = (typeof L!=='undefined' && L && L.products) ? L.products.map(function(p){return p.name;}) : [];
-      items = prodList;
+      // 그달 실제 있는 제품만 (rows에 등장한 product)
+      var seen = {};
+      rows.forEach(function(r){ if(r.product) seen[r.product] = true; });
+      items = Object.keys(seen).sort();
     } else if(_mpGroupMode === 'part'){
       lbl = '원육 선택:';
-      items = ['홍두깨','우둔','설도','무육'];
+      // 그달 실제 있는 원육만 (rows에 등장한 type)
+      var seen2 = {};
+      rows.forEach(function(r){
+        var k = r.type || (r.isNoMeat?'무육':'');
+        if(k) seen2[k] = true;
+      });
+      items = Object.keys(seen2).sort();
     }
+    if(!items.length) return '';
     var chips = items.map(function(x){return _filterChip(x, x);}).join('');
     return '<div id="mpToolbar4" style="padding:8px 14px;background:#fafafa;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #e5e7eb">'
          + '<span style="font-size:12px;color:#555;font-weight:600">'+lbl+'</span>'
@@ -1001,6 +1010,7 @@
         g.date = g._workDays.size + '일';  // 작업일 수 표시
         delete g._workDays;
         return Object.assign(g, {
+          dateRowIdx: 0,  // 그룹 row는 자기 행에 모든 td 표시
           rmKg: _r2(rm),
           ppKg: _r2(g.ppKg), ckKg: _r2(g.ckKg), shKg: _r2(g.shKg),
           meatKg: _r2(g.meatKg), prodKg: _r2(g.prodKg),

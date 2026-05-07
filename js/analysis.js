@@ -1681,6 +1681,8 @@ function chDay(d){
     // 해당 날짜에 데이터 있는지 L에서 체크 — packing 있는 날만 생산일 (포장 없으면 생산 안 한 것)
     var has=false;
     if(L&&L.packing) has=has||L.packing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
+    // ★ 오늘 날짜는 packing 0건이라도 통과 (작업 중일 수 있음)
+    if(ds === todayStr) has = true;
     if(has){ DDATE=ds; renderDaily(); return; }
   }
   toast('해당 방향에 데이터가 없습니다','d');
