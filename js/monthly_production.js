@@ -1053,7 +1053,7 @@
       groupMode: _mpGroupMode
     };
     var prevRows = (_mpPrevData && _mpPrevData.rows) || [];
-    var prevSum = _mpAggregate(prevRows.map(function(r){
+    function _mapForAgg(r){
       var ppT=r.ppPersonHours||0, ckT=r.ckPersonHours||0, shT=r.shPersonHours||0, pkT=r.pkPersonHours||0;
       var meatKg = r.pkEa*(r.kgea||0);
       var rm=r.rmKg;
@@ -1069,7 +1069,21 @@
         yieldPp: rm?r.ppKg/rm:0, yieldCk: r.ppKg?r.ckKg/r.ppKg:0,
         yieldSh: r.ckKg?r.shKg/r.ckKg:0, yieldPk: r.shKg?meatKg/r.shKg:0
       });
-    }));
+    }
+    var prevSum = _mpAggregate(prevRows.map(_mapForAgg));
+
+    // 전월 동기간: 이번달 생산일수만큼 전월 첫 N 생산일자만 합산 (사과 vs 사과 비교용)
+    var _prevDates=[], _seenD={};
+    prevRows.forEach(function(r){
+      var d=String(r.date||'').slice(0,10);
+      if(d && !_seenD[d]){ _seenD[d]=true; _prevDates.push(d); }
+    });
+    _prevDates.sort();
+    var _keepSet={};
+    _prevDates.slice(0, sum.dayCount).forEach(function(d){ _keepSet[d]=true; });
+    var prevSumSame = _mpAggregate(prevRows.filter(function(r){
+      return _keepSet[String(r.date||'').slice(0,10)];
+    }).map(_mapForAgg));
 
     // 그룹 첫 컬럼 판정 (좌측 경계선)
     function _isFirstOfGroup(c, idx){
@@ -1325,43 +1339,68 @@
     }
 
     var ymThis=(_mpYm||_ymToday()), ymPrev=_prevYm(ymThis);
+    var ndays = sum.dayCount;
     var thisAvg = sum.dayCount?(sum.rmKg/sum.dayCount):0;
-    var prevAvg = prevSum.dayCount?(prevSum.rmKg/prevSum.dayCount):0;
-    var diff = thisAvg-prevAvg;
-    var diffPct = prevAvg?(diff/prevAvg*100):0;
+    var sameAvg = prevSumSame.dayCount?(prevSumSame.rmKg/prevSumSame.dayCount):0;
+    var fullAvg = prevSum.dayCount?(prevSum.rmKg/prevSum.dayCount):0;
+    var avgD = thisAvg - sameAvg;
+    var avgDp = sameAvg ? (avgD/sameAvg*100) : 0;
     function nf(v, dec){ if(!isFinite(v)) return '-'; return v.toLocaleString(undefined,{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0}); }
     function diffColor(d){ return d>0?'#15803d':(d<0?'#b91c1c':'#475569'); }
     function arr(d){ return d>0?'▲':(d<0?'▼':''); }
-    // 수율 행 헬퍼: 원료육 대비 (kg/원육kg) — 차이는 percentage point 표시
-    function yieldRow(label, key){
+    // 절대값 행 헬퍼: 차이는 vs 동기간(prevSumSame) 기준
+    function rowAbs(label, key, unit, dec){
+      var thisV=sum[key]||0, sameV=prevSumSame[key]||0, fullV=prevSum[key]||0;
+      var d=thisV-sameV, dp=sameV?(d/sameV*100):0, u=unit?' '+unit:'';
+      return '<tr><td><strong>'+label+'</strong></td>'
+        +'<td>'+nf(thisV,dec)+u+'</td>'
+        +'<td>'+nf(sameV,dec)+u+'</td>'
+        +'<td>'+nf(fullV,dec)+u+'</td>'
+        +'<td style="color:'+diffColor(d)+';font-weight:600">'+arr(d)+' '+nf(Math.abs(d),dec)+u+'</td>'
+        +'<td style="color:'+diffColor(dp)+';font-weight:600">'+arr(dp)+' '+nf(Math.abs(dp),1)+'%</td></tr>';
+    }
+    // 수율 행 헬퍼: 차이는 vs 동기간 percentage point
+    function rowYield(label, key){
       var thisP = sum.rmKg ? sum[key]/sum.rmKg*100 : 0;
-      var prevP = prevSum.rmKg ? prevSum[key]/prevSum.rmKg*100 : 0;
-      var dp = thisP - prevP;
+      var sameP = prevSumSame.rmKg ? prevSumSame[key]/prevSumSame.rmKg*100 : 0;
+      var fullP = prevSum.rmKg ? prevSum[key]/prevSum.rmKg*100 : 0;
+      var dp = thisP - sameP;
       return '<tr><td><strong>'+label+'</strong></td>'
         +'<td>'+nf(thisP,1)+'%</td>'
-        +'<td>'+nf(prevP,1)+'%</td>'
+        +'<td>'+nf(sameP,1)+'%</td>'
+        +'<td>'+nf(fullP,1)+'%</td>'
         +'<td style="color:'+diffColor(dp)+';font-weight:600">'+arr(dp)+' '+nf(Math.abs(dp),1)+'%p</td>'
         +'<td>—</td></tr>';
     }
     cmp.innerHTML = '<h3>📊 전월 대비 비교</h3>'
       + '<table>'
-      + '<thead><tr><th>구분</th><th>'+ymThis.replace('-','년 ')+'월</th><th>'+ymPrev.replace('-','년 ')+'월</th><th>차이</th><th>증감율</th></tr></thead>'
+      + '<thead><tr>'
+      +   '<th>구분</th>'
+      +   '<th>'+ymThis.replace('-','년 ')+'월</th>'
+      +   '<th>'+ymPrev.replace('-','년 ')+'월 동기간 ('+ndays+'일차)</th>'
+      +   '<th>'+ymPrev.replace('-','년 ')+'월 (전체)</th>'
+      +   '<th>차이 (vs 동기간)</th>'
+      +   '<th>증감율</th>'
+      + '</tr></thead>'
       + '<tbody>'
-      + '<tr><td><strong>일평균 원육사용량</strong></td><td>'+nf(thisAvg,2)+' kg</td><td>'+nf(prevAvg,2)+' kg</td>'
-      +   '<td style="color:'+diffColor(diff)+';font-weight:600">'+arr(diff)+' '+nf(Math.abs(diff),2)+' kg</td>'
-      +   '<td style="color:'+diffColor(diffPct)+';font-weight:600">'+arr(diffPct)+' '+nf(Math.abs(diffPct),1)+'%</td></tr>'
-      + '<tr><td><strong>생산일수</strong></td><td>'+sum.dayCount+'일</td><td>'+prevSum.dayCount+'일</td>'
-      +   '<td style="color:'+diffColor(sum.dayCount-prevSum.dayCount)+';font-weight:600">'+arr(sum.dayCount-prevSum.dayCount)+' '+Math.abs(sum.dayCount-prevSum.dayCount)+'일</td><td>—</td></tr>'
-      + '<tr><td><strong>월 누적 원육사용량</strong></td><td>'+nf(sum.rmKg,2)+' kg</td><td>'+nf(prevSum.rmKg,2)+' kg</td>'
-      +   '<td style="color:'+diffColor(sum.rmKg-prevSum.rmKg)+';font-weight:600">'+arr(sum.rmKg-prevSum.rmKg)+' '+nf(Math.abs(sum.rmKg-prevSum.rmKg),2)+' kg</td><td>—</td></tr>'
-      + '<tr><td><strong>월 누적 EA (외포장)</strong></td><td>'+nf(sum.pkEa,0)+'</td><td>'+nf(prevSum.pkEa,0)+'</td>'
-      +   '<td style="color:'+diffColor(sum.pkEa-prevSum.pkEa)+';font-weight:600">'+arr(sum.pkEa-prevSum.pkEa)+' '+nf(Math.abs(sum.pkEa-prevSum.pkEa),0)+'</td><td>—</td></tr>'
-      + '<tr><td><strong>완제품 고기중량</strong></td><td>'+nf(sum.meatKg,2)+' kg</td><td>'+nf(prevSum.meatKg,2)+' kg</td>'
-      +   '<td style="color:'+diffColor(sum.meatKg-prevSum.meatKg)+';font-weight:600">'+arr(sum.meatKg-prevSum.meatKg)+' '+nf(Math.abs(sum.meatKg-prevSum.meatKg),2)+' kg</td><td>—</td></tr>'
-      + yieldRow('전처리 수율', 'ppKg')
-      + yieldRow('자숙 수율', 'ckKg')
-      + yieldRow('파쇄 수율', 'shKg')
-      + yieldRow('최종 수율', 'meatKg')
+      + '<tr><td><strong>일평균 원육사용량</strong></td>'
+      +   '<td>'+nf(thisAvg,2)+' kg</td>'
+      +   '<td>'+nf(sameAvg,2)+' kg</td>'
+      +   '<td>'+nf(fullAvg,2)+' kg</td>'
+      +   '<td style="color:'+diffColor(avgD)+';font-weight:600">'+arr(avgD)+' '+nf(Math.abs(avgD),2)+' kg</td>'
+      +   '<td style="color:'+diffColor(avgDp)+';font-weight:600">'+arr(avgDp)+' '+nf(Math.abs(avgDp),1)+'%</td></tr>'
+      + '<tr><td><strong>생산일수</strong></td>'
+      +   '<td>'+sum.dayCount+'일</td>'
+      +   '<td>'+prevSumSame.dayCount+'일</td>'
+      +   '<td>'+prevSum.dayCount+'일</td>'
+      +   '<td>—</td><td>—</td></tr>'
+      + rowAbs('월 누적 원육사용량', 'rmKg', 'kg', 2)
+      + rowAbs('월 누적 EA (외포장)', 'pkEa', '', 0)
+      + rowAbs('완제품 고기중량', 'meatKg', 'kg', 2)
+      + rowYield('전처리 수율', 'ppKg')
+      + rowYield('자숙 수율', 'ckKg')
+      + rowYield('파쇄 수율', 'shKg')
+      + rowYield('최종 수율', 'meatKg')
       + '</tbody></table>';
     cmp.style.display='';
   }
