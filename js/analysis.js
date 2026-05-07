@@ -2714,7 +2714,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 36, bottom: 20, right: 130 } },
+      layout: { padding: { top: 36, bottom: 60, right: 130 } },
       plugins: {
         legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 14, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
         tooltip: {
