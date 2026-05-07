@@ -22,6 +22,8 @@
   // 그룹 모드: 'none'(디폴트) / 'product'(제품별) / 'part'(원육별)
   // 디바이스간 동일성 룰 — localStorage 안 씀 (메모리만)
   var _mpGroupMode = 'none';
+  // 그룹 필터 — 선택된 항목들 (빈 Set이면 '전체')
+  var _mpGroupFilter = new Set();
   try {
     var saved = localStorage.getItem('ssbon_v6_mpGrp');
     if(saved) _mpGrp = Object.assign(_mpGrp, JSON.parse(saved));
@@ -195,6 +197,7 @@
       + _modeChip('product','제품별')
       + _modeChip('part','원육별')
       + '</div>'
+      + _filterRowHtml()
       + '<div id="mpStatus">데이터 불러오는 중…</div>'
       + '<div id="mpTblWrap" style="display:none"><table id="mpTbl"></table></div>'
       + '<div id="mpCmp" style="display:none"></div>';
@@ -215,8 +218,46 @@
   }
   function mpSetGroupMode(val){
     _mpGroupMode = val;
+    _mpGroupFilter = new Set();  // 모드 바뀌면 필터 리셋 (전체 선택)
     _mpRenderShell();
-    if(_mpData) _mpRenderTable();
+    if(_mpData) _mpRender();
+  }
+  function mpToggleFilter(name){
+    // '__ALL__' 토글 → 빈 Set (전체 선택 효과)
+    if(name === '__ALL__'){
+      _mpGroupFilter = new Set();
+    } else {
+      if(_mpGroupFilter.has(name)) _mpGroupFilter.delete(name);
+      else _mpGroupFilter.add(name);
+    }
+    _mpRenderShell();
+    if(_mpData) _mpRender();
+  }
+  function _filterChip(val, lbl){
+    var on = (val === '__ALL__') ? (_mpGroupFilter.size === 0) : _mpGroupFilter.has(val);
+    return '<label class="grp'+(on?' on':'')+'" onclick="mpToggleFilter(\''+val.replace(/'/g,"\\'")+'\')" style="cursor:pointer">'
+         + '<input type="checkbox" '+(on?'checked':'')+' onclick="event.stopPropagation()" onchange="mpToggleFilter(\''+val.replace(/'/g,"\\'")+'\')">'+lbl+'</label>';
+  }
+  // 필터 줄 (제품별 / 원육별 모드일 때만 표시)
+  function _filterRowHtml(){
+    if(_mpGroupMode === 'none') return '';
+    var items = [];
+    var lbl = '';
+    if(_mpGroupMode === 'product'){
+      lbl = '제품 선택:';
+      // L.products에서 제품명 목록
+      var prodList = (typeof L!=='undefined' && L && L.products) ? L.products.map(function(p){return p.name;}) : [];
+      items = prodList;
+    } else if(_mpGroupMode === 'part'){
+      lbl = '원육 선택:';
+      items = ['홍두깨','우둔','설도','무육'];
+    }
+    var chips = items.map(function(x){return _filterChip(x, x);}).join('');
+    return '<div id="mpToolbar4" style="padding:8px 14px;background:#fafafa;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #e5e7eb">'
+         + '<span style="font-size:12px;color:#555;font-weight:600">'+lbl+'</span>'
+         + _filterChip('__ALL__','전체')
+         + chips
+         + '</div>';
   }
 
   /* ===== 데이터 로드 ===== */
@@ -979,6 +1020,15 @@
           _grpSize: 1, _grpFirst: true
         });
       });
+      // ★ 필터 적용 — 빈 Set이면 전체 통과, 아니면 선택된 것만
+      if(_mpGroupFilter.size > 0){
+        calcRows = calcRows.filter(function(r){
+          var key = (_mpGroupMode === 'product') ? r.product : (r.type || (r.isNoMeat?'무육':''));
+          return _mpGroupFilter.has(key);
+        });
+        // dayNo 재배열
+        calcRows.forEach(function(r,i){ r.dayNo = i+1; });
+      }
     }
 
     var sum = _mpAggregate(calcRows);
@@ -1615,6 +1665,7 @@
   window.mpDownload     = _mpDownload;
   window.mpToggleGrp    = mpToggleGrp;
   window.mpSetGroupMode = mpSetGroupMode;
+  window.mpToggleFilter = mpToggleFilter;
 
   ['setMode','setModeSchedule','setModeAtt'].forEach(function(fn){
     var orig = window[fn];
