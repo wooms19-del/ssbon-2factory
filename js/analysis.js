@@ -819,6 +819,7 @@ function _moRedrawDefChart(){
       const ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
       if(!ds || !meta) { ctx.restore(); return; }
       ctx.font='bold 11px sans-serif';
+      const _lastIdx = meta.data.length - 1;
       meta.data.forEach((pt,j)=>{
         const v=ds.data[j];
         if(v==null) return;
@@ -827,7 +828,10 @@ function _moRedrawDefChart(){
         const h = 16;
         const goUp = (j % 2 === 0);
         const cy = pt.y + (goUp ? -16 : 16);
-        const x = pt.x - w/2, y = cy - h/2;
+        // 마지막 데이터 점 = end 라벨과 겹침 방지 위해 왼쪽으로 이동
+        const _isLast = (j === _lastIdx);
+        const _cx = _isLast ? (pt.x - w/2 - 4) : pt.x;  // 마지막은 점 왼쪽으로 박스 통째 이동
+        const x = _cx - w/2, y = cy - h/2;
         const ptColor = (Array.isArray(ds.pointBackgroundColor) ? ds.pointBackgroundColor[j] : ds.pointBackgroundColor) || ds.borderColor || '#475569';
         ctx.fillStyle = '#fff';
         ctx.strokeStyle = ptColor;
@@ -837,7 +841,7 @@ function _moRedrawDefChart(){
         ctx.fill(); ctx.stroke();
         ctx.fillStyle = ptColor;
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(txt, pt.x, cy);
+        ctx.fillText(txt, _cx, cy);
       });
       ctx.restore();
     }},
@@ -919,6 +923,7 @@ function _moRenderYieldChart(dailyYields) {
       const ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
       if(!ds || !meta) { ctx.restore(); return; }
       ctx.font='bold 11px sans-serif';
+      const _lastIdx = meta.data.length - 1;
       meta.data.forEach((pt,j)=>{
         const v=ds.data[j];
         if(v==null) return;
@@ -927,7 +932,10 @@ function _moRenderYieldChart(dailyYields) {
         const h = 16;
         const goUp = (j % 2 === 0);
         const cy = pt.y + (goUp ? -16 : 16);
-        const x = pt.x - w/2, y = cy - h/2;
+        // 마지막 데이터 점 = end 라벨과 겹침 방지 위해 왼쪽으로 이동
+        const _isLast = (j === _lastIdx);
+        const _cx = _isLast ? (pt.x - w/2 - 4) : pt.x;  // 마지막은 점 왼쪽으로 박스 통째 이동
+        const x = _cx - w/2, y = cy - h/2;
         const ptColor = (Array.isArray(ds.pointBackgroundColor) ? ds.pointBackgroundColor[j] : ds.pointBackgroundColor) || ds.borderColor || '#475569';
         ctx.fillStyle = '#fff';
         ctx.strokeStyle = ptColor;
@@ -937,7 +945,7 @@ function _moRenderYieldChart(dailyYields) {
         ctx.fill(); ctx.stroke();
         ctx.fillStyle = ptColor;
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(txt, pt.x, cy);
+        ctx.fillText(txt, _cx, cy);
       });
       ctx.restore();
     }},
