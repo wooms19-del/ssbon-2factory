@@ -1693,24 +1693,31 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
   const prevD=(()=>{const [y,m,dd]=packDate.split('-').map(Number);const dt=new Date(y,m-1,dd-1);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;})();
   const _normW=w=>String(w||'').replace(/[^0-9]/g,'')||String(w||'').trim();
   const wagons=[...new Set(ppRecs.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
+  // end 가 packDate 와 매칭되는지 (datetime 'YYYY-MM-DD HH:MM' 또는 옛 'HH:MM' + date=packDate)
+  const _endsOnDay=(r)=>{
+    const e=String(r.end||'');
+    if(!e) return false;
+    if(e.length>=10 && e.slice(0,10)===packDate) return true;
+    if(e.length<=5 && String(r.date||'').slice(0,10)===packDate) return true;
+    return false;
+  };
+  // 후보: (date=prevD) + (date=packDate) 합집합. 그 중 end 가 작업일 매칭 + cart in wagons.
+  const candidates=allThawing.filter(r=>{
+    const rd=String(r.date||'').slice(0,10);
+    return rd===prevD || rd===packDate;
+  });
   let matched=[];
   if(wagons.length){
-    const sameTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate&&wagons.includes(_normW(r.cart)));
-    if(sameTh.length){
-      matched=sameTh;
-    } else {
-      const todayAny=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
-      const prevTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&wagons.includes(_normW(r.cart)));
-      if(todayAny.length){
-        matched=todayAny;
-      } else if(prevTh.length){
-        matched=prevTh;
-      }
+    matched=candidates.filter(r=>_endsOnDay(r) && wagons.includes(_normW(r.cart)));
+    // 폴백 1: end 매칭 0 → cart 매칭만 (옛 record 호환)
+    if(!matched.length){
+      matched=candidates.filter(r=>wagons.includes(_normW(r.cart)));
     }
   } else {
-    matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
-    if(!matched.length) matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD);
+    matched=candidates.filter(r=>_endsOnDay(r));
+    if(!matched.length) matched=candidates;
   }
+  // 폴백 2: 그래도 0 → 옛 동작 (date 기반)
   if(!matched.length){
     matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
     if(!matched.length) matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD);
@@ -1733,20 +1740,26 @@ function getThByPartByPP_(ppRecs, allThawing, packDate) {
   const prevD=(()=>{const [y,m,dd]=packDate.split('-').map(Number);const dt=new Date(y,m-1,dd-1);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;})();
   const _normW=w=>String(w||'').replace(/[^0-9]/g,'')||String(w||'').trim();
   const wagons=[...new Set(ppRecs.flatMap(r=>(r.wagons||'').split(',').map(w=>_normW(w)).filter(Boolean)))];
+  const _endsOnDay=(r)=>{
+    const e=String(r.end||'');
+    if(!e) return false;
+    if(e.length>=10 && e.slice(0,10)===packDate) return true;
+    if(e.length<=5 && String(r.date||'').slice(0,10)===packDate) return true;
+    return false;
+  };
+  const candidates=allThawing.filter(r=>{
+    const rd=String(r.date||'').slice(0,10);
+    return rd===prevD || rd===packDate;
+  });
   let matched=[];
   if(wagons.length){
-    const sameTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate&&wagons.includes(_normW(r.cart)));
-    if(sameTh.length){
-      matched=sameTh;
-    } else {
-      const todayAny=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
-      const prevTh=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD&&wagons.includes(_normW(r.cart)));
-      if(todayAny.length){ matched=todayAny; }
-      else if(prevTh.length){ matched=prevTh; }
+    matched=candidates.filter(r=>_endsOnDay(r) && wagons.includes(_normW(r.cart)));
+    if(!matched.length){
+      matched=candidates.filter(r=>wagons.includes(_normW(r.cart)));
     }
   } else {
-    matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
-    if(!matched.length) matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===prevD);
+    matched=candidates.filter(r=>_endsOnDay(r));
+    if(!matched.length) matched=candidates;
   }
   if(!matched.length){
     matched=allThawing.filter(r=>String(r.date||'').slice(0,10)===packDate);
