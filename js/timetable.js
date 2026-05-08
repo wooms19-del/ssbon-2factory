@@ -76,7 +76,11 @@ function ttGetInputs() {
   return {
     meatType: getStr('tt-meat', '홍두깨'),
     meatKg: get('tt-kg', 1600),
-    startTime: getStr('tt-start', '06:00'),
+    startTime: getStr('tt-start', '05:00'),       // 조출 시각 (외국인 출근)
+    earlyWorkers: get('tt-early', 7),              // 조출 인원 (외국인)
+    mgrTime: getStr('tt-mgr-time', '07:00'),       // 관리자 출근 시각
+    mgrWorkers: get('tt-mgr', 2),                  // 관리자 인원
+    joinTime: getStr('tt-join', '09:00'),          // 한국인 합류 시각
     totalWorkers: get('tt-total', 28),
     wkPre: get('tt-wk-pre', 10),
     wkCrush: get('tt-wk-crush', 14),
@@ -234,6 +238,7 @@ async function ttPeriodChange() {
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
 function ttSimulate(inp) {
   const startMin = ttToMin(inp.startTime);
+  const joinMin = ttToMin(inp.joinTime);
   const cookYield = TT_COOK_YIELD[inp.meatType] || 56.8;
 
   const preIn = inp.meatKg;
@@ -246,20 +251,38 @@ function ttSimulate(inp) {
   const packOut = packIn * TT_PACK_YIELD / 100;
   const pouches = Math.floor(packOut / TT_PACK_KG_PER_POUCH);
 
-  const preHours = preIn / (inp.pPre * inp.wkPre);
-  const preEndMin = startMin + Math.round(preHours * 60);
+  // 전처리 시간: 조출(early) → 합류(join) 후 풀(wkPre) 단계
+  // Phase 1: 조출 인원으로 startMin~joinMin 시간 동안 처리
+  const phase1Min = Math.max(0, joinMin - startMin);
+  const phase1Kg = inp.pPre * inp.earlyWorkers * (phase1Min / 60);
+  // Phase 2: 풀 인원으로 나머지 처리
+  const remainingKg = Math.max(0, preIn - phase1Kg);
+  const phase2Min = remainingKg / (inp.pPre * inp.wkPre) * 60;
+  const preEndMin = joinMin + Math.round(phase2Min);
+  const preHours = (preEndMin - startMin) / 60;
 
-  // 자숙 4탱크 병렬
+  // 자숙 4탱크 병렬: 각 탱크 = 전처리 누적 i*tankKg 도달 시점에 투입
   const cookCycles = Math.max(1, Math.ceil(preIn / TT_FIXED.tankKg));
   const tankInTimes = [];
   for (let i = 0; i < cookCycles; i++) {
-    const t = startMin + Math.round(preHours * 60 * (i + 1) / cookCycles);
-    tankInTimes.push(t);
+    const targetKg = (i + 1) * TT_FIXED.tankKg;
+    let tankInMin;
+    if (targetKg <= phase1Kg) {
+      // Phase 1에서 도달
+      tankInMin = startMin + Math.round(targetKg / (inp.pPre * inp.earlyWorkers) * 60);
+    } else {
+      // Phase 2에서 도달
+      const extraKg = targetKg - phase1Kg;
+      tankInMin = joinMin + Math.round(extraKg / (inp.pPre * inp.wkPre) * 60);
+    }
+    // 마지막 탱크는 전처리 종료 시점 (잔량 처리 끝)
+    if (i === cookCycles - 1 && tankInMin > preEndMin) tankInMin = preEndMin;
+    tankInTimes.push(tankInMin);
   }
   const tankOutTimes = tankInTimes.map(t => t + TT_FIXED.cookHours * 60);
   const wagonEndTimes = tankOutTimes.map(t => t + TT_FIXED.wagonMin);
 
-  // 파쇄: 자숙 1호 와건 종료부터, 피크 인원으로 계산
+  // 파쇄: 자숙 1호 와건 종료부터, 피크 인원으로
   const crushStartMin = wagonEndTimes[0];
   const crushHours = crushIn / (inp.pCrush * inp.wkPackPeak);
   const crushEndMin = crushStartMin + Math.round(crushHours * 60);
@@ -277,7 +300,8 @@ function ttSimulate(inp) {
   return {
     preIn, preOut, cookIn, cookOut, crushIn, crushOut, packIn, packOut, pouches,
     preHours, crushHours, packMin,
-    startMin, preEndMin,
+    startMin, preEndMin, joinMin,
+    phase1Min, phase1Kg,
     tankInTimes, tankOutTimes, wagonEndTimes,
     crushStartMin, crushEndMin,
     packStartMin, packEndMin,
@@ -289,36 +313,51 @@ function ttSimulate(inp) {
 // ── 인원 운용 슬롯 자동 ─────────────────────────────────
 function ttPlanSlots(inp, sim) {
   const total = inp.totalWorkers;
-  const mgr = 2;
-  const foreign = Math.min(7, Math.floor((total - mgr) / 4));
+  const mgr = inp.mgrWorkers;
+  const early = inp.earlyWorkers;
   const slots = [];
 
+  // 슬롯 1: 조출~관리자 출근
+  const mgrTime = ttToMin(inp.mgrTime);
+  if (mgrTime > sim.startMin) {
+    slots.push({
+      range: `${ttFmt(sim.startMin)}~${inp.mgrTime}`,
+      cells: { 전처리: early },
+      sum: early,
+    });
+  }
+  // 슬롯 2: 관리자 출근~한국인 합류
+  if (sim.joinMin > mgrTime) {
+    slots.push({
+      range: `${inp.mgrTime}~${inp.joinTime}`,
+      cells: { 전처리: early, 관리: mgr },
+      sum: early + mgr,
+    });
+  }
+  // 슬롯 3: 한국인 합류~점심 1차 (풀가동)
+  // 한국인 합류 후 = total - early - mgr 명이 추가
+  const koreanArrived = total - early - mgr;
+  // 전처리 인원은 wkPre로 (외국인 일부 + 한국인 일부)
+  // 나머지(외포장·세팅) = total - wkPre - mgr
+  const remainPeak1 = total - inp.wkPre - mgr;
   slots.push({
-    range: `${ttFmt(sim.startMin)}~07:00`,
-    cells: { 전처리: foreign },
-    sum: foreign,
-  });
-  slots.push({
-    range: `07:00~09:00`,
-    cells: { 전처리: foreign, 관리: mgr },
-    sum: foreign + mgr,
-  });
-  const remain1 = total - inp.wkPre - mgr;
-  slots.push({
-    range: `09:00~11:30`,
-    cells: { 전처리: inp.wkPre, 외포장: Math.max(0, remain1 - 3), 세팅: 3, 관리: mgr },
+    range: `${inp.joinTime}~11:30`,
+    cells: { 전처리: inp.wkPre, 외포장: Math.max(0, remainPeak1 - 3), 세팅: 3, 관리: mgr },
     sum: total,
   });
+  // 슬롯 4: 점심 1차 (11:30~12:30)
   slots.push({
     range: `11:30~12:30`,
     cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
     sum: total,
   });
+  // 슬롯 5: 점심 2차 (12:30~13:30)
   slots.push({
     range: `12:30~13:30`,
     cells: { 파쇄: inp.wkCrush, 이송: inp.wkTrans, 점심: total - inp.wkCrush - inp.wkTrans - 1, 관리: 1 },
     sum: total,
   });
+  // 슬롯 6: 풀가동 (13:30~내포장종료)
   const peakRest = total - inp.wkPackPeak - inp.wkPack - inp.wkTrans - mgr;
   slots.push({
     range: `13:30~${ttFmt(sim.packEndMin)}`,
@@ -331,6 +370,7 @@ function ttPlanSlots(inp, sim) {
     },
     sum: total,
   });
+  // 슬롯 7: 내포장 종료 후 청소 전환
   const cleanRest = total - inp.wkTrans - mgr;
   slots.push({
     range: `${ttFmt(sim.packEndMin)}~17:30`,
@@ -344,9 +384,9 @@ function ttPlanSlots(inp, sim) {
 function ttPlanNarrative(inp, sim, slots) {
   const total = inp.totalWorkers;
   const lines = [];
-  lines.push(`<strong>${ttFmt(sim.startMin)}~07:00</strong> · 외국인 ${slots[0].cells.전처리}명 전처리 시작`);
-  lines.push(`<strong>07:00~09:00</strong> · 관리 ${slots[1].cells.관리}명 합류 (전처리는 그대로)`);
-  lines.push(`<strong>09:00~11:30</strong> · 한국인 합류 → 전처리 ${inp.wkPre}명 가동 + 외포장·세팅 병행 (${total}명 풀가동)`);
+  lines.push(`<strong>${ttFmt(sim.startMin)} (조출)</strong> · 외국인 ${inp.earlyWorkers}명 전처리 시작`);
+  lines.push(`<strong>${inp.mgrTime}</strong> · 관리자 ${inp.mgrWorkers}명 출근 (전처리는 그대로 ${inp.earlyWorkers}명)`);
+  lines.push(`<strong>${inp.joinTime}</strong> · 한국인 합류 → 전처리 ${inp.wkPre}명 가동 + 외포장·세팅 병행 (${total}명 풀가동)`);
   lines.push(`<strong>${ttFmt(sim.crushStartMin)}</strong> · 자숙 1호 출하 → <strong style="color:#BA7517">파쇄 ${inp.wkCrush}명 투입 시작</strong>`);
   lines.push(`<strong>11:30~12:30</strong> · 점심 1차 (후공정조)`);
   lines.push(`<strong>12:30~13:30</strong> · 점심 2차 (전처리조) — 파쇄 ${inp.wkCrush}명 가동`);
@@ -450,18 +490,18 @@ function ttRender() {
     isFull: slot.sum === inp.totalWorkers,
   }));
   const wkTbl = `
-    <table style="width:100%;border-collapse:collapse;font-size:10.5px;table-layout:fixed">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
       <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
-        <th style="text-align:left;padding:7px 4px;font-weight:500">시간대</th>
-        ${wkHeads.map((h,i) => `<th style="text-align:right;padding:7px 4px;font-weight:500;color:${wkColors[i]};font-size:10px">${h}</th>`).join('')}
-        <th style="text-align:right;padding:7px 4px;font-weight:500">합계</th>
+        <th style="text-align:left;padding:10px 6px;font-weight:500;font-size:11px">시간대</th>
+        ${wkHeads.map((h,i) => `<th style="text-align:right;padding:10px 5px;font-weight:500;color:${wkColors[i]};font-size:11px">${h}</th>`).join('')}
+        <th style="text-align:right;padding:10px 6px;font-weight:500;font-size:11px">합계</th>
       </tr></thead>
       <tbody>${slotsRows.map(r => {
         const bg = r.isFull ? 'rgba(232,243,222,0.4)' : '';
         return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary);background:${bg}">
-          <td style="padding:7px 4px;font-weight:500;font-size:10px">${r.range}</td>
-          ${r.cells.map(v => `<td style="padding:7px 4px;text-align:right;${v===0?'color:var(--color-text-tertiary)':'font-weight:500'}">${v||'·'}</td>`).join('')}
-          <td style="padding:7px 4px;text-align:right;font-weight:600;color:${r.isFull?'#0F6E56':'var(--color-text-tertiary)'}">${r.sum}${r.isFull?' ✓':''}</td>
+          <td style="padding:10px 6px;font-weight:500;font-size:11px">${r.range}</td>
+          ${r.cells.map(v => `<td style="padding:10px 5px;text-align:right;${v===0?'color:var(--color-text-tertiary)':'font-weight:500'}">${v||'·'}</td>`).join('')}
+          <td style="padding:10px 6px;text-align:right;font-weight:600;color:${r.isFull?'#0F6E56':'var(--color-text-tertiary)'}">${r.sum}${r.isFull?' ✓':''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
@@ -471,7 +511,7 @@ function ttRender() {
     <style>
       @media (max-width: 900px) { #tt-split { grid-template-columns: 1fr !important; } }
     </style>
-    <div id="tt-split" style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px">
+    <div id="tt-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
       <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px">📋 공정 타임라인</div>
         <div style="overflow-x:auto">${timelineSvg}</div>
