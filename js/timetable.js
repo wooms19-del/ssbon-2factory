@@ -282,33 +282,52 @@ function ttSimulate(inp) {
   const tankOutTimes = tankInTimes.map(t => t + TT_FIXED.cookHours * 60);
   const wagonEndTimes = tankOutTimes.map(t => t + TT_FIXED.wagonMin);
 
-  // 파쇄: 자숙 1호 와건 종료부터, 피크 인원으로
+  // 파쇄: 자숙 1호 와건 종료부터 시작
+  // 종료는 두 조건 중 늦은 쪽:
+  //  (1) 파쇄 자체 처리 완료 = crushStart + (총kg / 속도 / 인원)
+  //  (2) 자숙 마지막 와건 종료 + 잔량 처리 시간 (마지막 탱크 출하 후 그 분량 파쇄)
   const crushStartMin = wagonEndTimes[0];
-  const crushHours = crushIn / (inp.pCrush * inp.wkPackPeak);
-  const crushEndMin = crushStartMin + Math.round(crushHours * 60);
+  const lastWagonEnd = wagonEndTimes[wagonEndTimes.length - 1];
+  const crushSpeedKgPerMin = inp.pCrush * inp.wkPackPeak / 60;  // kg/분
+  const crushSelfMin = crushIn / crushSpeedKgPerMin;
+  const crushSelfEndMin = crushStartMin + Math.round(crushSelfMin);
+  // 마지막 탱크 산출 = tankKg × cookYield (kg)
+  const lastTankOutKg = TT_FIXED.tankKg * (cookYield / 100);
+  const lastTankCrushMin = lastTankOutKg / crushSpeedKgPerMin;
+  const crushAfterLastWagonEndMin = lastWagonEnd + Math.round(lastTankCrushMin);
+  const crushEndMin = Math.max(crushSelfEndMin, crushAfterLastWagonEndMin);
+  const crushHours = (crushEndMin - crushStartMin) / 60;
 
-  // 내포장: 파쇄 시작 1시간 후
+  // 내포장: 파쇄 시작 1시간 후 시작 (대차 1개 누적 후)
+  // 종료는 두 조건 중 늦은 쪽:
+  //  (1) 내포장 자체 처리 완료 = packStart + (총EA / 속도)
+  //  (2) 파쇄 종료 + 잔량 처리 시간 = crushEnd + (잔량EA / 속도)
+  //      ※ 파쇄 종료 시점에 내포장에 들어가지 않은 잔량 EA가 있으면 그만큼 추가 시간 필요
   const packStartMin = crushStartMin + 60;
-  const packMin = pouches / inp.pPackEa;
-  const packEndMin = packStartMin + Math.round(packMin);
+  const packSelfMin = pouches / inp.pPackEa;  // 자체 처리 시간
+  const packSelfEndMin = packStartMin + Math.round(packSelfMin);
+
+  // 파쇄 종료 시점에 내포장이 처리한 EA
+  const packProcessedAtCrushEnd = Math.max(0, (crushEndMin - packStartMin)) * inp.pPackEa;
+  const remainingEaAfterCrush = Math.max(0, pouches - packProcessedAtCrushEnd);
+  const packAfterCrushEndMin = crushEndMin + Math.round(remainingEaAfterCrush / inp.pPackEa);
+
+  // 둘 중 늦은 쪽
+  const packEndMin = Math.max(packSelfEndMin, packAfterCrushEndMin);
+  const packMin = packEndMin - packStartMin;
 
   // 레토르트: 회차별 시작 시점 동적 계산
-  // 1회차: 내포장 시작 후 384EA 누적 시점 = packStartMin + (384/pPackEa)분
-  // n회차(n≥2): max(이전 회차 종료, 내포장 시작 + n*384EA 누적 시점)
+  // 누적 EA 도달 시점은 내포장 종료 시점(packEndMin)을 넘을 수 없음
   const retortCycles = Math.ceil(pouches / TT_FIXED.retortPerCycle);
   const eaPerMin = inp.pPackEa;
-  const minPerCycleAccumulate = TT_FIXED.retortPerCycle / eaPerMin;
   const retortStartTimes = [];
   const retortEndTimes = [];
   for (let i = 0; i < retortCycles; i++) {
-    // 마지막 회차: 잔량만큼 누적 (384EA 미만 가능)
     const isLast = i === retortCycles - 1;
-    const eaNeeded = isLast
-      ? (pouches - i * TT_FIXED.retortPerCycle)
-      : TT_FIXED.retortPerCycle;
-    // 누적 도달 시점
     const cumEa = isLast ? pouches : (i + 1) * TT_FIXED.retortPerCycle;
-    const accumulateMin = packStartMin + Math.round(cumEa / eaPerMin);
+    // 누적 도달 시점 = 내포장 시작 + (누적EA / 속도), 단 packEndMin 초과 못 함
+    let accumulateMin = packStartMin + Math.round(cumEa / eaPerMin);
+    if (accumulateMin > packEndMin) accumulateMin = packEndMin;
     // 시작 = max(이전 회차 종료, 누적 도달 시점)
     const prevEnd = i > 0 ? retortEndTimes[i - 1] : 0;
     const start = Math.max(prevEnd, accumulateMin);
@@ -485,7 +504,7 @@ function ttRender() {
   bars += bar(wagonY + 28, '파쇄', sim.crushStartMin, sim.crushEndMin, '#BA7517',
     `${inp.wkPackPeak}명 · ${ttFmt(sim.crushStartMin)}~${ttFmt(sim.crushEndMin)}`);
   bars += bar(wagonY + 56, '내포장', sim.packStartMin, sim.packEndMin, '#7F77DD',
-    `${inp.pPackEa}EA/분`);
+    `${inp.pPackEa}EA/분 · ${ttFmt(sim.packStartMin)}~${ttFmt(sim.packEndMin)}`);
   for (let i = 0; i < sim.retortCycles; i++) {
     const s = sim.retortStartTimes[i];
     const e = sim.retortEndTimes[i];
