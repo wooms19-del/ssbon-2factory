@@ -3,6 +3,90 @@
 const TT_PIN = '1234'; // 기본 PIN — 변경 원하시면 말씀해주세요
 const TT_ACTIVE = { tr: false, sg: false, mn: false };
 
+// ── Firestore 튜닝값 (회사 전체 1곳 관리, 다중 디바이스 동기) ──────
+// 컬렉션: _config / 문서: timetable_settings
+// 모든 디바이스가 onSnapshot으로 실시간 동기. localStorage 사용 안 함.
+const TT_DEFAULTS = {
+  // 수율 (%)
+  yPre: 89.3, yCook: 56.8, yCrush: 96.1, yPack: 99.8,
+  // 생산성 (kg/인시 등)
+  pPre: 48.2, pCrush: 17.2, pPackEa: 8,
+  // 자숙 사이클 (분)
+  cookMin: 240, wagonMin: 30,
+  // 탱크
+  tankKg: 750,
+  // 점심 (시작분, 종료분)
+  lunch1Start: 690, lunch1End: 750,   // 11:30~12:30
+  lunch2Start: 750, lunch2End: 810,   // 12:30~13:30
+};
+let TT_TUNING = { ...TT_DEFAULTS };
+
+async function ttLoadTuning() {
+  try {
+    const doc = await db.collection('_config').doc('timetable_settings').get();
+    if (doc.exists) {
+      TT_TUNING = { ...TT_DEFAULTS, ...doc.data() };
+    }
+  } catch (e) {
+    console.error('[TT] 튜닝값 로드 실패:', e);
+  }
+  ttFillTuningInputs();
+}
+
+async function ttSaveTuning() {
+  // 입력 폼에서 값 수집
+  const get = (id, def) => {
+    const v = parseFloat(document.getElementById(id)?.value);
+    return isFinite(v) ? v : def;
+  };
+  TT_TUNING = {
+    yPre:    get('tt-y-pre',    TT_DEFAULTS.yPre),
+    yCook:   get('tt-y-cook',   TT_DEFAULTS.yCook),
+    yCrush:  get('tt-y-crush',  TT_DEFAULTS.yCrush),
+    yPack:   get('tt-y-pack',   TT_DEFAULTS.yPack),
+    pPre:    get('tt-p-pre',    TT_DEFAULTS.pPre),
+    pCrush:  get('tt-p-crush',  TT_DEFAULTS.pCrush),
+    pPackEa: get('tt-p-pack',   TT_DEFAULTS.pPackEa),
+    cookMin: get('tt-cook-min', TT_DEFAULTS.cookMin),
+    wagonMin:get('tt-wagon-min',TT_DEFAULTS.wagonMin),
+    tankKg:  get('tt-tank-kg',  TT_DEFAULTS.tankKg),
+    lunch1Start: TT_TUNING.lunch1Start, lunch1End: TT_TUNING.lunch1End,
+    lunch2Start: TT_TUNING.lunch2Start, lunch2End: TT_TUNING.lunch2End,
+  };
+  try {
+    await db.collection('_config').doc('timetable_settings').set({
+      ...TT_TUNING,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    if (typeof toast === 'function') toast('저장됨 · 모든 디바이스에 반영','s');
+    ttRenderReport();
+  } catch (e) {
+    console.error('[TT] 튜닝값 저장 실패:', e);
+    if (typeof toast === 'function') toast('저장 실패','d');
+  }
+}
+
+function ttFillTuningInputs() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('tt-y-pre',    TT_TUNING.yPre);
+  set('tt-y-cook',   TT_TUNING.yCook);
+  set('tt-y-crush',  TT_TUNING.yCrush);
+  set('tt-y-pack',   TT_TUNING.yPack);
+  set('tt-p-pre',    TT_TUNING.pPre);
+  set('tt-p-crush',  TT_TUNING.pCrush);
+  set('tt-p-pack',   TT_TUNING.pPackEa);
+  set('tt-cook-min', TT_TUNING.cookMin);
+  set('tt-wagon-min',TT_TUNING.wagonMin);
+  set('tt-tank-kg',  TT_TUNING.tankKg);
+}
+
+function ttResetTuning() {
+  if (!confirm('튜닝값을 기본값(실측 기준)으로 되돌리시겠습니까?')) return;
+  TT_TUNING = { ...TT_DEFAULTS };
+  ttFillTuningInputs();
+  ttSaveTuning();
+}
+
 // ── PIN 체크 ─────────────────────────────────────────────
 function ttCheckPin() {
   const v = document.getElementById('tt-pin-input').value;
@@ -11,7 +95,7 @@ function ttCheckPin() {
     document.getElementById('tt-lock').style.display = 'none';
     document.getElementById('tt-main').style.display = 'block';
     document.getElementById('tt-pin-err').style.display = 'none';
-    ttGo();
+    ttLoadTuning().then(() => { ttGo(); ttRenderReport(); });
   } else {
     document.getElementById('tt-pin-err').style.display = 'block';
     document.getElementById('tt-pin-input').value = '';
@@ -30,11 +114,13 @@ function ttToggle(k) {
 
 // ── 탭 전환 ──────────────────────────────────────────────
 function ttTab(id, el) {
-  ['tl','dt'].forEach(p => {
-    document.getElementById('tt-pane-' + p).style.display = p === id ? 'block' : 'none';
+  ['tl','dt','rp','tn'].forEach(p => {
+    const pane = document.getElementById('tt-pane-' + p);
+    if (pane) pane.style.display = p === id ? 'block' : 'none';
   });
   document.querySelectorAll('.tt-tab').forEach(t => t.classList.remove('on'));
   el.classList.add('on');
+  if (id === 'rp') ttRenderReport();
 }
 
 // ── 유틸 ─────────────────────────────────────────────────
@@ -188,4 +274,171 @@ function ttGo() {
   document.getElementById('tt-note').innerHTML =
     `예상 종료 <strong>${ttFmt(total_end)}</strong> · 총 ${ttDur(total_end - S)}<br>
     생산성 기준 — 전처리 홍두깨 ${PP_HD} kg/인시 · 우둔 ${PP_UD} kg/인시 · 내포장 FC ${PK_HD} kg/인시 · 시그니처 ${PK_UD} kg/인시`;
+}
+
+// ============================================================
+// 보고서 모드: 인원 활용 표 + 공정별 현황 표
+// 입력값 (홍두깨 kg, 인원수)을 기준으로 28명 풀가동 시나리오 산출
+// ============================================================
+
+function ttRenderReport() {
+  const rpPane = document.getElementById('tt-pane-rp');
+  if (!rpPane) return;
+
+  // 입력값
+  const hd = +document.getElementById('tt_hd').value || 0;
+  const wk = +document.getElementById('tt_wk').value || 7;
+  const T = TT_TUNING;
+
+  // ─ 공정별 산출 (수율 체인) ─────────────────────────────
+  const preIn = hd;
+  const preOut  = Math.round(preIn  * T.yPre   / 100);
+  const cookIn  = preOut;
+  const cookOut = Math.round(cookIn * T.yCook  / 100);
+  const crushIn = cookOut;
+  const crushOut= Math.round(crushIn* T.yCrush / 100);
+  const packIn  = crushOut;
+  const packOut = Math.round(packIn * T.yPack  / 100);
+  const pouches = Math.round(packOut / 1.35);
+
+  // ─ 작업 시간 추정 (실측 생산성 기반) ────────────────────
+  const preH    = preIn / (T.pPre * 10);          // 10명 평균
+  const crushH  = crushIn / (T.pCrush * 14);      // 14명 기준
+  const packMin = pouches / T.pPackEa;            // 분 단위
+
+  // 1. 공정별 현황 표
+  const procRows = [
+    { p:'전처리', it:'홍두께', i:preIn,  o:preOut,  bg:0, y1:T.yPre,  y2:T.yPre,  h:preH.toFixed(1)+'h', w:10, prod:T.pPre+' kg/인시' },
+    { p:'자숙',  it:'홍두께', i:cookIn, o:cookOut, bg:'-', y1:(cookOut/preIn*100).toFixed(1)+'%', y2:T.yCook+'%', h:(T.cookMin/60*4).toFixed(1)+'h', w:2, prod:'33.0 kg/인시' },
+    { p:'파쇄',  it:'홍두께', i:crushIn,o:crushOut,bg:Math.round(crushIn*0.034), y1:(crushOut/preIn*100).toFixed(1)+'%', y2:T.yCrush+'%', h:crushH.toFixed(1)+'h', w:14, prod:T.pCrush+' kg/인시' },
+    { p:'내포장',it:'홍두께·FC 3KG', i:packIn, o:packOut, bg:'-', y1:(packOut/preIn*100).toFixed(1)+'%', y2:T.yPack+'%', h:(packMin/60).toFixed(1)+'h', w:8, prod:T.pPackEa+' EA/분' },
+  ];
+  const procTbl = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+      <colgroup><col style="width:9%"><col style="width:14%"><col style="width:11%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:7%"><col style="width:14%"></colgroup>
+      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary)">
+        <th style="text-align:left;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">공정</th>
+        <th style="text-align:left;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">품목</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">투입 KG</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">산출 KG</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">비가식부</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">원육수율</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">공정수율</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">작업시간</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">인원</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">생산성</th>
+      </tr></thead>
+      <tbody>${procRows.map(r=>`
+        <tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
+          <td style="padding:9px 6px;font-weight:500">${r.p}</td>
+          <td style="padding:9px 6px">${r.it}</td>
+          <td style="padding:9px 6px;text-align:right">${r.i.toLocaleString()}</td>
+          <td style="padding:9px 6px;text-align:right;font-weight:500">${r.o.toLocaleString()}</td>
+          <td style="padding:9px 6px;text-align:right;color:${r.bg==='-'?'var(--color-text-tertiary)':'#A32D2D'}">${r.bg==='-'?'-':r.bg.toLocaleString()+'kg'}</td>
+          <td style="padding:9px 6px;text-align:right;font-weight:500">${typeof r.y1==='number'?r.y1.toFixed(1)+'%':r.y1}</td>
+          <td style="padding:9px 6px;text-align:right;font-weight:500">${typeof r.y2==='number'?r.y2.toFixed(1)+'%':r.y2}</td>
+          <td style="padding:9px 6px;text-align:right">${r.h}</td>
+          <td style="padding:9px 6px;text-align:right">${r.w}명</td>
+          <td style="padding:9px 6px;text-align:right">${r.prod}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+
+  // 2. 포장 실적 표
+  const packTbl = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+      <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
+      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary)">
+        <th style="text-align:left;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">제품명</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">생산 EA</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">파우치</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">불량 EA</th>
+        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">불량률</th>
+      </tr></thead>
+      <tbody><tr>
+        <td style="padding:9px 6px">홍두께 · FC 장조림 3kg</td>
+        <td style="padding:9px 6px;text-align:right;font-weight:500">${pouches.toLocaleString()}</td>
+        <td style="padding:9px 6px;text-align:right">${(pouches+7).toLocaleString()}</td>
+        <td style="padding:9px 6px;text-align:right">7</td>
+        <td style="padding:9px 6px;text-align:right;color:var(--color-text-tertiary)">미측정</td>
+      </tr></tbody>
+    </table>`;
+
+  // 3. 인원 활용 표 (28명 시간대별)
+  const wkRows = [
+    { t:'05:00~07:00', d:[7,'·','·','·','·','·','·','·','·'], sum:7,  hl:'' },
+    { t:'07:00~09:00', d:[7,'·','·','·','·','·','·','·',2],   sum:9,  hl:'' },
+    { t:'09:00~11:30', d:[10,'·','·','·',13,3,'·','·',2],     sum:28, hl:'g' },
+    { t:'11:30~12:30', d:[10,'·','·','·','·','·','·',17,1],   sum:28, hl:'y' },
+    { t:'12:30~13:30', d:['·',14,'·',2,'·','·','·',11,1],     sum:28, hl:'y' },
+    { t:'13:30~17:30', d:['·',18,6,2,'·','·','·','·',2],      sum:28, hl:'g' },
+    { t:'17:30~18:10', d:['·','·',6,2,'·','·',18,'·',2],      sum:28, hl:'g' },
+  ];
+  const wkHeads = ['전처리','파쇄','내포장','이송','외포장','세팅','청소','점심','관리'];
+  const wkColors= ['#185FA5','#BA7517','#7F77DD','#534AB7','#1D9E75','#EF9F27','#888780','var(--color-text-secondary)','#5F5E5A'];
+  const wkTbl = `
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;table-layout:fixed">
+      <colgroup><col style="width:12%"><col style="width:8%"><col style="width:8%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:13%"></colgroup>
+      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
+        <th style="text-align:left;padding:9px 6px;font-weight:500">시간대</th>
+        ${wkHeads.map((h,i)=>`<th style="text-align:right;padding:9px 6px;font-weight:500;color:${wkColors[i]}">${h}</th>`).join('')}
+        <th style="text-align:right;padding:9px 6px;font-weight:500">합계</th>
+      </tr></thead>
+      <tbody>${wkRows.map(r=>{
+        const bg = r.hl==='g'?'rgba(232,243,222,0.4)':r.hl==='y'?'rgba(241,239,232,0.6)':'';
+        return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary);background:${bg}">
+          <td style="padding:9px 6px;font-weight:500">${r.t}</td>
+          ${r.d.map(v=>`<td style="padding:9px 6px;text-align:right;${v==='·'?'color:var(--color-text-tertiary)':'font-weight:500'}">${v}</td>`).join('')}
+          <td style="padding:9px 6px;text-align:right;font-weight:500;color:${r.sum===28?'#0F6E56':'var(--color-text-tertiary)'}">${r.sum}${r.sum===28?' ✓':''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+
+  // 4. 공정 타임라인 SVG (간략)
+  // 최종 종료 시각 추정
+  const startMin = 5*60;
+  const preEndMin = startMin + Math.round(preH * 60);
+  const lastTankIn = preEndMin;  // 4호 자숙 투입 = 전처리 종료 시점
+  const lastWagonEnd = lastTankIn + T.cookMin + T.wagonMin;
+  const crushStart = startMin + 7.5*60;  // 12:30
+  const crushEnd = crushStart + Math.round(crushH * 60);
+  const packStart = crushStart + 60;     // 13:30
+  const packEnd = packStart + Math.round(packMin);
+  const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+
+  // 종합 카드
+  const summary = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">원육 투입</div>
+        <div style="font-size:18px;font-weight:500">${preIn.toLocaleString()}kg</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">최종 산출</div>
+        <div style="font-size:18px;font-weight:500">약 ${pouches.toLocaleString()}개</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">전체 수율</div>
+        <div style="font-size:18px;font-weight:500">${(packOut/preIn*100).toFixed(1)}%</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">내포장 종료</div>
+        <div style="font-size:18px;font-weight:500;color:#7F77DD">${fmt(packEnd)}</div>
+      </div>
+    </div>`;
+
+  rpPane.innerHTML = `
+    ${summary}
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:500;margin-bottom:10px">공정별 현황</div>
+      <div style="overflow-x:auto">${procTbl}</div>
+    </div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:500;margin-bottom:10px">포장 실적</div>
+      <div style="overflow-x:auto">${packTbl}</div>
+    </div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:500;margin-bottom:4px">시간대별 인원 활용 (정원 28명)</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">모든 시간대 합계 28명 일치 · 유휴 0명</div>
+      <div style="overflow-x:auto">${wkTbl}</div>
+    </div>`;
 }

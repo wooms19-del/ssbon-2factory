@@ -768,6 +768,8 @@
       <div style="display:flex;gap:4px;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:12px" id="tt-tabs">
         <div class="tt-tab on" onclick="ttTab('tl',this)">통합 타임라인</div>
         <div class="tt-tab" onclick="ttTab('dt',this)">공정별 상세</div>
+        <div class="tt-tab" onclick="ttTab('rp',this)">📊 보고서</div>
+        <div class="tt-tab" onclick="ttTab('tn',this)">⚙️ 튜닝값</div>
       </div>
 
       <!-- 통합 타임라인 -->
@@ -786,6 +788,59 @@
       <div id="tt-pane-dt" style="display:none">
         <div id="tt-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px"></div>
         <div id="tt-note" style="font-size:10px;color:var(--color-text-secondary);margin-top:12px;line-height:1.7"></div>
+      </div>
+
+      <!-- 보고서 (공정별 현황 + 포장 실적 + 인원 활용 표) -->
+      <div id="tt-pane-rp" style="display:none"></div>
+
+      <!-- 튜닝값 (수율·생산성 입력, Firestore 저장) -->
+      <div id="tt-pane-tn" style="display:none">
+        <div style="background:var(--color-background-info);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--color-text-info)">
+          💡 여기서 수정하면 Firestore에 저장되어 <strong>모든 디바이스(회사 PC·태블릿·모바일)에 즉시 반영</strong>됩니다.
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:14px">
+          <fieldset style="border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:12px">
+            <legend style="font-size:12px;font-weight:500;color:var(--color-text-secondary);padding:0 6px">수율 (%) · 실측값</legend>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="font-size:11px;color:var(--color-text-secondary)">전처리 수율
+                <input type="number" id="tt-y-pre" step="0.1" min="50" max="100" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+              <label style="font-size:11px;color:var(--color-text-secondary)">자숙 수율
+                <input type="number" id="tt-y-cook" step="0.1" min="40" max="80" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+              <label style="font-size:11px;color:var(--color-text-secondary)">파쇄 수율
+                <input type="number" id="tt-y-crush" step="0.1" min="80" max="100" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+              <label style="font-size:11px;color:var(--color-text-secondary)">내포장 수율
+                <input type="number" id="tt-y-pack" step="0.1" min="90" max="100" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+            </div>
+          </fieldset>
+
+          <fieldset style="border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:12px">
+            <legend style="font-size:12px;font-weight:500;color:var(--color-text-secondary);padding:0 6px">생산성 · 실측값</legend>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="font-size:11px;color:var(--color-text-secondary)">전처리 (kg/인시)
+                <input type="number" id="tt-p-pre" step="0.1" min="20" max="80" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+              <label style="font-size:11px;color:var(--color-text-secondary)">파쇄 (kg/인시)
+                <input type="number" id="tt-p-crush" step="0.1" min="10" max="30" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+              <label style="font-size:11px;color:var(--color-text-secondary)">내포장 (EA/분)
+                <input type="number" id="tt-p-pack" step="0.5" min="2" max="20" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+            </div>
+          </fieldset>
+
+          <fieldset style="border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:12px">
+            <legend style="font-size:12px;font-weight:500;color:var(--color-text-secondary);padding:0 6px">설비 · 사이클</legend>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="font-size:11px;color:var(--color-text-secondary)">자숙 사이클 (분)
+                <input type="number" id="tt-cook-min" step="5" min="120" max="360" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+              <label style="font-size:11px;color:var(--color-text-secondary)">와건 시간 (분)
+                <input type="number" id="tt-wagon-min" step="5" min="15" max="60" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+              <label style="font-size:11px;color:var(--color-text-secondary)">탱크당 자숙량 (kg)
+                <input type="number" id="tt-tank-kg" step="10" min="500" max="900" style="width:100%;height:30px;font-size:13px;margin-top:3px"></label>
+            </div>
+          </fieldset>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="ttResetTuning()" style="padding:8px 16px;font-size:13px;background:transparent;border:0.5px solid var(--color-border-secondary);border-radius:6px;cursor:pointer;color:var(--color-text-secondary)">기본값 복원</button>
+          <button onclick="ttSaveTuning()" style="padding:8px 18px;font-size:13px;background:#185FA5;border:none;border-radius:6px;cursor:pointer;color:#fff;font-weight:500">💾 저장 (전체 디바이스 동기)</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1178,6 +1233,6 @@
 <script src="js/globals.js?v=1778129561"></script>
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
-<script src="js/timetable.js?v=1778212900"></script>
+<script src="js/timetable.js?v=1778240521"></script>
 </body>
 </html>
