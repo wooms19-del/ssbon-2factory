@@ -292,10 +292,32 @@ function ttSimulate(inp) {
   const packMin = pouches / inp.pPackEa;
   const packEndMin = packStartMin + Math.round(packMin);
 
-  // 레토르트
-  const retortStartMin = packStartMin + 90;
+  // 레토르트: 회차별 시작 시점 동적 계산
+  // 1회차: 내포장 시작 후 384EA 누적 시점 = packStartMin + (384/pPackEa)분
+  // n회차(n≥2): max(이전 회차 종료, 내포장 시작 + n*384EA 누적 시점)
   const retortCycles = Math.ceil(pouches / TT_FIXED.retortPerCycle);
-  const retortEndMin = retortStartMin + retortCycles * TT_FIXED.retortCycleMin;
+  const eaPerMin = inp.pPackEa;
+  const minPerCycleAccumulate = TT_FIXED.retortPerCycle / eaPerMin;
+  const retortStartTimes = [];
+  const retortEndTimes = [];
+  for (let i = 0; i < retortCycles; i++) {
+    // 마지막 회차: 잔량만큼 누적 (384EA 미만 가능)
+    const isLast = i === retortCycles - 1;
+    const eaNeeded = isLast
+      ? (pouches - i * TT_FIXED.retortPerCycle)
+      : TT_FIXED.retortPerCycle;
+    // 누적 도달 시점
+    const cumEa = isLast ? pouches : (i + 1) * TT_FIXED.retortPerCycle;
+    const accumulateMin = packStartMin + Math.round(cumEa / eaPerMin);
+    // 시작 = max(이전 회차 종료, 누적 도달 시점)
+    const prevEnd = i > 0 ? retortEndTimes[i - 1] : 0;
+    const start = Math.max(prevEnd, accumulateMin);
+    const end = start + TT_FIXED.retortCycleMin;
+    retortStartTimes.push(start);
+    retortEndTimes.push(end);
+  }
+  const retortStartMin = retortStartTimes[0];
+  const retortEndMin = retortEndTimes[retortEndTimes.length - 1];
 
   return {
     preIn, preOut, cookIn, cookOut, crushIn, crushOut, packIn, packOut, pouches,
@@ -306,6 +328,7 @@ function ttSimulate(inp) {
     crushStartMin, crushEndMin,
     packStartMin, packEndMin,
     retortStartMin, retortEndMin, retortCycles,
+    retortStartTimes, retortEndTimes,
     cookYield,
   };
 }
@@ -464,8 +487,8 @@ function ttRender() {
   bars += bar(wagonY + 56, '내포장', sim.packStartMin, sim.packEndMin, '#7F77DD',
     `${inp.pPackEa}EA/분`);
   for (let i = 0; i < sim.retortCycles; i++) {
-    const s = sim.retortStartMin + i * TT_FIXED.retortCycleMin;
-    const e = s + TT_FIXED.retortCycleMin;
+    const s = sim.retortStartTimes[i];
+    const e = sim.retortEndTimes[i];
     bars += bar(wagonY + 84 + i*26, `레토르트 ${i+1}`, s, e, '#A32D2D',
       `${ttFmt(s)}~${ttFmt(e)}`);
   }
@@ -490,7 +513,7 @@ function ttRender() {
     isFull: slot.sum === inp.totalWorkers,
   }));
   const wkTbl = `
-    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+    <table style="width:100%;height:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
       <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
         <th style="text-align:left;padding:10px 6px;font-weight:500;font-size:11px">시간대</th>
         ${wkHeads.map((h,i) => `<th style="text-align:right;padding:10px 5px;font-weight:500;color:${wkColors[i]};font-size:11px">${h}</th>`).join('')}
@@ -499,9 +522,9 @@ function ttRender() {
       <tbody>${slotsRows.map(r => {
         const bg = r.isFull ? 'rgba(232,243,222,0.4)' : '';
         return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary);background:${bg}">
-          <td style="padding:10px 6px;font-weight:500;font-size:11px">${r.range}</td>
-          ${r.cells.map(v => `<td style="padding:10px 5px;text-align:right;${v===0?'color:var(--color-text-tertiary)':'font-weight:500'}">${v||'·'}</td>`).join('')}
-          <td style="padding:10px 6px;text-align:right;font-weight:600;color:${r.isFull?'#0F6E56':'var(--color-text-tertiary)'}">${r.sum}${r.isFull?' ✓':''}</td>
+          <td style="padding:14px 6px;font-weight:500;font-size:11px">${r.range}</td>
+          ${r.cells.map(v => `<td style="padding:14px 5px;text-align:right;${v===0?'color:var(--color-text-tertiary)':'font-weight:500'}">${v||'·'}</td>`).join('')}
+          <td style="padding:14px 6px;text-align:right;font-weight:600;color:${r.isFull?'#0F6E56':'var(--color-text-tertiary)'}">${r.sum}${r.isFull?' ✓':''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
@@ -511,15 +534,15 @@ function ttRender() {
     <style>
       @media (max-width: 900px) { #tt-split { grid-template-columns: 1fr !important; } }
     </style>
-    <div id="tt-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0">
+    <div id="tt-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:stretch">
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px">📋 공정 타임라인</div>
-        <div style="overflow-x:auto">${timelineSvg}</div>
+        <div style="overflow-x:auto;flex:1">${timelineSvg}</div>
       </div>
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0">
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">👥 시간대별 인원 활용</div>
         <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:8px">정원 ${inp.totalWorkers}명 · 합계 일치 ✓</div>
-        <div style="overflow-x:auto">${wkTbl}</div>
+        <div style="overflow-x:auto;flex:1;display:flex;flex-direction:column">${wkTbl}</div>
       </div>
     </div>`;
 
