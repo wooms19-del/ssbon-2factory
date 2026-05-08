@@ -10,6 +10,12 @@
   <meta name="application-name" content="순수본 2공장">
   <meta name="theme-color" content="#1a56db">
   <style>
+    .tt-pc{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+    .tt-pc.tt-on{border-color:#534AB7;background:var(--color-background-primary)}
+    .tt-fixed{border-color:#378ADD;background:var(--color-background-primary);cursor:default}
+    .tt-tab{padding:7px 16px;font-size:13px;cursor:pointer;border:0.5px solid transparent;border-radius:6px 6px 0 0;color:var(--color-text-secondary);background:transparent;display:inline-block}
+    .tt-tab.on{border-color:var(--color-border-tertiary);border-bottom-color:var(--color-background-primary);background:var(--color-background-primary);color:var(--color-text-primary);font-weight:500}
+  </style>
     /* 당김 새로고침 방지 */
     html, body { overscroll-behavior-y: contain; overscroll-behavior-x: none; }
     /* iOS 풀스크린 */
@@ -74,6 +80,7 @@
     <div class="ti" onclick="showTab('d','monthly')">월별현황</div>
     <div class="ti" onclick="showTab('d','trace')">이력추적</div>
     <div class="ti" onclick="showTab('d','recipe')">레시피</div>
+    <div class="ti" onclick="showTab('d','timetable')">타임테이블</div>
     <div class="ti" onclick="showTab('d','settings')">설정</div>
   </div>
 </div>
@@ -706,6 +713,84 @@
 
 
 
+<!-- ===== 타임테이블 ===== -->
+<div class="pg" id="p-timetable">
+  <div id="tt-lock" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:16px">
+    <div style="font-size:15px;font-weight:500;color:var(--color-text-primary)">🔒 관리자 전용</div>
+    <div style="font-size:13px;color:var(--color-text-secondary)">PIN 4자리를 입력하세요</div>
+    <input type="password" id="tt-pin-input" maxlength="4" placeholder="••••"
+      style="width:100px;height:44px;font-size:22px;text-align:center;letter-spacing:8px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-primary);color:var(--color-text-primary)"
+      oninput="ttCheckPin()">
+    <div id="tt-pin-err" style="font-size:12px;color:var(--color-text-danger);display:none">PIN이 맞지 않습니다</div>
+  </div>
+  <div id="tt-main" style="display:none">
+    <div class="card">
+      <!-- 입력 행 -->
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">홍두깨</span>
+        <input type="number" id="tt_hd" value="1600" oninput="ttGo()" style="width:76px;height:30px;font-size:13px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">우둔</span>
+        <input type="number" id="tt_ud" value="197" oninput="ttGo()" style="width:76px;height:30px;font-size:13px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">인원</span>
+        <input type="number" id="tt_wk" value="7" min="1" max="30" oninput="ttGo()" style="width:60px;height:30px;font-size:13px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">시작</span>
+        <input type="time" id="tt_st" value="05:25" oninput="ttGo()" style="height:30px;font-size:13px;width:96px">
+      </div>
+
+      <!-- 제품 선택 -->
+      <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">오늘 생산 제품</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:14px" id="tt-prod-grid">
+        <div class="tt-pc tt-fixed" id="tt-pc-fc">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <span style="font-size:12px;font-weight:500;color:var(--color-text-primary)">FC 3KG</span>
+            <span style="font-size:10px;background:#E6F1FB;color:#185FA5;padding:2px 7px;border-radius:99px">홍두깨 고정</span>
+          </div>
+          <div style="font-size:10px;color:var(--color-text-secondary)">대차당 380EA · 레토르트 150분</div>
+        </div>
+        <div class="tt-pc" id="tt-pc-tr" onclick="ttToggle('tr')">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:3px">트레이더스 460g</div>
+          <div style="font-size:10px;color:var(--color-text-secondary)">대차당 380EA · 레토르트 120분</div>
+          <select id="tt-src-tr" onclick="event.stopPropagation()" onchange="ttGo()" style="display:none;margin-top:6px;height:26px;font-size:11px;width:100%"><option value="ud">우둔 사용</option><option value="hd">홍두깨 사용</option></select>
+        </div>
+        <div class="tt-pc" id="tt-pc-sg" onclick="ttToggle('sg')">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:3px">시그니처 130g</div>
+          <div style="font-size:10px;color:var(--color-text-secondary)">대차당 1,024EA · 레토르트 120분</div>
+          <select id="tt-src-sg" onclick="event.stopPropagation()" onchange="ttGo()" style="display:none;margin-top:6px;height:26px;font-size:11px;width:100%"><option value="ud">우둔 사용</option><option value="hd">홍두깨 사용</option></select>
+        </div>
+        <div class="tt-pc" id="tt-pc-mn" onclick="ttToggle('mn')">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:3px">미니 70g 5개입</div>
+          <div style="font-size:10px;color:var(--color-text-secondary)">대차당 1,280EA · 레토르트 120분</div>
+          <select id="tt-src-mn" onclick="event.stopPropagation()" onchange="ttGo()" style="display:none;margin-top:6px;height:26px;font-size:11px;width:100%"><option value="ud">우둔 사용</option><option value="hd">홍두깨 사용</option></select>
+        </div>
+      </div>
+
+      <!-- 탭 -->
+      <div style="display:flex;gap:4px;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:12px" id="tt-tabs">
+        <div class="tt-tab on" onclick="ttTab('tl',this)">통합 타임라인</div>
+        <div class="tt-tab" onclick="ttTab('dt',this)">공정별 상세</div>
+      </div>
+
+      <!-- 통합 타임라인 -->
+      <div id="tt-pane-tl">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;font-size:11px;color:var(--color-text-secondary)">
+          <span>🟦 전처리</span><span>🟩 자숙</span><span>🟨 파쇄</span><span>🟪 내포장</span><span>🟥 레토르트</span>
+        </div>
+        <div style="overflow-x:auto">
+          <div id="tt-axis" style="position:relative;height:22px;margin-left:130px;margin-bottom:3px;min-width:500px"></div>
+          <div id="tt-rows"></div>
+        </div>
+        <div id="tt-badge" style="margin-top:10px"></div>
+      </div>
+
+      <!-- 공정별 상세 -->
+      <div id="tt-pane-dt" style="display:none">
+        <div id="tt-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px"></div>
+        <div id="tt-note" style="font-size:10px;color:var(--color-text-secondary);margin-top:12px;line-height:1.7"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 설정 ===== -->
 <!-- ===== 레시피 ===== -->
 <div class="pg" id="p-recipe">
@@ -1093,5 +1178,6 @@
 <script src="js/globals.js?v=1778129561"></script>
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
+<script src="js/timetable.js?v=1778212900"></script>
 </body>
 </html>
