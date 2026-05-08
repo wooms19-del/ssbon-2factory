@@ -366,7 +366,14 @@ async function saveCkEnd(id){
   }
 
   const fbId = await fbSave('cooking', completed);
-  if(fbId){ completed.fbId=fbId; saveL(); toast(`${completed.tank} 종료 저장됨 ✓`); }
+  if(fbId){
+    completed.fbId=fbId;
+    saveL();
+    // DB 의 fbId 필드도 새 docId 로 갱신 (안 하면 stale fbId 로 향후 update fail)
+    try { await fbUpdate('cooking', fbId, {fbId: fbId}); }
+    catch(e) { console.error('[cooking] fbId 동기화 실패:', e); }
+    toast(`${completed.tank} 종료 저장됨 ✓`);
+  }
   else { toast('저장 실패 - 로컬에만 저장됨','d'); }
 
   renderCkPending();
