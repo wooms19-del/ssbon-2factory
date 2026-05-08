@@ -87,6 +87,192 @@ function ttResetTuning() {
   ttSaveTuning();
 }
 
+// ── 누적 데이터 자동 분석 ────────────────────────────────
+// 기간 내 일별 실적(preprocess/cooking/shredding/packing) 합산 → 수율·생산성 평균
+async function ttAutoAnalyze() {
+  const period = document.getElementById('tt-aa-period')?.value || 'all';
+  const fromInp = document.getElementById('tt-aa-from')?.value;
+  const toInp = document.getElementById('tt-aa-to')?.value;
+  const result = document.getElementById('tt-aa-result');
+  if (result) result.innerHTML = '<div style="color:var(--color-text-secondary);font-size:12px">분석 중…</div>';
+
+  // 기간 결정
+  let fromDate, toDate;
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0,10);
+  if (period === 'all') {
+    fromDate = '2020-01-01';
+    toDate = fmt(today);
+  } else if (period === 'month') {
+    const d = new Date(today.getFullYear(), today.getMonth(), 1);
+    fromDate = fmt(d);
+    toDate = fmt(today);
+  } else if (period === 'last30') {
+    const d = new Date(today); d.setDate(d.getDate() - 30);
+    fromDate = fmt(d);
+    toDate = fmt(today);
+  } else if (period === 'custom') {
+    fromDate = fromInp;
+    toDate = toInp;
+    if (!fromDate || !toDate) {
+      if (result) result.innerHTML = '<div style="color:#A32D2D;font-size:12px">시작/종료 날짜를 모두 입력해주세요</div>';
+      return;
+    }
+  }
+
+  try {
+    // 4개 컬렉션 병렬 조회 (Firestore 컬렉션 전체 가져온 후 클라에서 필터)
+    const [preDocs, cookDocs, crushDocs, packDocs] = await Promise.all([
+      db.collection('preprocess').get(),
+      db.collection('cooking').get(),
+      db.collection('shredding').get(),
+      db.collection('packing').get(),
+    ]);
+
+    const inRange = d => d >= fromDate && d <= toDate;
+    const minutesBetween = (s, e) => {
+      if (!s || !e) return 0;
+      const [sh, sm] = String(s).split(':').map(Number);
+      const [eh, em] = String(e).split(':').map(Number);
+      let diff = (eh*60+em) - (sh*60+sm);
+      if (diff < 0) diff += 24*60;
+      return diff;
+    };
+
+    // 전처리 누적
+    let preInSum=0, preOutSum=0, prePersonHours=0;
+    preDocs.forEach(doc => {
+      const r = doc.data();
+      if (!inRange(r.date)) return;
+      const kg = +r.kg||0, waste = +r.waste||0, w = +r.workers||0;
+      const m = minutesBetween(r.start, r.end);
+      if (kg <= 0 || w <= 0 || m <= 0) return;
+      preInSum += kg;
+      preOutSum += (kg - waste);
+      prePersonHours += w * (m/60);
+    });
+
+    // 자숙 누적 (사이클 분 평균)
+    let cookCycleMins = [];
+    let cookKgIn = 0, cookKgOut = 0;
+    cookDocs.forEach(doc => {
+      const r = doc.data();
+      if (!inRange(r.date)) return;
+      const m = minutesBetween(r.start, r.end);
+      if (m > 60 && m < 600) cookCycleMins.push(m);
+      cookKgIn += (+r.kg||0);
+    });
+
+    // 파쇄 누적
+    let crushInSum=0, crushOutSum=0, crushPersonHours=0;
+    crushDocs.forEach(doc => {
+      const r = doc.data();
+      if (!inRange(r.date)) return;
+      const kg = +r.kg||0, waste = +r.waste||0, w = +r.workers||0;
+      const m = minutesBetween(r.start, r.end);
+      if (kg <= 0 || w <= 0 || m <= 0) return;
+      crushInSum += kg;
+      crushOutSum += (kg - waste);
+      crushPersonHours += w * (m/60);
+    });
+
+    // 내포장 누적 (생산성 EA/분)
+    let packEaSum = 0, packMins = 0, packKgIn = 0;
+    packDocs.forEach(doc => {
+      const r = doc.data();
+      if (!inRange(r.date)) return;
+      const ea = +r.ea||0, kg = +r.kg||0;
+      const m = minutesBetween(r.start, r.end);
+      if (ea <= 0 || m <= 0) return;
+      packEaSum += ea;
+      packMins += m;
+      packKgIn += kg;
+    });
+
+    // 자숙 수율은 preprocess 산출 → cooking 산출(kg) 비율로 추정 어려움
+    // (cooking 레코드에 산출kg 필드가 없음, kg=투입 추정)
+    // → 기본값 유지 권장. 사이클 분만 자동 산출.
+    const cookCycleAvg = cookCycleMins.length ? Math.round(cookCycleMins.reduce((a,b)=>a+b,0)/cookCycleMins.length) : null;
+
+    const calc = {
+      yPre:    preInSum > 0 ? +(preOutSum/preInSum*100).toFixed(1) : null,
+      yCrush:  crushInSum > 0 ? +(crushOutSum/crushInSum*100).toFixed(1) : null,
+      pPre:    prePersonHours > 0 ? +(preInSum/prePersonHours).toFixed(1) : null,
+      pCrush:  crushPersonHours > 0 ? +(crushInSum/crushPersonHours).toFixed(1) : null,
+      pPackEa: packMins > 0 ? +(packEaSum/packMins).toFixed(1) : null,
+      cookMin: cookCycleAvg,
+    };
+
+    // 결과 표시 + 적용 버튼
+    const items = [
+      { label:'전처리 수율', cur:TT_TUNING.yPre,    new:calc.yPre,    unit:'%', key:'yPre',    inputId:'tt-y-pre' },
+      { label:'파쇄 수율',  cur:TT_TUNING.yCrush,  new:calc.yCrush,  unit:'%', key:'yCrush',  inputId:'tt-y-crush' },
+      { label:'전처리 생산성', cur:TT_TUNING.pPre, new:calc.pPre, unit:'kg/인시', key:'pPre', inputId:'tt-p-pre' },
+      { label:'파쇄 생산성',   cur:TT_TUNING.pCrush, new:calc.pCrush, unit:'kg/인시', key:'pCrush', inputId:'tt-p-crush' },
+      { label:'내포장 생산성', cur:TT_TUNING.pPackEa, new:calc.pPackEa, unit:'EA/분', key:'pPackEa', inputId:'tt-p-pack' },
+      { label:'자숙 사이클',   cur:TT_TUNING.cookMin, new:calc.cookMin, unit:'분', key:'cookMin', inputId:'tt-cook-min' },
+    ];
+
+    const sample = preInSum + crushInSum + packKgIn;
+    const sampleTxt = sample > 0
+      ? `<span style="color:var(--color-text-secondary);font-size:11px">분석 기간 내 데이터: 전처리 ${preInSum.toLocaleString()}kg · 파쇄 ${crushInSum.toLocaleString()}kg · 포장 ${packEaSum.toLocaleString()}EA</span>`
+      : `<span style="color:#A32D2D;font-size:12px">⚠ 해당 기간 데이터가 부족합니다</span>`;
+
+    const tbl = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px">
+        <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary)">
+          <th style="text-align:left;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">항목</th>
+          <th style="text-align:right;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">현재값</th>
+          <th style="text-align:right;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">분석값</th>
+          <th style="text-align:right;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">적용</th>
+        </tr></thead>
+        <tbody>${items.map(it=>{
+          const hasNew = it.new !== null && isFinite(it.new);
+          const diff = hasNew ? (it.new - it.cur) : 0;
+          const diffColor = Math.abs(diff) < 0.1 ? 'var(--color-text-tertiary)' : (diff > 0 ? '#0F6E56' : '#A32D2D');
+          return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
+            <td style="padding:8px 6px">${it.label}</td>
+            <td style="padding:8px 6px;text-align:right;color:var(--color-text-secondary)">${it.cur} ${it.unit}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:500;color:${hasNew?diffColor:'var(--color-text-tertiary)'}">${hasNew ? it.new+' '+it.unit : '데이터 없음'}</td>
+            <td style="padding:8px 6px;text-align:right">
+              ${hasNew ? `<button onclick="ttApplyAuto('${it.inputId}', ${it.new})" style="padding:4px 10px;font-size:11px;background:#185FA5;border:none;border-radius:4px;cursor:pointer;color:#fff">적용</button>` : '-'}
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button onclick="ttApplyAllAuto(${JSON.stringify(items.filter(i=>i.new!==null&&isFinite(i.new)).map(i=>({id:i.inputId,v:i.new}))).replace(/"/g,'&quot;')})" style="padding:7px 14px;font-size:12px;background:#0F6E56;border:none;border-radius:6px;cursor:pointer;color:#fff;font-weight:500">전부 적용</button>
+      </div>`;
+
+    if (result) {
+      result.innerHTML = `<div style="margin-bottom:8px">${sampleTxt}</div>${tbl}`;
+    }
+  } catch (e) {
+    console.error('[TT] 자동 분석 실패:', e);
+    if (result) result.innerHTML = `<div style="color:#A32D2D;font-size:12px">분석 실패: ${e.message}</div>`;
+  }
+}
+
+function ttApplyAuto(inputId, val) {
+  const el = document.getElementById(inputId);
+  if (el) {
+    el.value = val;
+    el.style.background = '#E8F3DE';
+    setTimeout(() => { el.style.background = ''; }, 1500);
+  }
+}
+
+function ttApplyAllAuto(list) {
+  list.forEach(it => ttApplyAuto(it.id, it.v));
+  if (typeof toast === 'function') toast('적용됨 · 저장 버튼 눌러주세요','s');
+}
+
+function ttToggleCustomDate() {
+  const sel = document.getElementById('tt-aa-period');
+  const cust = document.getElementById('tt-aa-custom');
+  if (sel && cust) cust.style.display = sel.value === 'custom' ? 'flex' : 'none';
+}
+
 // ── PIN 체크 ─────────────────────────────────────────────
 function ttCheckPin() {
   const v = document.getElementById('tt-pin-input').value;

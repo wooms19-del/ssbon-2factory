@@ -794,11 +794,25 @@
 
       <!-- 설정값 (수율·생산성 입력, Firestore 저장) -->
       <div id="tt-pane-tn" style="display:none">
-        <!-- 자동 분석 영역 (2번 작업에서 채워짐) -->
+        <!-- 자동 분석 영역 -->
         <div id="tt-auto-analyze" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
           <div style="font-size:14px;font-weight:500;margin-bottom:6px">📊 누적 데이터 자동 분석</div>
-          <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">기간을 선택하면 일별 실적 데이터로 수율·생산성 평균값을 자동 계산합니다.</div>
-          <div style="font-size:11px;color:var(--color-text-tertiary);font-style:italic">— 다음 업데이트에서 활성화 예정 —</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">기간을 선택하면 일별 실적(전처리·자숙·파쇄·내포장)을 합산해 수율·생산성 평균을 자동 계산합니다.</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="tt-aa-period" onchange="ttToggleCustomDate()" style="height:32px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
+              <option value="all">전체 기간</option>
+              <option value="month">이번 달</option>
+              <option value="last30">최근 30일</option>
+              <option value="custom">기간 직접 지정</option>
+            </select>
+            <div id="tt-aa-custom" style="display:none;gap:6px;align-items:center">
+              <input type="date" id="tt-aa-from" style="height:32px;font-size:12px;padding:0 6px">
+              <span style="font-size:12px;color:var(--color-text-secondary)">~</span>
+              <input type="date" id="tt-aa-to" style="height:32px;font-size:12px;padding:0 6px">
+            </div>
+            <button onclick="ttAutoAnalyze()" style="padding:7px 16px;font-size:12px;background:#185FA5;border:none;border-radius:6px;cursor:pointer;color:#fff;font-weight:500">분석 실행</button>
+          </div>
+          <div id="tt-aa-result" style="margin-top:10px"></div>
         </div>
 
         <div style="background:var(--color-background-info);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--color-text-info)">
@@ -1239,6 +1253,6 @@
 <script src="js/globals.js?v=1778129561"></script>
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
-<script src="js/timetable.js?v=1778243745"></script>
+<script src="js/timetable.js?v=1778243908"></script>
 </body>
 </html>
