@@ -261,21 +261,22 @@ function ttSimulate(inp) {
   const preEndMin = joinMin + Math.round(phase2Min);
   const preHours = (preEndMin - startMin) / 60;
 
-  // 자숙 4탱크 병렬: 각 탱크 = 전처리 누적 i*tankKg 도달 시점에 투입
-  const cookCycles = Math.max(1, Math.ceil(preIn / TT_FIXED.tankKg));
+  // 자숙 탱크 수 = 전처리 산출량 기준 (자숙에 실제 들어가는 양)
+  // ※ 원육 투입량(preIn) 아니라 전처리 산출(preOut/cookIn) 기준이 맞음
+  const cookCycles = Math.max(1, Math.ceil(cookIn / TT_FIXED.tankKg));
   const tankInTimes = [];
   for (let i = 0; i < cookCycles; i++) {
-    const targetKg = (i + 1) * TT_FIXED.tankKg;
+    // i+1번째 탱크 투입 = 전처리 누적 산출이 (i+1)*tankKg 도달 시점
+    // 전처리 산출 누적 = 전처리 투입 누적 × 수율
+    const targetOutKg = (i + 1) * TT_FIXED.tankKg;  // 누적 산출 목표
+    const targetInKg = targetOutKg / (inp.yPre / 100);  // 그때까지 전처리 투입해야 하는 양
     let tankInMin;
-    if (targetKg <= phase1Kg) {
-      // Phase 1에서 도달
-      tankInMin = startMin + Math.round(targetKg / (inp.pPre * inp.earlyWorkers) * 60);
+    if (targetInKg <= phase1Kg) {
+      tankInMin = startMin + Math.round(targetInKg / (inp.pPre * inp.earlyWorkers) * 60);
     } else {
-      // Phase 2에서 도달
-      const extraKg = targetKg - phase1Kg;
+      const extraKg = targetInKg - phase1Kg;
       tankInMin = joinMin + Math.round(extraKg / (inp.pPre * inp.wkPre) * 60);
     }
-    // 마지막 탱크는 전처리 종료 시점 (잔량 처리 끝)
     if (i === cookCycles - 1 && tankInMin > preEndMin) tankInMin = preEndMin;
     tankInTimes.push(tankInMin);
   }
