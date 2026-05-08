@@ -189,28 +189,22 @@ async function ttAutoAnalyze() {
       packKgIn += kg;
     });
 
-    // 자숙 수율은 preprocess 산출 → cooking 산출(kg) 비율로 추정 어려움
-    // (cooking 레코드에 산출kg 필드가 없음, kg=투입 추정)
-    // → 기본값 유지 권장. 사이클 분만 자동 산출.
-    const cookCycleAvg = cookCycleMins.length ? Math.round(cookCycleMins.reduce((a,b)=>a+b,0)/cookCycleMins.length) : null;
-
+    // 자숙은 사이클 4시간(240분) 고정 — 자동 계산 안 함
     const calc = {
       yPre:    preInSum > 0 ? +(preOutSum/preInSum*100).toFixed(1) : null,
       yCrush:  crushInSum > 0 ? +(crushOutSum/crushInSum*100).toFixed(1) : null,
       pPre:    prePersonHours > 0 ? +(preInSum/prePersonHours).toFixed(1) : null,
       pCrush:  crushPersonHours > 0 ? +(crushInSum/crushPersonHours).toFixed(1) : null,
       pPackEa: packMins > 0 ? +(packEaSum/packMins).toFixed(1) : null,
-      cookMin: cookCycleAvg,
     };
 
-    // 결과 표시 + 적용 버튼
+    // 결과 표시 + 적용 버튼 (자숙 사이클 항목 제외)
     const items = [
       { label:'전처리 수율', cur:TT_TUNING.yPre,    new:calc.yPre,    unit:'%', key:'yPre',    inputId:'tt-y-pre' },
       { label:'파쇄 수율',  cur:TT_TUNING.yCrush,  new:calc.yCrush,  unit:'%', key:'yCrush',  inputId:'tt-y-crush' },
       { label:'전처리 생산성', cur:TT_TUNING.pPre, new:calc.pPre, unit:'kg/인시', key:'pPre', inputId:'tt-p-pre' },
       { label:'파쇄 생산성',   cur:TT_TUNING.pCrush, new:calc.pCrush, unit:'kg/인시', key:'pCrush', inputId:'tt-p-crush' },
       { label:'내포장 생산성', cur:TT_TUNING.pPackEa, new:calc.pPackEa, unit:'EA/분', key:'pPackEa', inputId:'tt-p-pack' },
-      { label:'자숙 사이클',   cur:TT_TUNING.cookMin, new:calc.cookMin, unit:'분', key:'cookMin', inputId:'tt-cook-min' },
     ];
 
     const sample = preInSum + crushInSum + packKgIn;
