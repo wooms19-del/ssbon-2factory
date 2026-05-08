@@ -471,7 +471,7 @@ function ttRender() {
     <style>
       @media (max-width: 900px) { #tt-split { grid-template-columns: 1fr !important; } }
     </style>
-    <div id="tt-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+    <div id="tt-split" style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px">
       <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px">📋 공정 타임라인</div>
         <div style="overflow-x:auto">${timelineSvg}</div>
