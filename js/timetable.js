@@ -298,19 +298,23 @@ function ttSimulate(inp) {
   const crushEndMin = Math.max(crushSelfEndMin, crushAfterLastWagonEndMin);
   const crushHours = (crushEndMin - crushStartMin) / 60;
 
-  // 내포장: 파쇄 시작 1시간 후 시작 (대차 1개 누적 후)
-  // 종료는 두 조건 중 늦은 쪽:
-  //  (1) 내포장 자체 처리 완료 = packStart + (총EA / 속도)
-  //  (2) 파쇄 종료 + 잔량 처리 시간 = crushEnd + (잔량EA / 속도)
-  //      ※ 파쇄 종료 시점에 내포장에 들어가지 않은 잔량 EA가 있으면 그만큼 추가 시간 필요
+  // 내포장: 파쇄 시작 1시간 후 시작 (대차 1개 누적 후 안정 가동)
+  // 종료 = 파쇄 종료 시점에서 마지막 파쇄 산출분이 내포장 라인 통과하는 시간 추가
+  //
+  // 정확한 계산:
+  //  - 파쇄에서 마지막에 나오는 산출 = 마지막 자숙 탱크 분량 × 파쇄 수율
+  //  - 그 마지막 산출량이 내포장 라인 통과하는 시간 = 마지막 산출 EA / 내포장 속도
+  //  - 내포장 종료 = max(자체 처리 종료, 파쇄 종료 + 마지막 산출분 처리 시간)
   const packStartMin = crushStartMin + 60;
-  const packSelfMin = pouches / inp.pPackEa;  // 자체 처리 시간
+  const packSelfMin = pouches / inp.pPackEa;
   const packSelfEndMin = packStartMin + Math.round(packSelfMin);
 
-  // 파쇄 종료 시점에 내포장이 처리한 EA
-  const packProcessedAtCrushEnd = Math.max(0, (crushEndMin - packStartMin)) * inp.pPackEa;
-  const remainingEaAfterCrush = Math.max(0, pouches - packProcessedAtCrushEnd);
-  const packAfterCrushEndMin = crushEndMin + Math.round(remainingEaAfterCrush / inp.pPackEa);
+  // 마지막 파쇄 산출분 (= 마지막 자숙 탱크 산출 × 파쇄 수율)
+  const lastTankPackEa = Math.round(lastTankOutKg * (inp.yCrush / 100) / TT_PACK_KG_PER_POUCH);
+  // 그 분량이 내포장 라인 통과하는 시간
+  const lastBatchPackMin = Math.round(lastTankPackEa / inp.pPackEa);
+  // 파쇄 종료 + 마지막 분량 통과 시간
+  const packAfterCrushEndMin = crushEndMin + lastBatchPackMin;
 
   // 둘 중 늦은 쪽
   const packEndMin = Math.max(packSelfEndMin, packAfterCrushEndMin);
