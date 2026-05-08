@@ -2675,11 +2675,9 @@ function renderPackingChart(dayEntries, opMap, ym) {
     return prodColorMap[prod];
   }
 
-  // 행 펼치기 — 평일 X축. 생산한 날 + 오늘 이후 평일. 오늘 이전 + 생산 안 한 날 제외.
-  const rows = [], groups = [];
-  // 생산한 날 set
+  // 일자별 stack — 같은 날 여러 제품은 막대 한 개 안에 색깔로 분리.
+  // 평일 X축: 생산한 날 + 오늘 이후 평일.
   const _producedSet = new Set(dayEntries.map(([d]) => d));
-  // 사용할 평일 (헬퍼 함수 사용)
   const _useWeekdays = (typeof _moChartWeekdays === 'function')
     ? _moChartWeekdays(ym || tod().slice(0,7), _producedSet)
     : (function(){
@@ -2696,55 +2694,64 @@ function renderPackingChart(dayEntries, opMap, ym) {
         }
         return arr;
       })();
-  // 생산한 날 map
   const _producedMap = {};
   dayEntries.forEach(([date, dayRows]) => { _producedMap[date] = dayRows; });
-  _useWeekdays.forEach((date, idx) => {
+
+  // 등장하는 제품 목록 + 일자별 제품별 ea/kg 매트릭스
+  const _prodSet = new Set();
+  const _cellByDate = {}; // date → { product → {ea, kg} }
+  _useWeekdays.forEach(date => {
     const dayRows = _producedMap[date] || [];
-    const items = dayRows.map(r => {
+    const cell = {};
+    dayRows.forEach(r => {
       const outerEa = opMap[date+'|'+r.product] || 0;
       const ea = outerEa > 0 ? outerEa : Math.round(r.ea || 0);
+      if(ea <= 0) return;
       const gPerEA = prodGramPerEA(r.product);
       const kg = Math.round(ea * gPerEA / 1000);
-      return { prod: r.product, short: prodShort(r.product), ea, kg };
-    }).filter(x => x.ea > 0).sort((a,b) => b.ea - a.ea);
-    const dayIdx = idx + 1;
-    // 라벨 = ['1일차', '05-04'] 배열 — dateLabelPlugin이 두 줄로 그림
-    const dayLabel = [dayIdx+'일차', date.slice(5)];
-    const si = rows.length;
-    if(items.length){
-      items.forEach(it => rows.push(it));
-      groups.push({ day: dayLabel, barIndexes: items.map((_,i) => si+i) });
-    } else {
-      rows.push({ prod: '', short: '', ea: 0, kg: 0, _empty: true });
-      groups.push({ day: dayLabel, barIndexes: [si] });
-    }
+      _prodSet.add(r.product);
+      if(!cell[r.product]) cell[r.product] = { ea: 0, kg: 0 };
+      cell[r.product].ea += ea;
+      cell[r.product].kg += kg;
+    });
+    _cellByDate[date] = cell;
+  });
+  // 색상 안정성: 등장 순서가 아닌 제품명 기준
+  const _allProds = [..._prodSet].sort();
+  _allProds.forEach(p => getColor(p)); // prefill
+
+  // 일자별 라벨 ['1일차','05-04']
+  const labels = _useWeekdays.map((d, i) => [(i+1)+'일차', d.slice(5)]);
+
+  // 모드: ea / weight / detail
+  const mode = _moPackingMode || 'detail';
+  const yUnit = (mode === 'ea') ? '' : 'kg';
+  // dataset value picker
+  const _val = (cell, p) => {
+    const c = cell[p]; if(!c) return null;
+    return (mode === 'ea') ? (c.ea > 0 ? c.ea : null) : (c.kg > 0 ? c.kg : null);
+  };
+  // 칸 안 / 위 라벨 함수
+  const inCellLine1 = (cell, p) => {
+    const c = cell[p]; if(!c) return '';
+    if(mode === 'ea') return c.ea.toLocaleString()+'EA';
+    if(mode === 'weight') return c.kg.toLocaleString()+'kg';
+    return c.ea.toLocaleString()+'EA';
+  };
+  const inCellLine2 = (cell, p) => {
+    if(mode !== 'detail') return '';
+    const c = cell[p]; if(!c) return '';
+    return c.kg.toLocaleString()+'kg';
+  };
+  const dayTotals = _useWeekdays.map(date => {
+    const cell = _cellByDate[date] || {};
+    return _allProds.reduce((s, p) => {
+      const c = cell[p]; if(!c) return s;
+      return s + (mode === 'ea' ? c.ea : c.kg);
+    }, 0);
   });
 
-  if (!rows.length) return;
-
-  const labels   = rows.map(r => r.short);
-  const bgColors = rows.map(r => getColor(r.prod) + 'dd');
-
-  // 모드별 데이터·라벨·축
-  const mode = _moPackingMode || 'detail';
-  let dataVals, yUnit, mainLabelFn, subLabelFn;
-  if (mode === 'ea') {
-    dataVals = rows.map(r => r.ea);
-    yUnit = '';
-    mainLabelFn = (r) => r.ea.toLocaleString() + 'EA';
-    subLabelFn = null;
-  } else if (mode === 'weight') {
-    dataVals = rows.map(r => r.kg);
-    yUnit = 'kg';
-    mainLabelFn = (r) => r.kg.toLocaleString() + 'kg';
-    subLabelFn = null;
-  } else { // detail
-    dataVals = rows.map(r => r.kg);
-    yUnit = 'kg';
-    mainLabelFn = (r) => r.ea.toLocaleString() + 'EA';
-    subLabelFn = (r) => r.kg.toLocaleString() + 'kg';
-  }
+  if(!_allProds.length || dayTotals.every(v => !v)) return;
 
   // 범례
   const legendEl = document.getElementById('mo_packing_legend');
@@ -2774,72 +2781,76 @@ function renderPackingChart(dayEntries, opMap, ym) {
   // 부제목 (모드별 안내 문구)
   const subEl = document.getElementById('mo_packing_subtitle');
   if (subEl) {
-    if (mode === 'ea')          subEl.textContent = '막대 = 생산 EA';
-    else if (mode === 'weight') subEl.textContent = '막대 = 생산 무게(kg)';
-    else                        subEl.textContent = '막대 = 생산 무게(kg) · 막대 위 = EA / 무게(kg)';
+    if (mode === 'ea')          subEl.textContent = '막대 = 일자별 합계 EA · 칸 안 = 제품별 EA';
+    else if (mode === 'weight') subEl.textContent = '막대 = 일자별 합계 무게(kg) · 칸 안 = 제품별 kg';
+    else                        subEl.textContent = '막대 = 일자별 합계 무게(kg) · 막대 위 = 합계 · 칸 안 = 제품별 EA / kg';
   }
 
 
+  // 막대 위 라벨: 일자별 합계
   const topNumPlugin = {
     id: 'pkTopNum',
     afterDatasetsDraw(chart) {
       const { ctx } = chart;
-      chart.getDatasetMeta(0).data.forEach((bar, i) => {
-        const v = dataVals[i]; if (!v) return;
-        const r = rows[i];
-        ctx.save();
-        ctx.textAlign = 'center';
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#222';
-        if (subLabelFn) {
-          // 상세 모드: EA(검정 굵게) + kg(회색)
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 16);
-          ctx.font = '10px sans-serif';
-          ctx.fillStyle = '#666';
-          ctx.fillText(subLabelFn(r), bar.x, bar.y - 4);
-        } else {
-          // EA 또는 중량 단일 라벨
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillText(mainLabelFn(r), bar.x, bar.y - 5);
-        }
-        ctx.restore();
-      });
+      const barMetas = chart.data.datasets
+        .map((d,i) => ({ds:d, meta: chart.getDatasetMeta(i)}))
+        .filter(x => (x.ds.type||chart.config.type) === 'bar');
+      if(!barMetas.length) return;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g7') || '#1e293b';
+      ctx.font = 'bold 11px sans-serif';
+      const xCount = labels.length;
+      for(let i=0; i<xCount; i++){
+        const total = dayTotals[i]; if(!total) continue;
+        let topY = Infinity, topX = null;
+        barMetas.forEach(({meta}) => {
+          const bar = meta.data[i]; if(!bar) return;
+          if(bar.y < topY){ topY = bar.y; topX = bar.x; }
+        });
+        if(topX == null) continue;
+        ctx.fillText(total.toLocaleString()+(yUnit||'EA'), topX, topY - 6);
+      }
+      ctx.restore();
     }
   };
 
-  const dateLabelPlugin = {
-    id: 'pkDateLabel',
-    afterDraw(chart) {
-      const { ctx, chartArea } = chart;
-      const meta = chart.getDatasetMeta(0);
-      const bottom = chartArea.bottom;
-      groups.forEach(g => {
-        const bars = g.barIndexes.map(i => meta.data[i]).filter(Boolean);
-        if (!bars.length) return;
-        const x1 = bars[0].x - bars[0].width / 2;
-        const x2 = bars[bars.length-1].x + bars[bars.length-1].width / 2;
-        const cx = (x1 + x2) / 2;
-        ctx.save();
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--g5') || '#666';
-        ctx.textAlign = 'center';
-        // dayLabel이 배열이면 두 줄로
-        if(Array.isArray(g.day)){
-          ctx.fillText(g.day[0], cx, bottom + 38);
-          ctx.fillText(g.day[1] || '', cx, bottom + 50);
-        } else {
-          ctx.fillText(g.day, cx, bottom + 38);
-        }
-        if (bars.length > 1) {
-          ctx.strokeStyle = 'rgba(100,116,139,0.3)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(x1+2, bottom+26); ctx.lineTo(x1+2, bottom+30);
-          ctx.lineTo(x2-2, bottom+30); ctx.lineTo(x2-2, bottom+26);
-          ctx.stroke();
-        }
-        ctx.restore();
+  // 칸 안 라벨: 제품별 EA / kg
+  const inCellPlugin = {
+    id: 'pkInCell',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      ctx.save();
+      ctx.textAlign = 'center';
+      chart.data.datasets.forEach((ds, di) => {
+        if((ds.type||chart.config.type) !== 'bar') return;
+        const product = ds.label; if(!product) return;
+        const meta = chart.getDatasetMeta(di);
+        meta.data.forEach((bar, i) => {
+          const date = _useWeekdays[i]; if(!date) return;
+          const cell = _cellByDate[date] || {};
+          const c = cell[product]; if(!c) return;
+          const top = bar.y, base = bar.base;
+          const h = Math.abs(base - top);
+          const cx = bar.x;
+          const cy = (top + base) / 2;
+          const l1 = inCellLine1(cell, product);
+          const l2 = inCellLine2(cell, product);
+          // 막대 안 색상에 맞는 짙은 텍스트 — 모든 색상에서 가독 위해 동일한 어두운 톤
+          ctx.fillStyle = '#0f172a';
+          if(l2 && h >= 26){
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(l1, cx, cy - 4);
+            ctx.font = '10px sans-serif';
+            ctx.fillStyle = '#334155';
+            ctx.fillText(l2, cx, cy + 10);
+          } else if(h >= 14){
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(l1, cx, cy + 4);
+          }
+        });
       });
+      ctx.restore();
     }
   };
 
@@ -2858,39 +2869,36 @@ function renderPackingChart(dayEntries, opMap, ym) {
   const _curAvgKg = _curDayKgs.length ? Math.round(_curDayKgs.reduce((s,v)=>s+v,0)/_curDayKgs.length) : null;
   const _avgPkKg = window._moPrevAvgPkKg;
   const showAvgLine = (mode === 'weight' || mode === 'detail');
-  const datasets = [{ data: dataVals, backgroundColor: bgColors, borderWidth: 0, borderRadius: 3 }];
+
+  // 제품별 stacked dataset
+  const datasets = _allProds.map(p => ({
+    type: 'bar', label: p,
+    data: _useWeekdays.map(d => _val(_cellByDate[d] || {}, p)),
+    backgroundColor: getColor(p) + 'dd',
+    borderWidth: 0,
+    stack: 'pk'
+  }));
+
   if(showAvgLine && _curAvgKg != null){
     datasets.push({
-      type: 'line',
-      label: '이번달 일평균',
-      data: Array(rows.length).fill(_curAvgKg),
-      borderColor: '#7c3aed',
-      borderDash: [2,3],
-      pointRadius: 0,
-      borderWidth: 1.5,
-      fill: false,
-      order: 0,
-      _endLabel: _curAvgKg.toLocaleString()+'kg'
+      type: 'line', label: '이번달 일평균',
+      data: Array(labels.length).fill(_curAvgKg),
+      borderColor: '#7c3aed', borderDash: [2,3], pointRadius: 0, borderWidth: 1.5, fill: false, order: 0,
+      _endLabel: _curAvgKg.toLocaleString()+'kg', xAxisID: 'x', yAxisID: 'y_avg'
     });
   }
   if(showAvgLine && _avgPkKg != null && _avgPkKg > 0){
     datasets.push({
-      type: 'line',
-      label: '전월 일평균',
-      data: Array(rows.length).fill(Math.round(_avgPkKg)),
-      borderColor: '#94a3b8',
-      borderDash: [5,4],
-      pointRadius: 0,
-      borderWidth: 1.5,
-      fill: false,
-      order: 0,
-      _endLabel: Math.round(_avgPkKg).toLocaleString()+'kg'
+      type: 'line', label: '전월 일평균',
+      data: Array(labels.length).fill(Math.round(_avgPkKg)),
+      borderColor: '#94a3b8', borderDash: [5,4], pointRadius: 0, borderWidth: 1.5, fill: false, order: 0,
+      _endLabel: Math.round(_avgPkKg).toLocaleString()+'kg', xAxisID: 'x', yAxisID: 'y_avg'
     });
   }
 
   _moPackingChart = new Chart(canvas, {
     type: 'bar',
-    plugins: [topNumPlugin, dateLabelPlugin,
+    plugins: [topNumPlugin, inCellPlugin,
       {id:'endLbl',afterDatasetsDraw(chart){
         const {ctx, chartArea}=chart; ctx.save();
         ctx.font='bold 11px sans-serif';
@@ -2939,28 +2947,43 @@ function renderPackingChart(dayEntries, opMap, ym) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { left: 20, top: 50, bottom: 60, right: 170 } },
+      layout: { padding: { left: 20, top: 50, bottom: 16, right: 170 } },
       plugins: {
-        legend: showAvgLine && (_curAvgKg!=null || _avgPkKg!=null) ? { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 30, filter: (item) => item.text === '이번달 일평균' || item.text === '전월 일평균' } } : { display: false },
+        legend: { display: true, position: 'top', labels: { font: {size:10}, boxWidth: 12, usePointStyle: true, padding: 24,
+          filter: (item) => true } },
         tooltip: {
           callbacks: {
             title: ctx => {
-              if(ctx[0].datasetIndex !== 0) return '';
-              const g = groups.find(g => g.barIndexes.includes(ctx[0].dataIndex));
-              const dayStr = g ? (Array.isArray(g.day) ? g.day.join(' ') : g.day) : '';
-              return dayStr + ' · ' + rows[ctx[0].dataIndex].prod;
+              const i = ctx[0].dataIndex;
+              const lbl = labels[i];
+              return Array.isArray(lbl) ? lbl.join(' ') : String(lbl||'');
             },
             label: ctx => {
-              if(ctx.datasetIndex !== 0) return '';
-              const r = rows[ctx.dataIndex];
-              return ' ' + r.ea.toLocaleString() + 'EA · ' + r.kg.toLocaleString() + 'kg';
+              const ds = ctx.dataset;
+              if(ds.type === 'line') return ' '+(ds.label||'')+' '+(ctx.raw||0).toLocaleString()+'kg';
+              const date = _useWeekdays[ctx.dataIndex];
+              const cell = (_cellByDate[date] || {})[ds.label];
+              if(!cell) return '';
+              return ' '+ds.label+': '+cell.ea.toLocaleString()+'EA · '+cell.kg.toLocaleString()+'kg';
             },
+            footer: items => {
+              if(!items.length) return '';
+              const total = dayTotals[items[0].dataIndex];
+              return total ? '합계: '+total.toLocaleString()+(yUnit||'EA') : '';
+            }
           }
         }
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: 'var(--g5)', font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
-        y: { grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '20%' }
+        x: { stacked: true, grid: { display: false }, ticks: { color: 'var(--g5)', font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
+        y: { stacked: true, grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '20%' },
+        // 평균선 전용 — stacked 영향 안 받게 별도 축
+        y_avg: { display: false, stacked: false, beginAtZero: true, grace: '20%',
+          afterFit: function(scale){
+            const yScale = scale.chart.scales.y;
+            if(yScale){ scale.min = yScale.min; scale.max = yScale.max; }
+          }
+        }
       }
     }
   });
@@ -3084,6 +3107,30 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
   _moRmChart = new Chart(canvas, {
     type: 'bar',
     plugins: [
+      // 칸 안 라벨: stacked 종합 모드일 때 부위별 kg
+      {id:'rmInCell',afterDatasetsDraw(chart){
+        if(!isStacked) return;
+        const {ctx} = chart;
+        ctx.save();
+        ctx.textAlign = 'center';
+        chart.data.datasets.forEach((ds, di) => {
+          if((ds.type||chart.config.type) !== 'bar') return;
+          const meta = chart.getDatasetMeta(di);
+          meta.data.forEach((bar, i) => {
+            const v = ds.data[i];
+            if(v == null || v <= 0) return;
+            const top = bar.y, base = bar.base;
+            const h = Math.abs(base - top);
+            if(h < 14) return;
+            const cx = bar.x;
+            const cy = (top + base) / 2;
+            ctx.fillStyle = '#0f172a';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(Math.round(v).toLocaleString()+'kg', cx, cy + 4);
+          });
+        });
+        ctx.restore();
+      }},
       {id:'topNum',afterDatasetsDraw(chart){
         const {ctx} = chart; ctx.save();
         // 막대 위 합계 라벨 — stacked일 때는 마지막 bar dataset의 top, 단일은 그냥 bar 위
