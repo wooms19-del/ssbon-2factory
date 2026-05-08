@@ -725,15 +725,24 @@
   <div id="tt-main" style="display:none">
     <div class="card">
       <!-- 입력 행 -->
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--color-text-secondary);font-weight:500">원육 종류</span>
+        <select id="tt_meat" onchange="ttGo();ttRenderReport()" style="height:30px;font-size:13px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px">
+          <option value="홍두깨" selected>홍두깨</option>
+          <option value="우둔">우둔</option>
+          <option value="설도">설도</option>
+        </select>
         <span style="font-size:11px;color:var(--color-text-secondary)">홍두깨</span>
-        <input type="number" id="tt_hd" value="1600" oninput="ttGo()" style="width:76px;height:30px;font-size:13px">
-        <span style="font-size:11px;color:var(--color-text-secondary)">우둔</span>
-        <input type="number" id="tt_ud" value="197" oninput="ttGo()" style="width:76px;height:30px;font-size:13px">
-        <span style="font-size:11px;color:var(--color-text-secondary)">인원</span>
-        <input type="number" id="tt_wk" value="7" min="1" max="30" oninput="ttGo()" style="width:60px;height:30px;font-size:13px">
+        <input type="number" id="tt_hd" value="1600" oninput="ttGo();ttRenderReport()" style="width:80px;height:30px;font-size:13px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">kg · 우둔</span>
+        <input type="number" id="tt_ud" value="0" oninput="ttGo();ttRenderReport()" style="width:80px;height:30px;font-size:13px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">kg · 인원</span>
+        <input type="number" id="tt_wk" value="28" min="1" max="40" oninput="ttGo();ttRenderReport()" style="width:60px;height:30px;font-size:13px">
         <span style="font-size:11px;color:var(--color-text-secondary)">시작</span>
-        <input type="time" id="tt_st" value="05:25" oninput="ttGo()" style="height:30px;font-size:13px;width:96px">
+        <input type="time" id="tt_st" value="05:25" oninput="ttGo();ttRenderReport()" style="height:30px;font-size:13px;width:96px">
+        <span style="font-size:11px;color:var(--color-text-secondary);font-weight:500;margin-left:6px">🎯 목표 종료</span>
+        <input type="time" id="tt_target" value="" oninput="ttRenderReport()" style="height:30px;font-size:13px;width:96px">
+        <span style="font-size:10px;color:var(--color-text-tertiary)">(선택사항 — 입력하면 역산 분석)</span>
       </div>
 
       <!-- 제품 선택 -->
@@ -797,8 +806,15 @@
         <!-- 자동 분석 영역 -->
         <div id="tt-auto-analyze" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
           <div style="font-size:14px;font-weight:500;margin-bottom:6px">📊 누적 데이터 자동 분석</div>
-          <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">기간을 선택하면 일별 실적(전처리·자숙·파쇄·내포장)을 합산해 수율·생산성 평균을 자동 계산합니다.</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">원육 종류와 기간을 선택하면 일별 실적(전처리·파쇄·내포장)을 합산해 수율·생산성 평균을 자동 계산합니다.</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:11px;color:var(--color-text-secondary)">원육</label>
+            <select id="tt-aa-meat" style="height:32px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
+              <option value="홍두깨">홍두깨</option>
+              <option value="우둔">우둔</option>
+              <option value="설도">설도</option>
+            </select>
+            <label style="font-size:11px;color:var(--color-text-secondary);margin-left:6px">기간</label>
             <select id="tt-aa-period" onchange="ttToggleCustomDate()" style="height:32px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
               <option value="all">전체 기간</option>
               <option value="month">이번 달</option>
@@ -1253,6 +1269,6 @@
 <script src="js/globals.js?v=1778129561"></script>
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
-<script src="js/timetable.js?v=1778244003"></script>
+<script src="js/timetable.js?v=1778244861"></script>
 </body>
 </html>

@@ -88,9 +88,10 @@ function ttResetTuning() {
 }
 
 // ── 누적 데이터 자동 분석 ────────────────────────────────
-// 기간 내 일별 실적(preprocess/cooking/shredding/packing) 합산 → 수율·생산성 평균
+// 기간 + 원육 종류 필터 → 수율·생산성 평균 + 데이터 건수(n)
 async function ttAutoAnalyze() {
   const period = document.getElementById('tt-aa-period')?.value || 'all';
+  const meatType = document.getElementById('tt-aa-meat')?.value || '홍두깨';
   const fromInp = document.getElementById('tt-aa-from')?.value;
   const toInp = document.getElementById('tt-aa-to')?.value;
   const result = document.getElementById('tt-aa-result');
@@ -130,6 +131,7 @@ async function ttAutoAnalyze() {
     ]);
 
     const inRange = d => d >= fromDate && d <= toDate;
+    const matchType = r => !meatType || (r.type && r.type === meatType);
     const minutesBetween = (s, e) => {
       if (!s || !e) return 0;
       const [sh, sm] = String(s).split(':').map(Number);
@@ -139,32 +141,24 @@ async function ttAutoAnalyze() {
       return diff;
     };
 
-    // 전처리 누적
-    let preInSum=0, preOutSum=0, prePersonHours=0;
+    // 전처리 누적 (원육 종류 필터)
+    let preInSum=0, preOutSum=0, prePersonHours=0, preN=0;
     preDocs.forEach(doc => {
       const r = doc.data();
       if (!inRange(r.date)) return;
+      if (!matchType(r)) return;
       const kg = +r.kg||0, waste = +r.waste||0, w = +r.workers||0;
       const m = minutesBetween(r.start, r.end);
       if (kg <= 0 || w <= 0 || m <= 0) return;
       preInSum += kg;
       preOutSum += (kg - waste);
       prePersonHours += w * (m/60);
+      preN++;
     });
 
-    // 자숙 누적 (사이클 분 평균)
-    let cookCycleMins = [];
-    let cookKgIn = 0, cookKgOut = 0;
-    cookDocs.forEach(doc => {
-      const r = doc.data();
-      if (!inRange(r.date)) return;
-      const m = minutesBetween(r.start, r.end);
-      if (m > 60 && m < 600) cookCycleMins.push(m);
-      cookKgIn += (+r.kg||0);
-    });
-
-    // 파쇄 누적
-    let crushInSum=0, crushOutSum=0, crushPersonHours=0;
+    // 파쇄 누적 (shredding은 type 필드 없을 수 있음 → wagonIn/wagonOut으로 추적 어려움)
+    // → 파쇄는 필터 없이 전체 사용 (사용자분 시스템 데이터 구조상 부득이)
+    let crushInSum=0, crushOutSum=0, crushPersonHours=0, crushN=0;
     crushDocs.forEach(doc => {
       const r = doc.data();
       if (!inRange(r.date)) return;
@@ -174,68 +168,80 @@ async function ttAutoAnalyze() {
       crushInSum += kg;
       crushOutSum += (kg - waste);
       crushPersonHours += w * (m/60);
+      crushN++;
     });
 
-    // 내포장 누적 (생산성 EA/분)
-    let packEaSum = 0, packMins = 0, packKgIn = 0;
+    // 내포장 누적 (FC 3kg 제품으로 필터링 — 홍두깨 선택 시)
+    let packEaSum = 0, packMins = 0, packN = 0;
+    const packProductFilter = (r) => {
+      if (!meatType) return true;
+      if (meatType === '홍두깨') return (r.product||'').includes('FC') || (r.product||'').includes('3kg') || (r.product||'').includes('3KG');
+      return true;  // 우둔/설도는 모든 제품
+    };
     packDocs.forEach(doc => {
       const r = doc.data();
       if (!inRange(r.date)) return;
-      const ea = +r.ea||0, kg = +r.kg||0;
+      if (!packProductFilter(r)) return;
+      const ea = +r.ea||0;
       const m = minutesBetween(r.start, r.end);
       if (ea <= 0 || m <= 0) return;
       packEaSum += ea;
       packMins += m;
-      packKgIn += kg;
+      packN++;
     });
 
     // 자숙은 사이클 4시간(240분) 고정 — 자동 계산 안 함
     const calc = {
-      yPre:    preInSum > 0 ? +(preOutSum/preInSum*100).toFixed(1) : null,
-      yCrush:  crushInSum > 0 ? +(crushOutSum/crushInSum*100).toFixed(1) : null,
-      pPre:    prePersonHours > 0 ? +(preInSum/prePersonHours).toFixed(1) : null,
-      pCrush:  crushPersonHours > 0 ? +(crushInSum/crushPersonHours).toFixed(1) : null,
-      pPackEa: packMins > 0 ? +(packEaSum/packMins).toFixed(1) : null,
+      yPre:    { val: preInSum > 0 ? +(preOutSum/preInSum*100).toFixed(1) : null, n: preN, formula: `(투입${preInSum.toFixed(0)}-비가식부) ÷ 투입 × 100` },
+      yCrush:  { val: crushInSum > 0 ? +(crushOutSum/crushInSum*100).toFixed(1) : null, n: crushN, formula: `(투입${crushInSum.toFixed(0)}-비가식부) ÷ 투입 × 100` },
+      pPre:    { val: prePersonHours > 0 ? +(preInSum/prePersonHours).toFixed(1) : null, n: preN, formula: `${preInSum.toFixed(0)}kg ÷ ${prePersonHours.toFixed(1)}인시` },
+      pCrush:  { val: crushPersonHours > 0 ? +(crushInSum/crushPersonHours).toFixed(1) : null, n: crushN, formula: `${crushInSum.toFixed(0)}kg ÷ ${crushPersonHours.toFixed(1)}인시` },
+      pPackEa: { val: packMins > 0 ? +(packEaSum/packMins).toFixed(1) : null, n: packN, formula: `${packEaSum.toFixed(0)}EA ÷ ${packMins.toFixed(0)}분` },
     };
 
-    // 결과 표시 + 적용 버튼 (자숙 사이클 항목 제외)
+    // 결과 표시
     const items = [
-      { label:'전처리 수율', cur:TT_TUNING.yPre,    new:calc.yPre,    unit:'%', key:'yPre',    inputId:'tt-y-pre' },
-      { label:'파쇄 수율',  cur:TT_TUNING.yCrush,  new:calc.yCrush,  unit:'%', key:'yCrush',  inputId:'tt-y-crush' },
-      { label:'전처리 생산성', cur:TT_TUNING.pPre, new:calc.pPre, unit:'kg/인시', key:'pPre', inputId:'tt-p-pre' },
-      { label:'파쇄 생산성',   cur:TT_TUNING.pCrush, new:calc.pCrush, unit:'kg/인시', key:'pCrush', inputId:'tt-p-crush' },
-      { label:'내포장 생산성', cur:TT_TUNING.pPackEa, new:calc.pPackEa, unit:'EA/분', key:'pPackEa', inputId:'tt-p-pack' },
+      { label:'전처리 수율', cur:TT_TUNING.yPre,    info:calc.yPre,    unit:'%', inputId:'tt-y-pre' },
+      { label:'파쇄 수율',  cur:TT_TUNING.yCrush,  info:calc.yCrush,  unit:'%', inputId:'tt-y-crush' },
+      { label:'전처리 생산성', cur:TT_TUNING.pPre, info:calc.pPre, unit:'kg/인시', inputId:'tt-p-pre' },
+      { label:'파쇄 생산성',   cur:TT_TUNING.pCrush, info:calc.pCrush, unit:'kg/인시', inputId:'tt-p-crush' },
+      { label:'내포장 생산성', cur:TT_TUNING.pPackEa, info:calc.pPackEa, unit:'EA/분', inputId:'tt-p-pack' },
     ];
 
-    const sample = preInSum + crushInSum + packKgIn;
-    const sampleTxt = sample > 0
-      ? `<span style="color:var(--color-text-secondary);font-size:11px">분석 기간 내 데이터: 전처리 ${preInSum.toLocaleString()}kg · 파쇄 ${crushInSum.toLocaleString()}kg · 포장 ${packEaSum.toLocaleString()}EA</span>`
-      : `<span style="color:#A32D2D;font-size:12px">⚠ 해당 기간 데이터가 부족합니다</span>`;
+    const totalN = preN + crushN + packN;
+    const sampleTxt = totalN > 0
+      ? `<span style="color:var(--color-text-secondary);font-size:12px">📊 <strong>${meatType}</strong> 데이터 분석 — 전처리 <strong>n=${preN}</strong>건 · 파쇄 <strong>n=${crushN}</strong>건 · 내포장 <strong>n=${packN}</strong>건</span>`
+      : `<span style="color:#A32D2D;font-size:12px">⚠ 해당 기간/원육종류 데이터가 부족합니다</span>`;
 
     const tbl = `
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px">
-        <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary)">
-          <th style="text-align:left;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">항목</th>
-          <th style="text-align:right;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">현재값</th>
-          <th style="text-align:right;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">분석값</th>
-          <th style="text-align:right;padding:7px 6px;font-weight:500;color:var(--color-text-secondary)">적용</th>
+        <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
+          <th style="text-align:left;padding:9px 8px;font-weight:500;color:var(--color-text-secondary)">항목</th>
+          <th style="text-align:right;padding:9px 8px;font-weight:500;color:var(--color-text-secondary)">현재값</th>
+          <th style="text-align:right;padding:9px 8px;font-weight:500;color:var(--color-text-secondary)">분석값 (n=건수)</th>
+          <th style="text-align:left;padding:9px 8px;font-weight:500;color:var(--color-text-secondary)">근거</th>
+          <th style="text-align:right;padding:9px 8px;font-weight:500;color:var(--color-text-secondary)">적용</th>
         </tr></thead>
         <tbody>${items.map(it=>{
-          const hasNew = it.new !== null && isFinite(it.new);
-          const diff = hasNew ? (it.new - it.cur) : 0;
+          const hasNew = it.info.val !== null && isFinite(it.info.val);
+          const diff = hasNew ? (it.info.val - it.cur) : 0;
           const diffColor = Math.abs(diff) < 0.1 ? 'var(--color-text-tertiary)' : (diff > 0 ? '#0F6E56' : '#A32D2D');
+          const diffArrow = Math.abs(diff) < 0.1 ? '' : (diff > 0 ? ' ▲' : ' ▼');
           return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
-            <td style="padding:8px 6px">${it.label}</td>
-            <td style="padding:8px 6px;text-align:right;color:var(--color-text-secondary)">${it.cur} ${it.unit}</td>
-            <td style="padding:8px 6px;text-align:right;font-weight:500;color:${hasNew?diffColor:'var(--color-text-tertiary)'}">${hasNew ? it.new+' '+it.unit : '데이터 없음'}</td>
-            <td style="padding:8px 6px;text-align:right">
-              ${hasNew ? `<button onclick="ttApplyAuto('${it.inputId}', ${it.new})" style="padding:4px 10px;font-size:11px;background:#185FA5;border:none;border-radius:4px;cursor:pointer;color:#fff">적용</button>` : '-'}
+            <td style="padding:10px 8px;font-weight:500">${it.label}</td>
+            <td style="padding:10px 8px;text-align:right;color:var(--color-text-secondary)">${it.cur} ${it.unit}</td>
+            <td style="padding:10px 8px;text-align:right;font-weight:500;color:${hasNew?diffColor:'var(--color-text-tertiary)'}">
+              ${hasNew ? `${it.info.val} ${it.unit}<span style="font-size:10px;color:var(--color-text-tertiary);font-weight:400">${diffArrow} (n=${it.info.n})</span>` : '데이터 없음'}
+            </td>
+            <td style="padding:10px 8px;font-size:10px;color:var(--color-text-tertiary)">${hasNew ? it.info.formula : '-'}</td>
+            <td style="padding:10px 8px;text-align:right">
+              ${hasNew ? `<button onclick="ttApplyAuto('${it.inputId}', ${it.info.val})" style="padding:5px 12px;font-size:11px;background:#185FA5;border:none;border-radius:4px;cursor:pointer;color:#fff">적용</button>` : '-'}
             </td>
           </tr>`;
         }).join('')}</tbody>
       </table>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-        <button onclick="ttApplyAllAuto(${JSON.stringify(items.filter(i=>i.new!==null&&isFinite(i.new)).map(i=>({id:i.inputId,v:i.new}))).replace(/"/g,'&quot;')})" style="padding:7px 14px;font-size:12px;background:#0F6E56;border:none;border-radius:6px;cursor:pointer;color:#fff;font-weight:500">전부 적용</button>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button onclick="ttApplyAllAuto(${JSON.stringify(items.filter(i=>i.info.val!==null&&isFinite(i.info.val)).map(i=>({id:i.inputId,v:i.info.val}))).replace(/"/g,'&quot;')})" style="padding:8px 16px;font-size:12px;background:#0F6E56;border:none;border-radius:6px;cursor:pointer;color:#fff;font-weight:500">전부 적용</button>
       </div>`;
 
     if (result) {
@@ -390,16 +396,16 @@ function ttGo() {
     axis.appendChild(t);
   }
 
-  // 타임라인 행
+  // 타임라인 행 (0kg 항목은 제외)
   const ROWS = [
-    { name:'전처리 (홍두깨)', s:S,       e:pp_hd_e, bg:'#378ADD', lbl:`${ttFmt(S)}~${ttFmt(pp_hd_e)} · ${hd}kg` },
-    { name:'전처리 (우둔)',   s:S,       e:pp_ud_e, bg:'#378ADD', lbl:`${ttFmt(S)}~${ttFmt(pp_ud_e)} · ${ud}kg` },
-    { name:'자숙 (홍두깨)',  s:ck_hd_s, e:ck_hd_e, bg:'#1D9E75', lbl:`${ttFmt(ck_hd_s)}~${ttFmt(ck_hd_e)} → ${ck_hd_out}kg` },
-    { name:'자숙 (우둔)',    s:ck_ud_s, e:ck_ud_e, bg:'#1D9E75', lbl:`${ttFmt(ck_ud_s)}~${ttFmt(ck_ud_e)} → ${ck_ud_out}kg` },
-    { name:'파쇄',           s:sh_s,    e:sh_e,    bg:'#EF9F27', lbl:`${ttFmt(sh_s)}~${ttFmt(sh_e)} → ${sh_out}kg` },
+    hd > 0 && { name:'전처리 (홍두깨)', s:S,       e:pp_hd_e, bg:'#378ADD', lbl:`${ttFmt(S)}~${ttFmt(pp_hd_e)} · ${hd}kg` },
+    ud > 0 && { name:'전처리 (우둔)',   s:S,       e:pp_ud_e, bg:'#378ADD', lbl:`${ttFmt(S)}~${ttFmt(pp_ud_e)} · ${ud}kg` },
+    hd > 0 && { name:'자숙 (홍두깨)',  s:ck_hd_s, e:ck_hd_e, bg:'#1D9E75', lbl:`${ttFmt(ck_hd_s)}~${ttFmt(ck_hd_e)} → ${ck_hd_out}kg` },
+    ud > 0 && { name:'자숙 (우둔)',    s:ck_ud_s, e:ck_ud_e, bg:'#1D9E75', lbl:`${ttFmt(ck_ud_s)}~${ttFmt(ck_ud_e)} → ${ck_ud_out}kg` },
+    hd > 0 && { name:'파쇄',           s:sh_s,    e:sh_e,    bg:'#EF9F27', lbl:`${ttFmt(sh_s)}~${ttFmt(sh_e)} → ${sh_out}kg` },
     ...prodResults.map(p => ({ name:`내포장 (${p.name})`,   s:p.pk_s, e:p.pk_e, bg:'#534AB7', lbl:`${ttFmt(p.pk_s)}~${ttFmt(p.pk_e)} · ${p.ea}EA` })),
     ...prodResults.map(p => ({ name:`레토르트 (${p.name})`, s:p.rt_s, e:p.rt_e, bg:'#D85A30', lbl:`${p.rt_cycles}대차 · ${ttFmt(p.rt_s)}~${ttFmt(p.rt_e)}` })),
-  ];
+  ].filter(Boolean);
 
   const cont = document.getElementById('tt-rows');
   cont.innerHTML = '';
@@ -430,14 +436,14 @@ function ttGo() {
   document.getElementById('tt-badge').innerHTML =
     `<span style="display:inline-block;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:99px;padding:4px 14px;font-size:12px;font-weight:500;color:var(--color-text-primary)">예상 종료 ${ttFmt(total_end)} · 총 ${ttDur(total_end - S)}</span>`;
 
-  // 공정별 상세 카드
+  // 공정별 상세 카드 (0kg 항목은 제외)
   const fixed = [
-    { name:'전처리 홍두깨', time:`${ttFmt(S)} ~ ${ttFmt(pp_hd_e)}`,       sub:`${ttDur(pp_hd_min)} · ${hd}kg 투입`,                  color:'#378ADD' },
-    { name:'전처리 우둔',   time:`${ttFmt(S)} ~ ${ttFmt(pp_ud_e)}`,       sub:`${ttDur(pp_ud_min)} · ${ud}kg 투입`,                   color:'#378ADD' },
-    { name:'자숙 홍두깨',  time:`${ttFmt(ck_hd_s)} ~ ${ttFmt(ck_hd_e)}`, sub:`${ttDur(CK_MIN)} · 산출 ${ck_hd_out}kg (수율 90%)`,   color:'#1D9E75' },
-    { name:'자숙 우둔',    time:`${ttFmt(ck_ud_s)} ~ ${ttFmt(ck_ud_e)}`, sub:`${ttDur(CK_MIN)} · 산출 ${ck_ud_out}kg (수율 55%)`,   color:'#1D9E75' },
-    { name:'파쇄',          time:`${ttFmt(sh_s)} ~ ${ttFmt(sh_e)}`,       sub:`${ttDur(sh_min)} · 산출 ${sh_out}kg (수율 97%)`,       color:'#EF9F27' },
-  ];
+    hd > 0 && { name:'전처리 홍두깨', time:`${ttFmt(S)} ~ ${ttFmt(pp_hd_e)}`,       sub:`${ttDur(pp_hd_min)} · ${hd}kg 투입`,                  color:'#378ADD' },
+    ud > 0 && { name:'전처리 우둔',   time:`${ttFmt(S)} ~ ${ttFmt(pp_ud_e)}`,       sub:`${ttDur(pp_ud_min)} · ${ud}kg 투입`,                   color:'#378ADD' },
+    hd > 0 && { name:'자숙 홍두깨',  time:`${ttFmt(ck_hd_s)} ~ ${ttFmt(ck_hd_e)}`, sub:`${ttDur(CK_MIN)} · 산출 ${ck_hd_out}kg (수율 90%)`,   color:'#1D9E75' },
+    ud > 0 && { name:'자숙 우둔',    time:`${ttFmt(ck_ud_s)} ~ ${ttFmt(ck_ud_e)}`, sub:`${ttDur(CK_MIN)} · 산출 ${ck_ud_out}kg (수율 55%)`,   color:'#1D9E75' },
+    hd > 0 && { name:'파쇄',          time:`${ttFmt(sh_s)} ~ ${ttFmt(sh_e)}`,       sub:`${ttDur(sh_min)} · 산출 ${sh_out}kg (수율 97%)`,       color:'#EF9F27' },
+  ].filter(Boolean);
   const prodCards = prodResults.flatMap(p => [
     { name:`내포장 ${p.name}`,   time:`${ttFmt(p.pk_s)} ~ ${ttFmt(p.pk_e)}`, sub:`${ttDur(p.pk_min)} · ${p.kg}kg → ${p.ea}EA`,                        color:'#534AB7' },
     { name:`레토르트 ${p.name}`, time:`${ttFmt(p.rt_s)} ~ ${ttFmt(p.rt_e)}`, sub:`${p.rt_cycles}대차 × ${p.rt_min}분 · 대차당 ${p.rt_ea}EA`,            color:'#D85A30' },
@@ -457,21 +463,37 @@ function ttGo() {
 }
 
 // ============================================================
-// 보고서 모드: 인원 활용 표 + 공정별 현황 표
-// 입력값 (홍두깨 kg, 인원수)을 기준으로 28명 풀가동 시나리오 산출
+// 의사결정 보고서 (데이터 기반)
+// 입력: 원육 종류·kg + 인원 + 시작 + 목표 종료(선택)
+// 출력: 결론 박스 + 공정별 필요 인원 계산 + 병목 진단 + 해결책
 // ============================================================
 
 function ttRenderReport() {
   const rpPane = document.getElementById('tt-pane-rp');
   if (!rpPane) return;
 
-  // 입력값
+  // ─ 입력값 ──────────────────────────────────────────────
+  const meatType = document.getElementById('tt_meat')?.value || '홍두깨';
   const hd = +document.getElementById('tt_hd').value || 0;
-  const wk = +document.getElementById('tt_wk').value || 7;
+  const ud = +document.getElementById('tt_ud').value || 0;
+  const totalWorkers = +document.getElementById('tt_wk').value || 28;
+  const startTime = document.getElementById('tt_st').value || '05:00';
+  const target = document.getElementById('tt_target').value || '';
+
+  // 활성 원육 = 입력값에 따라
+  const meatKg = meatType === '홍두깨' ? hd : (meatType === '우둔' ? ud : 0);
   const T = TT_TUNING;
 
+  if (meatKg <= 0) {
+    rpPane.innerHTML = `
+      <div style="background:var(--color-background-secondary);border-radius:12px;padding:30px;text-align:center;color:var(--color-text-secondary);font-size:13px">
+        ${meatType} 원육량을 입력해주세요
+      </div>`;
+    return;
+  }
+
   // ─ 공정별 산출 (수율 체인) ─────────────────────────────
-  const preIn = hd;
+  const preIn = meatKg;
   const preOut  = Math.round(preIn  * T.yPre   / 100);
   const cookIn  = preOut;
   const cookOut = Math.round(cookIn * T.yCook  / 100);
@@ -481,69 +503,283 @@ function ttRenderReport() {
   const packOut = Math.round(packIn * T.yPack  / 100);
   const pouches = Math.round(packOut / 1.35);
 
-  // ─ 작업 시간 추정 (실측 생산성 기반) ────────────────────
-  const preH    = preIn / (T.pPre * 10);          // 10명 평균
-  const crushH  = crushIn / (T.pCrush * 14);      // 14명 기준
-  const packMin = pouches / T.pPackEa;            // 분 단위
+  // ─ 시작 시각 분 단위 ───────────────────────────────────
+  const [sh, sm] = startTime.split(':').map(Number);
+  const startMin = sh*60 + sm;
 
-  // 1. 공정별 현황 표
-  const procRows = [
-    { p:'전처리', it:'홍두께', i:preIn,  o:preOut,  bg:0, y1:T.yPre,  y2:T.yPre,  h:preH.toFixed(1)+'h', w:10, prod:T.pPre+' kg/인시' },
-    { p:'자숙',  it:'홍두께', i:cookIn, o:cookOut, bg:'-', y1:(cookOut/preIn*100).toFixed(1)+'%', y2:T.yCook+'%', h:(T.cookMin/60*4).toFixed(1)+'h', w:2, prod:'33.0 kg/인시' },
-    { p:'파쇄',  it:'홍두께', i:crushIn,o:crushOut,bg:Math.round(crushIn*0.034), y1:(crushOut/preIn*100).toFixed(1)+'%', y2:T.yCrush+'%', h:crushH.toFixed(1)+'h', w:14, prod:T.pCrush+' kg/인시' },
-    { p:'내포장',it:'홍두께·FC 3KG', i:packIn, o:packOut, bg:'-', y1:(packOut/preIn*100).toFixed(1)+'%', y2:T.yPack+'%', h:(packMin/60).toFixed(1)+'h', w:8, prod:T.pPackEa+' EA/분' },
+  // ─ 현재 인원 가정 (자동 분배: 28명 = 외국인 7 + 한국인 19 + 관리 2) ─
+  // 시간대별로 다르게 배치되지만, 보고서 계산용으로는 대표 인원 사용
+  const curWorkers = {
+    pre: Math.min(10, Math.floor(totalWorkers * 0.36)),  // 전처리 10명 (28명 기준)
+    crush: Math.min(18, Math.floor(totalWorkers * 0.64)), // 파쇄 최대 18명
+    pack: Math.min(8, Math.floor(totalWorkers * 0.28)),   // 내포장 8명
+  };
+
+  // ─ 시나리오 1: 현재 인원으로 종료 시각 계산 ─────────────
+  // 전처리: preIn / (pPre × 인원)
+  const preHours = preIn / (T.pPre * curWorkers.pre);
+  const preEndMin = startMin + Math.round(preHours * 60);
+  // 자숙: 4시간 × 회차 (병렬 가능, 마지막 회차 종료 = 전처리 종료 + 4시간)
+  const cookCycles = Math.ceil(preIn / T.tankKg);
+  const cookEndMin = preEndMin + T.cookMin + T.wagonMin;
+  // 파쇄: crushIn / (pCrush × 인원), 자숙 종료 후 시작
+  const crushHours = crushIn / (T.pCrush * curWorkers.crush);
+  const crushStartMin = cookEndMin;
+  const crushEndMin = crushStartMin + Math.round(crushHours * 60);
+  // 내포장: pouches / (pPackEa EA/분)
+  const packMin = pouches / T.pPackEa;
+  const packStartMin = crushStartMin + 60;  // 파쇄 1시간 후 시작 (분리)
+  const packEndMin = packStartMin + Math.round(packMin);
+  // 최종 = max(파쇄 종료, 내포장 종료)
+  const finalEndMin = Math.max(crushEndMin, packEndMin);
+
+  const fmtT = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(Math.round(m%60)).padStart(2,'0')}`;
+  const dur = m => {
+    const h = Math.floor(m/60), n = m%60;
+    return h ? `${h}시간 ${n}분` : `${n}분`;
+  };
+
+  // ─ 시나리오 2: 목표 시간 입력 시 → 역산 분석 ──────────
+  let targetAnalysis = null;
+  if (target) {
+    const [th, tm] = target.split(':').map(Number);
+    const targetMin = th*60 + tm;
+    // 가용 시간 (시작~목표)
+    const availMin = targetMin - startMin;
+    if (availMin > 0) {
+      // 자숙·와건 고정 시간 차감
+      const cookFixed = T.cookMin + T.wagonMin;  // 자숙 + 와건
+      // 전처리 시간을 줄이려면 인원 늘려야 함
+      // 파쇄·내포장은 자숙 후에 시작 → 가용 시간 = availMin - cookFixed - preTime
+      // 단순화: 전처리는 자숙 첫 회차까지 끝나면 됨 (1.5시간 가정)
+      const prePhase = Math.min(2.5, availMin/60 * 0.3) * 60;  // 전처리 phase 분
+      const postCookPhase = availMin - prePhase - cookFixed;  // 자숙 종료 후 가용 시간
+      // 필요 인원
+      const preNeeded = Math.ceil(preIn / (T.pPre * (prePhase/60)));
+      const crushNeeded = Math.ceil(crushIn / (T.pCrush * (postCookPhase/60)));
+      const packEaPerMinNeeded = pouches / postCookPhase;
+      const packNeeded = curWorkers.pack;  // 인원이 아니라 속도 문제
+      const totalNeeded = preNeeded + crushNeeded + packNeeded + 2;  // +2 관리/이송
+
+      targetAnalysis = {
+        availMin, prePhase, postCookPhase,
+        preNeeded, crushNeeded, packNeeded, packEaPerMinNeeded,
+        totalNeeded,
+        feasible: totalNeeded <= totalWorkers && packEaPerMinNeeded <= 10,
+      };
+    }
+  }
+
+  // ─ 결론 박스 ──────────────────────────────────────────
+  const goodColor = '#0F6E56', badColor = '#A32D2D', warnColor = '#BA7517';
+  let conclusionBox;
+  if (target) {
+    const [th, tm] = target.split(':').map(Number);
+    const targetMin = th*60 + tm;
+    const onTime = finalEndMin <= targetMin;
+    const diff = finalEndMin - targetMin;
+    if (onTime) {
+      conclusionBox = `
+        <div style="background:linear-gradient(135deg, #E8F3DE 0%, #f5fbef 100%);border:1px solid ${goodColor};border-radius:12px;padding:18px 22px;margin-bottom:16px">
+          <div style="font-size:11px;color:${goodColor};font-weight:600;letter-spacing:0.5px;margin-bottom:6px">✅ 목표 달성 가능</div>
+          <div style="font-size:18px;font-weight:600;color:var(--color-text-primary);margin-bottom:4px">
+            ${meatType} ${meatKg.toLocaleString()}kg → 약 ${pouches.toLocaleString()}개 · <strong style="color:${goodColor}">${fmtT(finalEndMin)} 종료</strong>
+          </div>
+          <div style="font-size:12px;color:var(--color-text-secondary)">
+            목표 ${target} 대비 ${dur(Math.abs(diff))} 여유 · 현재 인원 ${totalWorkers}명으로 가능
+          </div>
+        </div>`;
+    } else {
+      conclusionBox = `
+        <div style="background:linear-gradient(135deg, #FCEAEA 0%, #fef5f5 100%);border:1px solid ${badColor};border-radius:12px;padding:18px 22px;margin-bottom:16px">
+          <div style="font-size:11px;color:${badColor};font-weight:600;letter-spacing:0.5px;margin-bottom:6px">⚠ 목표 시간 초과</div>
+          <div style="font-size:18px;font-weight:600;color:var(--color-text-primary);margin-bottom:4px">
+            ${meatType} ${meatKg.toLocaleString()}kg → <strong style="color:${badColor}">${fmtT(finalEndMin)} 종료 예상</strong>
+          </div>
+          <div style="font-size:12px;color:var(--color-text-secondary)">
+            목표 ${target} 대비 <strong style="color:${badColor}">${dur(diff)} 초과</strong> · 인원 보강 또는 생산성 개선 필요 (아래 해결책 참조)
+          </div>
+        </div>`;
+    }
+  } else {
+    conclusionBox = `
+      <div style="background:linear-gradient(135deg, #E6F1FB 0%, #f3f9fd 100%);border:1px solid #185FA5;border-radius:12px;padding:18px 22px;margin-bottom:16px">
+        <div style="font-size:11px;color:#185FA5;font-weight:600;letter-spacing:0.5px;margin-bottom:6px">📊 현재 인원 기준 분석</div>
+        <div style="font-size:18px;font-weight:600;color:var(--color-text-primary);margin-bottom:4px">
+          ${meatType} ${meatKg.toLocaleString()}kg → 약 ${pouches.toLocaleString()}개 · <strong style="color:#185FA5">${fmtT(finalEndMin)} 종료</strong>
+        </div>
+        <div style="font-size:12px;color:var(--color-text-secondary)">
+          시작 ${startTime} · ${totalWorkers}명 가동 · 총 ${dur(finalEndMin - startMin)}
+        </div>
+      </div>`;
+  }
+
+  // ─ 공정별 필요 인원 vs 현재 인원 표 ────────────────────
+  // 표준 가동 시간 (기준): 전처리 ~3시간, 파쇄 ~5시간, 내포장 ~5시간
+  const stdHours = { pre: 3, crush: 5, pack: 5 };
+  const reqWorkers = {
+    pre: Math.ceil(preIn / (T.pPre * stdHours.pre)),
+    crush: Math.ceil(crushIn / (T.pCrush * stdHours.crush)),
+    pack: Math.ceil(pouches / (T.pPackEa * stdHours.pack * 60)) || 1,  // EA/분 → 인당 처리량 추정
+  };
+  // 내포장은 인원수보다 라인 속도(EA/분)가 결정적 → 표시는 현재 그대로
+  const procDataRows = [
+    {
+      name: '전처리',
+      productivity: `${T.pPre} kg/인시`,
+      formula: `${preIn.toLocaleString()}kg ÷ ${T.pPre} ÷ ${stdHours.pre}h`,
+      required: reqWorkers.pre,
+      current: curWorkers.pre,
+      unit: '명',
+    },
+    {
+      name: '파쇄',
+      productivity: `${T.pCrush} kg/인시`,
+      formula: `${crushIn.toLocaleString()}kg ÷ ${T.pCrush} ÷ ${stdHours.crush}h`,
+      required: reqWorkers.crush,
+      current: curWorkers.crush,
+      unit: '명',
+    },
+    {
+      name: '내포장 (속도)',
+      productivity: `${T.pPackEa} EA/분`,
+      formula: `${pouches.toLocaleString()}EA ÷ ${T.pPackEa}EA/분 ÷ 60 = ${(pouches/T.pPackEa/60).toFixed(1)}h`,
+      required: '8명',
+      current: curWorkers.pack + '명',
+      unit: '',
+      note: `포장 라인 속도 ${T.pPackEa}EA/분 (인원보다 라인 속도가 결정적)`,
+    },
   ];
-  const procTbl = `
-    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
-      <colgroup><col style="width:9%"><col style="width:14%"><col style="width:11%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:7%"><col style="width:14%"></colgroup>
-      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary)">
-        <th style="text-align:left;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">공정</th>
-        <th style="text-align:left;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">품목</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">투입 KG</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">산출 KG</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">비가식부</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">원육수율</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">공정수율</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">작업시간</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">인원</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">생산성</th>
+
+  const reqTbl = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
+        <th style="text-align:left;padding:10px 8px;font-weight:500">공정</th>
+        <th style="text-align:left;padding:10px 8px;font-weight:500">기준 생산성 (설정값)</th>
+        <th style="text-align:left;padding:10px 8px;font-weight:500;color:var(--color-text-secondary)">근거 계산식</th>
+        <th style="text-align:right;padding:10px 8px;font-weight:500">필요</th>
+        <th style="text-align:right;padding:10px 8px;font-weight:500">현재</th>
+        <th style="text-align:right;padding:10px 8px;font-weight:500">차이</th>
       </tr></thead>
-      <tbody>${procRows.map(r=>`
+      <tbody>${procDataRows.map(r => {
+        const reqNum = typeof r.required === 'number' ? r.required : parseInt(r.required) || 0;
+        const curNum = typeof r.current === 'number' ? r.current : parseInt(r.current) || 0;
+        const diff = curNum - reqNum;
+        const status = diff >= 0 ? '✓ 충족' : `${diff} 부족`;
+        const statusColor = diff >= 0 ? goodColor : badColor;
+        return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
+          <td style="padding:11px 8px;font-weight:500">${r.name}</td>
+          <td style="padding:11px 8px">${r.productivity}</td>
+          <td style="padding:11px 8px;font-size:11px;color:var(--color-text-tertiary);font-family:monospace">${r.formula}</td>
+          <td style="padding:11px 8px;text-align:right;font-weight:500">${r.required}${r.unit}</td>
+          <td style="padding:11px 8px;text-align:right;color:var(--color-text-secondary)">${r.current}${r.unit}</td>
+          <td style="padding:11px 8px;text-align:right;font-weight:600;color:${statusColor}">${status}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="font-size:10px;color:var(--color-text-tertiary);margin-top:8px;line-height:1.6">
+      ※ 기준 가동시간: 전처리 ${stdHours.pre}h · 파쇄 ${stdHours.crush}h · 내포장 ${stdHours.pack}h
+    </div>`;
+
+  // ─ 병목 진단 ─────────────────────────────────────────
+  const bottlenecks = [];
+  if (curWorkers.crush < reqWorkers.crush) {
+    bottlenecks.push({
+      proc: '파쇄',
+      issue: `필요 ${reqWorkers.crush}명 vs 현재 ${curWorkers.crush}명`,
+      shortfall: reqWorkers.crush - curWorkers.crush,
+      solution: `파쇄 인원 +${reqWorkers.crush - curWorkers.crush}명 → 총 ${reqWorkers.crush}명`,
+      data: `생산성 ${T.pCrush}kg/인시 기준`,
+    });
+  }
+  // 내포장: 8 EA/분이 가능 속도, 4 EA/분이면 부족
+  if (T.pPackEa < pouches / (stdHours.pack * 60)) {
+    const needed = Math.ceil(pouches / (stdHours.pack * 60) * 10) / 10;
+    bottlenecks.push({
+      proc: '내포장 라인 속도',
+      issue: `현재 ${T.pPackEa}EA/분 → 필요 ${needed}EA/분`,
+      shortfall: (needed - T.pPackEa).toFixed(1) + ' EA/분',
+      solution: `포장 라인 속도 업그레이드 또는 작업자 숙련도 향상 필요`,
+      data: `${pouches.toLocaleString()}EA를 ${stdHours.pack}시간 안에 처리 시`,
+    });
+  }
+
+  let bottleneckBox = '';
+  if (bottlenecks.length > 0) {
+    bottleneckBox = `
+      <div style="background:#FFF7ED;border:1px solid ${warnColor};border-radius:12px;padding:14px 18px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:${warnColor};margin-bottom:8px">⚠ 병목 지점 (${bottlenecks.length}개)</div>
+        ${bottlenecks.map(b => `
+          <div style="margin-bottom:10px;padding:10px;background:rgba(255,255,255,0.6);border-radius:6px">
+            <div style="font-size:12px;font-weight:500;margin-bottom:3px">${b.proc}</div>
+            <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">└ <strong>현황:</strong> ${b.issue}</div>
+            <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">└ <strong>해결:</strong> ${b.solution}</div>
+            <div style="font-size:10px;color:var(--color-text-tertiary)">└ 근거: ${b.data}</div>
+          </div>
+        `).join('')}
+      </div>`;
+  } else {
+    bottleneckBox = `
+      <div style="background:#E8F3DE;border:1px solid ${goodColor};border-radius:12px;padding:14px 18px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:${goodColor}">✓ 병목 없음 — 현재 인원·생산성으로 처리 가능</div>
+      </div>`;
+  }
+
+  // ─ 공정별 산출 표 ─────────────────────────────────────
+  const procStatusRows = [
+    { p:'전처리', it:meatType, i:preIn,  o:preOut,  bg:Math.round(preIn*(100-T.yPre)/100), y:T.yPre,  h:preHours.toFixed(1)+'h', w:curWorkers.pre+'명', prod:T.pPre+' kg/인시' },
+    { p:'자숙',  it:meatType, i:cookIn, o:cookOut, bg:'-', y:T.yCook+'%', h:`${(T.cookMin/60).toFixed(1)}h × ${cookCycles}회`, w:'2명', prod:T.tankKg+'kg/탱크' },
+    { p:'파쇄',  it:meatType, i:crushIn,o:crushOut,bg:Math.round(crushIn*(100-T.yCrush)/100), y:T.yCrush+'%', h:crushHours.toFixed(1)+'h', w:curWorkers.crush+'명', prod:T.pCrush+' kg/인시' },
+    { p:'내포장',it:meatType+'·FC 3KG', i:packIn, o:packOut, bg:'-', y:T.yPack+'%', h:(packMin/60).toFixed(1)+'h', w:curWorkers.pack+'명', prod:T.pPackEa+' EA/분' },
+  ];
+
+  const procStatusTbl = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
+        <th style="text-align:left;padding:9px 6px;font-weight:500">공정</th>
+        <th style="text-align:left;padding:9px 6px;font-weight:500">품목</th>
+        <th style="text-align:right;padding:9px 6px;font-weight:500">투입</th>
+        <th style="text-align:right;padding:9px 6px;font-weight:500">산출</th>
+        <th style="text-align:right;padding:9px 6px;font-weight:500">비가식부</th>
+        <th style="text-align:right;padding:9px 6px;font-weight:500">수율</th>
+        <th style="text-align:right;padding:9px 6px;font-weight:500">시간</th>
+        <th style="text-align:right;padding:9px 6px;font-weight:500">인원</th>
+      </tr></thead>
+      <tbody>${procStatusRows.map(r=>`
         <tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
-          <td style="padding:9px 6px;font-weight:500">${r.p}</td>
-          <td style="padding:9px 6px">${r.it}</td>
-          <td style="padding:9px 6px;text-align:right">${r.i.toLocaleString()}</td>
-          <td style="padding:9px 6px;text-align:right;font-weight:500">${r.o.toLocaleString()}</td>
-          <td style="padding:9px 6px;text-align:right;color:${r.bg==='-'?'var(--color-text-tertiary)':'#A32D2D'}">${r.bg==='-'?'-':r.bg.toLocaleString()+'kg'}</td>
-          <td style="padding:9px 6px;text-align:right;font-weight:500">${typeof r.y1==='number'?r.y1.toFixed(1)+'%':r.y1}</td>
-          <td style="padding:9px 6px;text-align:right;font-weight:500">${typeof r.y2==='number'?r.y2.toFixed(1)+'%':r.y2}</td>
-          <td style="padding:9px 6px;text-align:right">${r.h}</td>
-          <td style="padding:9px 6px;text-align:right">${r.w}명</td>
-          <td style="padding:9px 6px;text-align:right">${r.prod}</td>
+          <td style="padding:10px 6px;font-weight:500">${r.p}</td>
+          <td style="padding:10px 6px">${r.it}</td>
+          <td style="padding:10px 6px;text-align:right">${typeof r.i==='number'?r.i.toLocaleString():r.i}</td>
+          <td style="padding:10px 6px;text-align:right;font-weight:500">${typeof r.o==='number'?r.o.toLocaleString():r.o}</td>
+          <td style="padding:10px 6px;text-align:right;color:${r.bg==='-'?'var(--color-text-tertiary)':badColor}">${r.bg==='-'?'-':r.bg.toLocaleString()+'kg'}</td>
+          <td style="padding:10px 6px;text-align:right;font-weight:500">${typeof r.y==='number'?r.y.toFixed(1)+'%':r.y}</td>
+          <td style="padding:10px 6px;text-align:right">${r.h}</td>
+          <td style="padding:10px 6px;text-align:right">${r.w}</td>
         </tr>`).join('')}</tbody>
     </table>`;
 
-  // 2. 포장 실적 표
-  const packTbl = `
-    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
-      <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
-      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary)">
-        <th style="text-align:left;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">제품명</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">생산 EA</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">파우치</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">불량 EA</th>
-        <th style="text-align:right;padding:8px 6px;font-weight:500;color:var(--color-text-secondary)">불량률</th>
-      </tr></thead>
-      <tbody><tr>
-        <td style="padding:9px 6px">홍두께 · FC 장조림 3kg</td>
-        <td style="padding:9px 6px;text-align:right;font-weight:500">${pouches.toLocaleString()}</td>
-        <td style="padding:9px 6px;text-align:right">${(pouches+7).toLocaleString()}</td>
-        <td style="padding:9px 6px;text-align:right">7</td>
-        <td style="padding:9px 6px;text-align:right;color:var(--color-text-tertiary)">미측정</td>
-      </tr></tbody>
-    </table>`;
+  // ─ 종료시각 카드 ──────────────────────────────────────
+  const endCards = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px">
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">전처리 종료</div>
+        <div style="font-size:16px;font-weight:500">${fmtT(preEndMin)}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">자숙 완료 (마지막)</div>
+        <div style="font-size:16px;font-weight:500">${fmtT(cookEndMin)}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">파쇄 종료</div>
+        <div style="font-size:16px;font-weight:500">${fmtT(crushEndMin)}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">내포장 종료</div>
+        <div style="font-size:16px;font-weight:500;color:#7F77DD">${fmtT(packEndMin)}</div>
+      </div>
+    </div>`;
 
-  // 3. 인원 활용 표 (28명 시간대별)
+  // ─ 시간대별 인원 활용 표 (28명 시나리오) ────────────────
   const wkRows = [
     { t:'05:00~07:00', d:[7,'·','·','·','·','·','·','·','·'], sum:7,  hl:'' },
     { t:'07:00~09:00', d:[7,'·','·','·','·','·','·','·',2],   sum:9,  hl:'' },
@@ -568,138 +804,33 @@ function ttRenderReport() {
         return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary);background:${bg}">
           <td style="padding:9px 6px;font-weight:500">${r.t}</td>
           ${r.d.map(v=>`<td style="padding:9px 6px;text-align:right;${v==='·'?'color:var(--color-text-tertiary)':'font-weight:500'}">${v}</td>`).join('')}
-          <td style="padding:9px 6px;text-align:right;font-weight:500;color:${r.sum===28?'#0F6E56':'var(--color-text-tertiary)'}">${r.sum}${r.sum===28?' ✓':''}</td>
+          <td style="padding:9px 6px;text-align:right;font-weight:500;color:${r.sum===28?goodColor:'var(--color-text-tertiary)'}">${r.sum}${r.sum===28?' ✓':''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
 
-  // 4. 공정 타임라인 (이미지2 Block 3 스타일)
-  const startMin = 5*60;
-  const preEndMin = startMin + Math.round(preH * 60);
-  const cookCycles = Math.ceil(preIn / T.tankKg);  // 자숙 회차 = 탱크 수
-  const cookCycleEnds = [];
-  for (let i = 0; i < cookCycles; i++) {
-    // 각 자숙 시작 = 전처리 진행 중 단계적으로 (균등 분포)
-    const cookStart = startMin + Math.round((preH * 60) * (i + 1) / cookCycles) - T.cookMin/2;
-    const cookEnd = cookStart + T.cookMin;
-    cookCycleEnds.push({s: Math.max(cookStart, startMin + 90), e: cookEnd});
-  }
-  const lastWagonEnd = cookCycleEnds[cookCycleEnds.length-1].e + T.wagonMin;
-  const crushStart = Math.max(lastWagonEnd, startMin + 7.5*60);
-  const crushEnd = crushStart + Math.round(crushH * 60);
-  const packStart = crushStart + 60;
-  const packEnd = packStart + Math.round(packMin);
-  const retortStart = packStart + 90;  // 첫 회차 시작 (포장 1.5h 후)
-  const retortEnd = packEnd + 150;     // 마지막 회차 종료
-  const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
-
-  // SVG 타임라인 생성
-  const tlMin = startMin;
-  const tlMax = Math.max(retortEnd, packEnd) + 30;
-  const tlSpan = tlMax - tlMin;
-  const SVG_W = 700, SVG_LEFT = 80, SVG_RIGHT = 660;
-  const xPos = m => SVG_LEFT + (m - tlMin) / tlSpan * (SVG_RIGHT - SVG_LEFT);
-  const tlBars = [];
-  // 시간 눈금
-  let hourTicks = '';
-  for (let h = Math.floor(tlMin/60); h <= Math.ceil(tlMax/60); h++) {
-    const x = xPos(h*60);
-    if (x >= SVG_LEFT && x <= SVG_RIGHT+10) {
-      hourTicks += `<line x1="${x}" y1="30" x2="${x}" y2="380" stroke="#d3d1c7" stroke-width="0.5" stroke-dasharray="2 3"/>`;
-      hourTicks += `<text x="${x}" y="22" text-anchor="middle" font-size="10" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
-    }
-  }
-  // 막대들
-  const mkBar = (y, label, s, e, color, txt) => `
-    <text x="${SVG_LEFT-5}" y="${y+14}" text-anchor="end" font-size="11" fill="var(--color-text-secondary)">${label}</text>
-    <rect x="${xPos(s)}" y="${y}" width="${Math.max(xPos(e)-xPos(s),2)}" height="20" rx="4" fill="${color}"/>
-    <text x="${(xPos(s)+xPos(e))/2}" y="${y+14}" text-anchor="middle" font-size="10" fill="#fff" font-weight="500">${txt}</text>`;
-  let bars = '';
-  bars += mkBar(44, '전처리', startMin, preEndMin, '#185FA5', `${fmt(startMin)}~${fmt(preEndMin)}`);
-  cookCycleEnds.forEach((c, i) => {
-    bars += mkBar(72 + i*22, `자숙 ${i+1}호`, c.s, c.e, '#0F6E56', `${fmt(c.s)}~${fmt(c.e)}`);
-  });
-  const wagonY = 72 + cookCycleEnds.length*22;
-  bars += mkBar(wagonY, '와건', lastWagonEnd-T.wagonMin, lastWagonEnd, '#D85A30', `${T.wagonMin}분`);
-  bars += mkBar(wagonY+28, '파쇄', crushStart, crushEnd, '#BA7517', `${fmt(crushStart)}~${fmt(crushEnd)}`);
-  bars += mkBar(wagonY+56, '내포장', packStart, packEnd, '#7F77DD', `${fmt(packStart)}~${fmt(packEnd)}`);
-  bars += mkBar(wagonY+84, '레토르트', retortStart, retortEnd, '#A32D2D', `${fmt(retortStart)}~${fmt(retortEnd)}`);
-  // 종료시각 점선 표시
-  const endLine = `
-    <line x1="${xPos(packEnd)}" y1="40" x2="${xPos(packEnd)}" y2="${wagonY+110}" stroke="#7F77DD" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="${xPos(packEnd)}" y="${wagonY+125}" text-anchor="middle" font-size="10" fill="#7F77DD" font-weight="500">${fmt(packEnd)} 내포장종료</text>`;
-
-  const svgH = wagonY + 140;
-  const tlSvg = `
-    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img">
-      ${hourTicks}
-      ${bars}
-      ${endLine}
-    </svg>`;
-
-  // 종료시각 카드 (이미지2 Block 3 하단)
-  const endCards = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:14px">
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">전처리 종료</div>
-        <div style="font-size:16px;font-weight:500">${fmt(preEndMin)}</div>
-      </div>
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">파쇄 종료</div>
-        <div style="font-size:16px;font-weight:500">${fmt(crushEnd)}</div>
-      </div>
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">내포장 종료</div>
-        <div style="font-size:16px;font-weight:500;color:#7F77DD">${fmt(packEnd)}</div>
-      </div>
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">레토르트 최종</div>
-        <div style="font-size:16px;font-weight:500;color:#A32D2D">${fmt(retortEnd)}</div>
-      </div>
-    </div>`;
-
-  // 종합 카드
-  const summary = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">원육 투입</div>
-        <div style="font-size:18px;font-weight:500">${preIn.toLocaleString()}kg</div>
-      </div>
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">최종 산출</div>
-        <div style="font-size:18px;font-weight:500">약 ${pouches.toLocaleString()}개</div>
-      </div>
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">전체 수율</div>
-        <div style="font-size:18px;font-weight:500">${(packOut/preIn*100).toFixed(1)}%</div>
-      </div>
-      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">내포장 종료</div>
-        <div style="font-size:18px;font-weight:500;color:#7F77DD">${fmt(packEnd)}</div>
-      </div>
-    </div>`;
-
+  // ─ 최종 렌더링 ────────────────────────────────────────
   rpPane.innerHTML = `
-    ${summary}
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="font-size:14px;font-weight:500;margin-bottom:10px">공정별 현황</div>
-      <div style="overflow-x:auto">${procTbl}</div>
-    </div>
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="font-size:14px;font-weight:500;margin-bottom:10px">포장 실적</div>
-      <div style="overflow-x:auto">${packTbl}</div>
-    </div>
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:14px;font-weight:500">공정 타임라인</div>
-        <span style="font-size:11px;background:var(--color-background-info);color:var(--color-text-info);padding:3px 10px;border-radius:99px">통합</span>
+    ${conclusionBox}
+    ${bottleneckBox}
+
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:600">📐 데이터 기반 필요 인원 계산</div>
+        <span style="font-size:10px;background:var(--color-background-info);color:var(--color-text-info);padding:3px 10px;border-radius:99px">설정값 기준</span>
       </div>
-      <div style="overflow-x:auto;min-width:600px">${tlSvg}</div>
+      <div style="overflow-x:auto">${reqTbl}</div>
+    </div>
+
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px">📋 공정별 수율·산출 흐름</div>
+      <div style="overflow-x:auto">${procStatusTbl}</div>
       ${endCards}
     </div>
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="font-size:14px;font-weight:500;margin-bottom:4px">시간대별 인원 활용 (정원 28명)</div>
-      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">모든 시간대 합계 28명 일치 · 유휴 0명</div>
+
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">👥 시간대별 인원 활용 (정원 28명)</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">유휴 0명 · 점심 2차 분산</div>
       <div style="overflow-x:auto">${wkTbl}</div>
     </div>`;
 }
