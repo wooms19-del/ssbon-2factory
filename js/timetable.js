@@ -320,8 +320,11 @@ function ttSimulate(inp) {
   const packEndMin = Math.max(packSelfEndMin, packAfterCrushEndMin);
   const packMin = packEndMin - packStartMin;
 
-  // 레토르트: 회차별 시작 시점 동적 계산
-  // 누적 EA 도달 시점은 내포장 종료 시점(packEndMin)을 넘을 수 없음
+  // 레토르트: 회차별 시작 시점 동적 계산 (모든 공정 연결성 보장)
+  //  - 각 회차 384EA씩, 1대 운영, 사이클 2.5h
+  //  - 누적 도달 = 내포장이 그만큼 처리 완료된 시점
+  //  - 마지막 회차 시작 = max(이전 회차 종료, 내포장 종료)
+  //    → 내포장 마지막 EA 나와야 마지막 회차 가능 (사용자분 짚어주신 핵심)
   const retortCycles = Math.ceil(pouches / TT_FIXED.retortPerCycle);
   const eaPerMin = inp.pPackEa;
   const retortStartTimes = [];
@@ -329,9 +332,12 @@ function ttSimulate(inp) {
   for (let i = 0; i < retortCycles; i++) {
     const isLast = i === retortCycles - 1;
     const cumEa = isLast ? pouches : (i + 1) * TT_FIXED.retortPerCycle;
-    // 누적 도달 시점 = 내포장 시작 + (누적EA / 속도), 단 packEndMin 초과 못 함
+    // 누적 도달 시점 = 내포장 시작 + (누적EA / 속도)
     let accumulateMin = packStartMin + Math.round(cumEa / eaPerMin);
-    if (accumulateMin > packEndMin) accumulateMin = packEndMin;
+    // 마지막 회차는 반드시 내포장 종료 이후 시작 (마지막 EA가 나와야)
+    if (isLast) accumulateMin = Math.max(accumulateMin, packEndMin);
+    // 그 외 회차도 내포장 종료 시점 초과 못 함
+    else if (accumulateMin > packEndMin) accumulateMin = packEndMin;
     // 시작 = max(이전 회차 종료, 누적 도달 시점)
     const prevEnd = i > 0 ? retortEndTimes[i - 1] : 0;
     const start = Math.max(prevEnd, accumulateMin);
