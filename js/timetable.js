@@ -393,17 +393,90 @@ function ttRenderReport() {
       }).join('')}</tbody>
     </table>`;
 
-  // 4. 공정 타임라인 SVG (간략)
-  // 최종 종료 시각 추정
+  // 4. 공정 타임라인 (이미지2 Block 3 스타일)
   const startMin = 5*60;
   const preEndMin = startMin + Math.round(preH * 60);
-  const lastTankIn = preEndMin;  // 4호 자숙 투입 = 전처리 종료 시점
-  const lastWagonEnd = lastTankIn + T.cookMin + T.wagonMin;
-  const crushStart = startMin + 7.5*60;  // 12:30
+  const cookCycles = Math.ceil(preIn / T.tankKg);  // 자숙 회차 = 탱크 수
+  const cookCycleEnds = [];
+  for (let i = 0; i < cookCycles; i++) {
+    // 각 자숙 시작 = 전처리 진행 중 단계적으로 (균등 분포)
+    const cookStart = startMin + Math.round((preH * 60) * (i + 1) / cookCycles) - T.cookMin/2;
+    const cookEnd = cookStart + T.cookMin;
+    cookCycleEnds.push({s: Math.max(cookStart, startMin + 90), e: cookEnd});
+  }
+  const lastWagonEnd = cookCycleEnds[cookCycleEnds.length-1].e + T.wagonMin;
+  const crushStart = Math.max(lastWagonEnd, startMin + 7.5*60);
   const crushEnd = crushStart + Math.round(crushH * 60);
-  const packStart = crushStart + 60;     // 13:30
+  const packStart = crushStart + 60;
   const packEnd = packStart + Math.round(packMin);
+  const retortStart = packStart + 90;  // 첫 회차 시작 (포장 1.5h 후)
+  const retortEnd = packEnd + 150;     // 마지막 회차 종료
   const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+
+  // SVG 타임라인 생성
+  const tlMin = startMin;
+  const tlMax = Math.max(retortEnd, packEnd) + 30;
+  const tlSpan = tlMax - tlMin;
+  const SVG_W = 700, SVG_LEFT = 80, SVG_RIGHT = 660;
+  const xPos = m => SVG_LEFT + (m - tlMin) / tlSpan * (SVG_RIGHT - SVG_LEFT);
+  const tlBars = [];
+  // 시간 눈금
+  let hourTicks = '';
+  for (let h = Math.floor(tlMin/60); h <= Math.ceil(tlMax/60); h++) {
+    const x = xPos(h*60);
+    if (x >= SVG_LEFT && x <= SVG_RIGHT+10) {
+      hourTicks += `<line x1="${x}" y1="30" x2="${x}" y2="380" stroke="#d3d1c7" stroke-width="0.5" stroke-dasharray="2 3"/>`;
+      hourTicks += `<text x="${x}" y="22" text-anchor="middle" font-size="10" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
+    }
+  }
+  // 막대들
+  const mkBar = (y, label, s, e, color, txt) => `
+    <text x="${SVG_LEFT-5}" y="${y+14}" text-anchor="end" font-size="11" fill="var(--color-text-secondary)">${label}</text>
+    <rect x="${xPos(s)}" y="${y}" width="${Math.max(xPos(e)-xPos(s),2)}" height="20" rx="4" fill="${color}"/>
+    <text x="${(xPos(s)+xPos(e))/2}" y="${y+14}" text-anchor="middle" font-size="10" fill="#fff" font-weight="500">${txt}</text>`;
+  let bars = '';
+  bars += mkBar(44, '전처리', startMin, preEndMin, '#185FA5', `${fmt(startMin)}~${fmt(preEndMin)}`);
+  cookCycleEnds.forEach((c, i) => {
+    bars += mkBar(72 + i*22, `자숙 ${i+1}호`, c.s, c.e, '#0F6E56', `${fmt(c.s)}~${fmt(c.e)}`);
+  });
+  const wagonY = 72 + cookCycleEnds.length*22;
+  bars += mkBar(wagonY, '와건', lastWagonEnd-T.wagonMin, lastWagonEnd, '#D85A30', `${T.wagonMin}분`);
+  bars += mkBar(wagonY+28, '파쇄', crushStart, crushEnd, '#BA7517', `${fmt(crushStart)}~${fmt(crushEnd)}`);
+  bars += mkBar(wagonY+56, '내포장', packStart, packEnd, '#7F77DD', `${fmt(packStart)}~${fmt(packEnd)}`);
+  bars += mkBar(wagonY+84, '레토르트', retortStart, retortEnd, '#A32D2D', `${fmt(retortStart)}~${fmt(retortEnd)}`);
+  // 종료시각 점선 표시
+  const endLine = `
+    <line x1="${xPos(packEnd)}" y1="40" x2="${xPos(packEnd)}" y2="${wagonY+110}" stroke="#7F77DD" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="${xPos(packEnd)}" y="${wagonY+125}" text-anchor="middle" font-size="10" fill="#7F77DD" font-weight="500">${fmt(packEnd)} 내포장종료</text>`;
+
+  const svgH = wagonY + 140;
+  const tlSvg = `
+    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img">
+      ${hourTicks}
+      ${bars}
+      ${endLine}
+    </svg>`;
+
+  // 종료시각 카드 (이미지2 Block 3 하단)
+  const endCards = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:14px">
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">전처리 종료</div>
+        <div style="font-size:16px;font-weight:500">${fmt(preEndMin)}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">파쇄 종료</div>
+        <div style="font-size:16px;font-weight:500">${fmt(crushEnd)}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">내포장 종료</div>
+        <div style="font-size:16px;font-weight:500;color:#7F77DD">${fmt(packEnd)}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">레토르트 최종</div>
+        <div style="font-size:16px;font-weight:500;color:#A32D2D">${fmt(retortEnd)}</div>
+      </div>
+    </div>`;
 
   // 종합 카드
   const summary = `
@@ -435,6 +508,14 @@ function ttRenderReport() {
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
       <div style="font-size:14px;font-weight:500;margin-bottom:10px">포장 실적</div>
       <div style="overflow-x:auto">${packTbl}</div>
+    </div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:500">공정 타임라인</div>
+        <span style="font-size:11px;background:var(--color-background-info);color:var(--color-text-info);padding:3px 10px;border-radius:99px">통합</span>
+      </div>
+      <div style="overflow-x:auto;min-width:600px">${tlSvg}</div>
+      ${endCards}
     </div>
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
       <div style="font-size:14px;font-weight:500;margin-bottom:4px">시간대별 인원 활용 (정원 28명)</div>

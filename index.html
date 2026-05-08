@@ -765,14 +765,17 @@
 
       <!-- 탭 -->
       <div style="display:flex;gap:4px;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:12px" id="tt-tabs">
-        <div class="tt-tab on" onclick="ttTab('tl',this)">통합 타임라인</div>
+        <div class="tt-tab on" onclick="ttTab('rp',this)">보고서</div>
+        <div class="tt-tab" onclick="ttTab('tl',this)">통합 타임라인</div>
         <div class="tt-tab" onclick="ttTab('dt',this)">공정별 상세</div>
-        <div class="tt-tab" onclick="ttTab('rp',this)">📊 보고서</div>
-        <div class="tt-tab" onclick="ttTab('tn',this)">⚙️ 튜닝값</div>
+        <div class="tt-tab" onclick="ttTab('tn',this)">설정값</div>
       </div>
 
+      <!-- 보고서 (공정별 현황 + 포장 실적 + 인원 활용 표) — 기본 화면 -->
+      <div id="tt-pane-rp"></div>
+
       <!-- 통합 타임라인 -->
-      <div id="tt-pane-tl">
+      <div id="tt-pane-tl" style="display:none">
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;font-size:11px;color:var(--color-text-secondary)">
           <span>🟦 전처리</span><span>🟩 자숙</span><span>🟨 파쇄</span><span>🟪 내포장</span><span>🟥 레토르트</span>
         </div>
@@ -789,11 +792,15 @@
         <div id="tt-note" style="font-size:10px;color:var(--color-text-secondary);margin-top:12px;line-height:1.7"></div>
       </div>
 
-      <!-- 보고서 (공정별 현황 + 포장 실적 + 인원 활용 표) -->
-      <div id="tt-pane-rp" style="display:none"></div>
-
-      <!-- 튜닝값 (수율·생산성 입력, Firestore 저장) -->
+      <!-- 설정값 (수율·생산성 입력, Firestore 저장) -->
       <div id="tt-pane-tn" style="display:none">
+        <!-- 자동 분석 영역 (2번 작업에서 채워짐) -->
+        <div id="tt-auto-analyze" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:500;margin-bottom:6px">📊 누적 데이터 자동 분석</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">기간을 선택하면 일별 실적 데이터로 수율·생산성 평균값을 자동 계산합니다.</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);font-style:italic">— 다음 업데이트에서 활성화 예정 —</div>
+        </div>
+
         <div style="background:var(--color-background-info);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--color-text-info)">
           💡 여기서 수정하면 Firestore에 저장되어 <strong>모든 디바이스(회사 PC·태블릿·모바일)에 즉시 반영</strong>됩니다.
         </div>
@@ -1232,6 +1239,6 @@
 <script src="js/globals.js?v=1778129561"></script>
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
-<script src="js/timetable.js?v=1778243336"></script>
+<script src="js/timetable.js?v=1778243745"></script>
 </body>
 </html>
