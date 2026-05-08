@@ -569,38 +569,93 @@ function ttRender() {
       </div>
     </div>`;
 
-  // 공정별 현황 표
+  // 공정별 현황 표 (수율·생산성 직접 수정 가능)
+  const editYield = (id, val, autoVal, n) => `
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+      <input type="number" step="0.1" value="${val}" 
+        oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttRender()"
+        style="width:70px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
+      <div style="font-size:9px;color:var(--color-text-tertiary)">자동: ${autoVal}${n!==undefined?` (n=${n})`:''}</div>
+    </div>`;
+  const editProd = (id, val, unit, autoVal, n) => `
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
+      <div style="display:flex;align-items:center;gap:4px">
+        <input type="number" step="0.1" value="${val}"
+          oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttRender()"
+          style="width:60px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
+        <span style="font-size:10px;color:var(--color-text-secondary)">${unit}</span>
+      </div>
+      <div style="font-size:9px;color:var(--color-text-tertiary)">자동: ${autoVal}${n!==undefined?` (n=${n})`:''}</div>
+    </div>`;
+
   const procRows = [
-    { p:'전처리', i:Math.round(sim.preIn), o:Math.round(sim.preOut), y:inp.yPre, prod:`${inp.pPre} kg/인시 (n=${TT_AUTO.pPre.n})`, h:sim.preHours.toFixed(1)+'h', w:`${inp.wkPre}명` },
-    { p:'자숙', i:Math.round(sim.cookIn), o:Math.round(sim.cookOut), y:sim.cookYield, prod:`${TT_FIXED.cookHours}h × ${sim.tankInTimes.length}탱크 (고정)`, h:`${TT_FIXED.cookHours*sim.tankInTimes.length}h (병렬)`, w:'2명' },
-    { p:'파쇄', i:Math.round(sim.crushIn), o:Math.round(sim.crushOut), y:inp.yCrush, prod:`${inp.pCrush} kg/인시 (n=${TT_AUTO.pCrush.n})`, h:sim.crushHours.toFixed(1)+'h', w:`${inp.wkCrush}→${inp.wkPackPeak}명` },
-    { p:'내포장', i:Math.round(sim.packIn), o:Math.round(sim.packOut), y:TT_PACK_YIELD, prod:`${inp.pPackEa} EA/분 (n=${TT_AUTO.pPackEa.n})`, h:(sim.packMin/60).toFixed(1)+'h', w:`${inp.wkPack}명` },
-    { p:'레토르트', i:sim.pouches+'EA', o:sim.pouches+'EA', y:100, prod:`${TT_FIXED.retortCycleMin/60}h × ${sim.retortCycles}회 (대차 8개)`, h:`${(sim.retortCycles*TT_FIXED.retortCycleMin/60).toFixed(1)}h (순차)`, w:'2명' },
+    {
+      p:'전처리',
+      i:Math.round(sim.preIn), o:Math.round(sim.preOut),
+      yEdit: editYield('tt-y-pre', inp.yPre, TT_AUTO.yPre.val, TT_AUTO.yPre.n),
+      prodEdit: editProd('tt-p-pre', inp.pPre, 'kg/인시', TT_AUTO.pPre.val, TT_AUTO.pPre.n),
+      h:sim.preHours.toFixed(1)+'h', w:`${inp.wkPre}명`,
+      formula:`${Math.round(sim.preIn).toLocaleString()} ÷ (${inp.pPre} × ${inp.wkPre}) = ${sim.preHours.toFixed(2)}h`,
+    },
+    {
+      p:'자숙',
+      i:Math.round(sim.cookIn), o:Math.round(sim.cookOut),
+      yEdit: `<span style="font-size:11px;color:var(--color-text-secondary)">${sim.cookYield.toFixed(1)}% (고정)</span>`,
+      prodEdit: `<span style="font-size:10px;color:var(--color-text-tertiary)">4h × ${sim.tankInTimes.length}탱크 (고정)</span>`,
+      h:`${TT_FIXED.cookHours*sim.tankInTimes.length}h (병렬)`, w:'2명',
+      formula:`탱크당 ${TT_FIXED.tankKg}kg × ${sim.cookYield}% = ${Math.round(TT_FIXED.tankKg*sim.cookYield/100)}kg/탱크`,
+    },
+    {
+      p:'파쇄',
+      i:Math.round(sim.crushIn), o:Math.round(sim.crushOut),
+      yEdit: editYield('tt-y-crush', inp.yCrush, TT_AUTO.yCrush.val, TT_AUTO.yCrush.n),
+      prodEdit: editProd('tt-p-crush', inp.pCrush, 'kg/인시', TT_AUTO.pCrush.val, TT_AUTO.pCrush.n),
+      h:sim.crushHours.toFixed(1)+'h', w:`${inp.wkCrush}→${inp.wkPackPeak}명`,
+      formula:`${Math.round(sim.crushIn).toLocaleString()} ÷ (${inp.pCrush} × ${inp.wkPackPeak}) = ${sim.crushHours.toFixed(2)}h`,
+    },
+    {
+      p:'내포장',
+      i:Math.round(sim.packIn), o:Math.round(sim.packOut),
+      yEdit: `<span style="font-size:11px;color:var(--color-text-secondary)">${TT_PACK_YIELD}% (고정)</span>`,
+      prodEdit: editProd('tt-p-pack', inp.pPackEa, 'EA/분', TT_AUTO.pPackEa.val, TT_AUTO.pPackEa.n),
+      h:(sim.packMin/60).toFixed(1)+'h', w:`${inp.wkPack}명`,
+      formula:`${sim.pouches.toLocaleString()}EA ÷ ${inp.pPackEa}EA/분 = ${Math.round(sim.packMin)}분`,
+    },
+    {
+      p:'레토르트',
+      i:sim.pouches+'EA', o:sim.pouches+'EA',
+      yEdit: `<span style="font-size:11px;color:var(--color-text-secondary)">100% (고정)</span>`,
+      prodEdit: `<span style="font-size:10px;color:var(--color-text-tertiary)">${TT_FIXED.retortCycleMin/60}h × ${sim.retortCycles}회 (대차 8개)</span>`,
+      h:`${(sim.retortCycles*TT_FIXED.retortCycleMin/60).toFixed(1)}h (순차)`, w:'2명',
+      formula:`${sim.pouches.toLocaleString()}EA ÷ 384EA/회 = ${sim.retortCycles}회차`,
+    },
   ];
   const procTbl = `
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:16px">
-      <div style="font-size:14px;font-weight:600;margin-bottom:4px">📐 공정별 현황</div>
-      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">생산성·수율 = 데이터 자동값 (위 입력란에서 직접 수정 가능)</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">📐 공정별 현황 — 수율·생산성 직접 수정 가능</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">자동값(DB)이 채워져 있습니다. 입력칸 클릭해서 직접 수정하면 즉시 결과가 갱신됩니다.</div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
             <th style="text-align:left;padding:10px 8px;font-weight:500">공정</th>
             <th style="text-align:right;padding:10px 8px;font-weight:500">투입</th>
             <th style="text-align:right;padding:10px 8px;font-weight:500">산출</th>
-            <th style="text-align:right;padding:10px 8px;font-weight:500">수율</th>
-            <th style="text-align:left;padding:10px 8px;font-weight:500">생산성 (n=건수)</th>
+            <th style="text-align:right;padding:10px 8px;font-weight:500">수율 (수정)</th>
+            <th style="text-align:left;padding:10px 8px;font-weight:500">생산성 (수정)</th>
             <th style="text-align:right;padding:10px 8px;font-weight:500">시간</th>
             <th style="text-align:right;padding:10px 8px;font-weight:500">인원</th>
+            <th style="text-align:left;padding:10px 8px;font-weight:500;font-size:10px">계산 근거</th>
           </tr></thead>
           <tbody>${procRows.map(r => `
             <tr style="border-bottom:0.5px solid var(--color-border-tertiary)">
               <td style="padding:11px 8px;font-weight:500">${r.p}</td>
               <td style="padding:11px 8px;text-align:right">${typeof r.i === 'number' ? r.i.toLocaleString()+' kg' : r.i}</td>
               <td style="padding:11px 8px;text-align:right;font-weight:500">${typeof r.o === 'number' ? r.o.toLocaleString()+' kg' : r.o}</td>
-              <td style="padding:11px 8px;text-align:right">${typeof r.y === 'number' ? r.y.toFixed(1)+'%' : r.y}</td>
-              <td style="padding:11px 8px;font-size:11px;color:var(--color-text-tertiary)">${r.prod}</td>
+              <td style="padding:8px;text-align:right">${r.yEdit}</td>
+              <td style="padding:8px">${r.prodEdit}</td>
               <td style="padding:11px 8px;text-align:right">${r.h}</td>
               <td style="padding:11px 8px;text-align:right">${r.w}</td>
+              <td style="padding:11px 8px;font-size:10px;color:var(--color-text-tertiary);font-family:monospace">${r.formula}</td>
             </tr>`).join('')}
           </tbody>
         </table>
