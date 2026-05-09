@@ -817,27 +817,28 @@ function ttRender() {
     isFull: slot.sum === inp.totalWorkers,
   }));
   const wkTbl = `
-    <div style="overflow-x:auto;border:2px solid #185FA5;border-radius:6px">
-    <table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff">
+    <div style="border:2px solid #185FA5;border-radius:6px;flex:1;display:flex;overflow:hidden">
+    <table style="width:100%;height:100%;border-collapse:collapse;font-size:13px;background:#fff">
       <thead>
         <tr style="background:linear-gradient(135deg,#185FA5,#1a6db5);color:#fff">
-          <th style="padding:12px 8px;font-weight:700;text-align:left;letter-spacing:0.5px;white-space:nowrap;border:1px solid #0d4a8a;font-size:12px">시간대</th>
-          ${wkHeads.map((h,i) => `<th style="padding:12px 6px;font-weight:700;border:1px solid #0d4a8a;font-size:12px">${h}</th>`).join('')}
-          <th style="padding:12px 8px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:12px">합계</th>
+          <th style="padding:10px 8px;font-weight:700;text-align:left;letter-spacing:0.5px;white-space:nowrap;border:1px solid #0d4a8a;font-size:12px">시간대</th>
+          ${wkHeads.map((h,i) => `<th style="padding:10px 6px;font-weight:700;border:1px solid #0d4a8a;font-size:12px">${h}</th>`).join('')}
+          <th style="padding:10px 8px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:12px">합계</th>
         </tr>
       </thead>
       <tbody>
       ${slotsRows.map((r, idx) => {
         const stripe = idx % 2 === 1 ? 'background:#f7f9fc' : '';
-        return `<tr style="${stripe}">
-          <td class="tt-cell" style="padding:11px 8px;font-weight:600;border:1px solid #ddd;font-size:12px">${r.range}</td>
+        // height:1px + height:100% trick: 모든 행 균등 분배
+        return `<tr style="${stripe}height:1px">
+          <td class="tt-cell" style="padding:8px;font-weight:600;border:1px solid #ddd;font-size:12px;vertical-align:middle">${r.range}</td>
           ${r.cells.map((v, ci) => {
             const isZero = v === 0;
             const color = isZero ? '#ccc' : wkColors[ci];
             const fw = isZero ? 'normal' : (v >= 10 ? 700 : 600);
-            return `<td class="tt-cell" style="padding:11px 6px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw}">${v||'·'}</td>`;
+            return `<td class="tt-cell" style="padding:8px 6px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw};vertical-align:middle">${v||'·'}</td>`;
           }).join('')}
-          <td class="tt-cell" style="padding:11px 8px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:13px;border:1px solid #ddd">${r.sum}${r.isFull?' ✓':''}</td>
+          <td class="tt-cell" style="padding:8px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:13px;border:1px solid #ddd;vertical-align:middle">${r.sum}${r.isFull?' ✓':''}</td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -960,106 +961,94 @@ function ttRender() {
   const lastPackEa = Math.round(lastTankKg * inp.yCrush / 100 / TT_PACK_KG_PER_POUCH);
   const lastBatchPackMin = Math.round(lastPackEa / inp.pPackEa);
 
+  // 인원 변화에 따라 시간이 어떻게 영향받는지 안내 (레토르트는 인원 무관)
   const whyCards = `
     <div style="margin-bottom:16px">
       <div style="font-size:14px;font-weight:600;margin-bottom:4px">📐 각 공정이 왜 그 시간인지</div>
-      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">대표님이 어떤 막대 가리키셔도 즉답 가능 — 모든 숫자 추적</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">대표님이 어떤 막대 가리키셔도 즉답 가능 — 모든 숫자 추적</div>
 
-      <!-- 전처리 -->
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:4px solid #185FA5;border-radius:10px;padding:14px 16px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px dashed var(--color-border-tertiary)">
-          <div><strong style="color:#185FA5;font-size:13px">전처리</strong>
-          <span style="font-size:11px;color:var(--color-text-secondary);margin-left:8px">${ttFmt(sim.startMin)} ~ ${ttFmt(sim.preEndMin)} · ${ttDur(sim.preEndMin-sim.startMin)} · ${inp.earlyWorkers}명→${inp.wkPre}명</span></div>
-          <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.preIn).toLocaleString()}kg → ${Math.round(sim.preOut).toLocaleString()}kg</div>
-        </div>
-        <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace">
-          🕐 시작 ${ttFmt(sim.startMin)} = 외국인 조출 시각<br>
-          ⏱ Phase 1 (${ttFmt(sim.startMin)}~${inp.joinTime}, 외국인 ${inp.earlyWorkers}명):<br>
-          &nbsp;&nbsp;&nbsp;${inp.pPre} × ${inp.earlyWorkers} × ${(sim.phase1Min/60).toFixed(0)}h = ${Math.round(sim.phase1Kg).toLocaleString()}kg 처리 가능<br>
-          ⏱ Phase 2 (${inp.joinTime}~, 한국인 ${inp.wkPre}명):<br>
-          &nbsp;&nbsp;&nbsp;잔량 ${Math.max(0, Math.round(sim.preIn - sim.phase1Kg)).toLocaleString()}kg ÷ (${inp.pPre} × ${inp.wkPre}) × 60 = ${Math.max(0, sim.preEndMin - sim.joinMin)}분<br>
-          📊 생산성 ${inp.pPre} kg/인시 (자동: ${TT_AUTO.pPre.val} · n=${TT_AUTO.pPre.n})
-        </div>
-      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:8px">
 
-      <!-- 자숙 -->
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:4px solid #0F6E56;border-radius:10px;padding:14px 16px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px dashed var(--color-border-tertiary)">
-          <div><strong style="color:#0F6E56;font-size:13px">자숙 (${sim.tankInTimes.length}탱크 병렬)</strong>
-          <span style="font-size:11px;color:var(--color-text-secondary);margin-left:8px">${ttFmt(sim.tankInTimes[0])} ~ ${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])} · 2명</span></div>
-          <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.cookIn).toLocaleString()}kg → ${Math.round(sim.cookOut).toLocaleString()}kg</div>
+        <!-- 전처리 -->
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:4px solid #185FA5;border-radius:8px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:0.5px dashed var(--color-border-tertiary)">
+            <div><strong style="color:#185FA5;font-size:12px">전처리</strong>
+            <span style="font-size:10.5px;color:var(--color-text-secondary);margin-left:6px">${ttFmt(sim.startMin)}~${ttFmt(sim.preEndMin)} · ${inp.earlyWorkers}→${inp.wkPre}명</span></div>
+            <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.preIn).toLocaleString()} → ${Math.round(sim.preOut).toLocaleString()}kg</div>
+          </div>
+          <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.6;font-family:monospace">
+            🕐 ${ttFmt(sim.startMin)} 외국인 조출<br>
+            P1 (${ttFmt(sim.startMin)}~${inp.joinTime}, ${inp.earlyWorkers}명): ${inp.pPre}×${inp.earlyWorkers}×${(sim.phase1Min/60).toFixed(0)}h = ${Math.round(sim.phase1Kg).toLocaleString()}kg<br>
+            P2 (${inp.joinTime}~, ${inp.wkPre}명): 잔량 ${Math.max(0, Math.round(sim.preIn - sim.phase1Kg)).toLocaleString()}kg ÷ (${inp.pPre}×${inp.wkPre})×60 = ${Math.max(0, sim.preEndMin - sim.joinMin)}분<br>
+            📊 ${inp.pPre} kg/인시 (자동 ${TT_AUTO.pPre.val} · n=${TT_AUTO.pPre.n})
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace">
-          🔢 탱크 수 = ${Math.round(sim.cookIn)} ÷ ${TT_FIXED.tankKg} = ${(sim.cookIn/TT_FIXED.tankKg).toFixed(2)} → ${sim.tankInTimes.length}탱크<br>
-          ⏱ 사이클 4시간 + 와건 30분 (사용자분 시스템 고정)<br>
-          📊 수율 ${sim.cookYield}% (홍두깨 자숙 고정값)<br>
-          ${sim.tankInTimes.map((t, i) => `└ <strong>${i+1}호</strong> 투입 ${ttFmt(t)} → 와건 ${ttFmt(sim.wagonEndTimes[i])}`).join('<br>')}
-        </div>
-      </div>
 
-      <!-- 파쇄 (강조 — 사용자분이 자주 의심) -->
-      <div style="background:linear-gradient(to right,#FFF7ED 0%,#fffbf5 100%);border:1px solid #BA7517;border-radius:10px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 3px rgba(186,117,23,0.08)">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px dashed rgba(186,117,23,0.3)">
-          <div><strong style="color:#BA7517;font-size:13px">파쇄</strong>
-          <span style="font-size:11px;color:var(--color-text-secondary);margin-left:8px">${ttFmt(sim.crushStartMin)} ~ ${ttFmt(sim.crushEndMin)} · ${ttDur(sim.crushEndMin-sim.crushStartMin)} · ${inp.wkCrush}→${inp.wkPackPeak}명</span></div>
-          <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.crushIn).toLocaleString()}kg → ${Math.round(sim.crushOut).toLocaleString()}kg</div>
+        <!-- 자숙 -->
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:4px solid #0F6E56;border-radius:8px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:0.5px dashed var(--color-border-tertiary)">
+            <div><strong style="color:#0F6E56;font-size:12px">자숙 (${sim.tankInTimes.length}탱크 병렬)</strong>
+            <span style="font-size:10.5px;color:var(--color-text-secondary);margin-left:6px">${ttFmt(sim.tankInTimes[0])}~${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])} · 2명</span></div>
+            <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.cookIn).toLocaleString()} → ${Math.round(sim.cookOut).toLocaleString()}kg</div>
+          </div>
+          <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.6;font-family:monospace">
+            🔢 ${Math.round(sim.cookIn)} ÷ ${TT_FIXED.tankKg} = ${(sim.cookIn/TT_FIXED.tankKg).toFixed(2)} → ${sim.tankInTimes.length}탱크<br>
+            ⏱ 4h + 와건 30분 (고정) · 수율 ${sim.cookYield}% (고정)<br>
+            ${sim.tankInTimes.map((t, i) => `└ ${i+1}호 ${ttFmt(t)} → 와건 ${ttFmt(sim.wagonEndTimes[i])}`).join('<br>')}
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace">
-          🕐 시작 ${ttFmt(sim.crushStartMin)} = 자숙 1호 와건 종료 시점<br>
-          <br>
-          <strong>종료가 ${ttFmt(sim.crushEndMin)}인 이유 — 둘 중 늦은 쪽:</strong><br>
-          ① 자체 처리 종료:<br>
-          &nbsp;&nbsp;&nbsp;${Math.round(sim.crushIn)}kg ÷ (${inp.pCrush} × ${inp.wkPackPeak}) = ${(sim.crushIn / (inp.pCrush*inp.wkPackPeak)).toFixed(2)}h<br>
-          &nbsp;&nbsp;&nbsp;${ttFmt(sim.crushStartMin)} + ${(sim.crushIn / (inp.pCrush*inp.wkPackPeak)).toFixed(2)}h = ${ttFmt(sim.crushStartMin + Math.round(sim.crushIn / (inp.pCrush*inp.wkPackPeak) * 60))}<br>
-          ② 마지막 자숙 4호 출하 후 처리:<br>
-          &nbsp;&nbsp;&nbsp;마지막 와건 ${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])} + 마지막 탱크 ${Math.round(lastTankKg)}kg 처리(${lastTankCrushMin}분)<br>
-          &nbsp;&nbsp;&nbsp;= ${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1] + lastTankCrushMin)}<br>
-          → <strong style="color:#BA7517">늦은 쪽 = ${ttFmt(sim.crushEndMin)}</strong><br>
-          <br>
-          📊 생산성 ${inp.pCrush} kg/인시 (자동: ${TT_AUTO.pCrush.val} · n=${TT_AUTO.pCrush.n})
-        </div>
-      </div>
 
-      <!-- 내포장 (강조 — 사용자분이 가장 자주 짚으심) -->
-      <div style="background:linear-gradient(to right,#F4F2FB 0%,#faf9fd 100%);border:1px solid #7F77DD;border-radius:10px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 3px rgba(127,119,221,0.08)">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px dashed rgba(127,119,221,0.3)">
-          <div><strong style="color:#7F77DD;font-size:13px">내포장</strong>
-          <span style="font-size:11px;color:var(--color-text-secondary);margin-left:8px">${ttFmt(sim.packStartMin)} ~ ${ttFmt(sim.packEndMin)} · ${ttDur(sim.packEndMin-sim.packStartMin)} · ${inp.wkPack}명</span></div>
-          <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.packIn).toLocaleString()}kg → ${sim.pouches.toLocaleString()}EA</div>
+        <!-- 파쇄 -->
+        <div style="background:linear-gradient(to right,#FFF7ED 0%,#fffbf5 100%);border:1px solid #BA7517;border-radius:8px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:0.5px dashed rgba(186,117,23,0.3)">
+            <div><strong style="color:#BA7517;font-size:12px">파쇄</strong>
+            <span style="font-size:10.5px;color:var(--color-text-secondary);margin-left:6px">${ttFmt(sim.crushStartMin)}~${ttFmt(sim.crushEndMin)} · ${inp.wkCrush}→${inp.wkPackPeak}명</span></div>
+            <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.crushIn).toLocaleString()} → ${Math.round(sim.crushOut).toLocaleString()}kg</div>
+          </div>
+          <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.6;font-family:monospace">
+            🕐 ${ttFmt(sim.crushStartMin)} = 자숙 1호 와건 종료<br>
+            <strong>종료 ${ttFmt(sim.crushEndMin)} = max(둘 중 늦은):</strong><br>
+            ① 자체: ${Math.round(sim.crushIn)}kg ÷ (${inp.pCrush}×${inp.wkPackPeak}) = ${(sim.crushIn / (inp.pCrush*inp.wkPackPeak)).toFixed(2)}h → ${ttFmt(sim.crushSelfEndMin)}<br>
+            ② 마지막 탱크: 와건 ${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])} + ${Math.round(sim.lastTankOutKg)}kg(${lastTankCrushMin}분) = ${ttFmt(sim.lastTankCrushEndMin)}<br>
+            📊 ${inp.pCrush} kg/인시 (자동 ${TT_AUTO.pCrush.val} · n=${TT_AUTO.pCrush.n})
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace">
-          🕐 시작 ${ttFmt(sim.packStartMin)} = 파쇄 시작(${ttFmt(sim.crushStartMin)}) + 1h (대차 1개 누적)<br>
-          <br>
-          <strong>종료가 ${ttFmt(sim.packEndMin)}인 이유 — 둘 중 늦은 쪽:</strong><br>
-          ① 자체 처리 종료:<br>
-          &nbsp;&nbsp;&nbsp;${sim.pouches}EA ÷ ${inp.pPackEa}EA/분 = ${Math.round(sim.pouches / inp.pPackEa)}분<br>
-          &nbsp;&nbsp;&nbsp;${ttFmt(sim.packStartMin)} + ${Math.round(sim.pouches / inp.pPackEa)}분 = ${ttFmt(sim.packStartMin + Math.round(sim.pouches / inp.pPackEa))}<br>
-          ② 파쇄 종료 후 마지막 산출분 처리:<br>
-          &nbsp;&nbsp;&nbsp;마지막 탱크 파쇄 산출 ${lastPackEa}EA<br>
-          &nbsp;&nbsp;&nbsp;${lastPackEa}EA ÷ ${inp.pPackEa} = ${lastBatchPackMin}분<br>
-          &nbsp;&nbsp;&nbsp;파쇄 종료 ${ttFmt(sim.crushEndMin)} + ${lastBatchPackMin}분 = ${ttFmt(sim.crushEndMin + lastBatchPackMin)}<br>
-          → <strong style="color:#7F77DD">늦은 쪽 = ${ttFmt(sim.packEndMin)}</strong><br>
-          <br>
-          📊 생산성 ${inp.pPackEa} EA/분 (자동: ${TT_AUTO.pPackEa.val} · n=${TT_AUTO.pPackEa.n})
-        </div>
-      </div>
 
-      <!-- 레토르트 -->
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:4px solid #A32D2D;border-radius:10px;padding:14px 16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px dashed var(--color-border-tertiary)">
-          <div><strong style="color:#A32D2D;font-size:13px">레토르트 (${sim.retortCycles}회차)</strong>
-          <span style="font-size:11px;color:var(--color-text-secondary);margin-left:8px">${ttFmt(sim.retortStartTimes[0])} ~ ${ttFmt(sim.retortEndMin)} · 2명</span></div>
-          <div style="font-size:10px;color:var(--color-text-tertiary)">${sim.pouches.toLocaleString()}EA</div>
+        <!-- 내포장 -->
+        <div style="background:linear-gradient(to right,#F4F2FB 0%,#faf9fd 100%);border:1px solid #7F77DD;border-radius:8px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:0.5px dashed rgba(127,119,221,0.3)">
+            <div><strong style="color:#7F77DD;font-size:12px">내포장</strong>
+            <span style="font-size:10.5px;color:var(--color-text-secondary);margin-left:6px">${ttFmt(sim.packStartMin)}~${ttFmt(sim.packEndMin)} · ${inp.wkPack}명</span></div>
+            <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.packIn).toLocaleString()}kg → ${sim.pouches.toLocaleString()}EA</div>
+          </div>
+          <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.6;font-family:monospace">
+            🕐 ${ttFmt(sim.packStartMin)} = 파쇄(${ttFmt(sim.crushStartMin)})+1h<br>
+            <strong>종료 ${ttFmt(sim.packEndMin)} = max(둘 중 늦은):</strong><br>
+            ① 자체: ${sim.pouches}EA ÷ ${inp.pPackEa}/분 = ${Math.round(sim.pouches / inp.pPackEa)}분 → ${ttFmt(sim.packSelfEndMin)}<br>
+            ② 파쇄 종료 후 마지막 ${sim.lastTankPackEa}EA: ${ttFmt(sim.crushEndMin)}+${lastBatchPackMin}분 = ${ttFmt(sim.lastBatchPackEndMin)}<br>
+            📊 ${inp.pPackEa} EA/분 — <strong style="color:#7F77DD">기계 1대 한도 (인원 무관)</strong>
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace">
-          🔢 회차 = ${sim.pouches} ÷ 384 = ${(sim.pouches/384).toFixed(2)} → ${sim.retortCycles}회차<br>
-          ⏱ 사이클 2.5h × ${sim.retortCycles}회 (대차 8개 한도, 1대 운영)<br>
-          ${sim.retortStartTimes.map((s, i) => {
-            const e = sim.retortEndTimes[i];
-            const isLast = i === sim.retortStartTimes.length - 1;
-            return `└ <strong>${i+1}회차</strong> ${ttFmt(s)}~${ttFmt(e)}${isLast ? ' <span style="color:#A32D2D">★ 내포장 종료('+ttFmt(sim.packEndMin)+') 후 시작</span>' : ''}`;
-          }).join('<br>')}
+
+        <!-- 레토르트 -->
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:4px solid #A32D2D;border-radius:8px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:0.5px dashed var(--color-border-tertiary)">
+            <div><strong style="color:#A32D2D;font-size:12px">레토르트 (${sim.retortCycles}회차)</strong>
+            <span style="font-size:10.5px;color:var(--color-text-secondary);margin-left:6px">${ttFmt(sim.retortStartTimes[0])}~${ttFmt(sim.retortEndMin)} · 2명</span></div>
+            <div style="font-size:10px;color:var(--color-text-tertiary)">${sim.pouches.toLocaleString()}EA</div>
+          </div>
+          <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.6;font-family:monospace">
+            🔢 ${sim.pouches} ÷ 384 = ${(sim.pouches/384).toFixed(2)} → ${sim.retortCycles}회차<br>
+            ⏱ 2.5h 사이클 (설비 3대 + 대차 8개 한도)<br>
+            <strong style="color:#A32D2D">★ 인원 늘려도 시간 안 변함 — 설비·내포장 속도(8 EA/분)가 진짜 병목</strong><br>
+            ${sim.retortStartTimes.map((s, i) => {
+              const e = sim.retortEndTimes[i];
+              const isLast = i === sim.retortStartTimes.length - 1;
+              return `└ ${i+1}회차 ${ttFmt(s)}~${ttFmt(e)}${isLast ? ' ★ 내포장 후' : ''}`;
+            }).join('<br>')}
+          </div>
         </div>
+
       </div>
     </div>`;
 
