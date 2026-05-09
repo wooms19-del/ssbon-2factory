@@ -35,18 +35,14 @@ let TT_AUTO = {
   pPackEa: { val: 8, n: 0 },
 };
 
-// ── PIN 체크 ─────────────────────────────────────────────
-function ttCheckPin() {
-  const v = document.getElementById('tt-pin-input').value;
-  if (v.length < 4) return;
-  if (v === TT_PIN) {
-    document.getElementById('tt-lock').style.display = 'none';
-    document.getElementById('tt-main').style.display = 'block';
-    document.getElementById('tt-pin-err').style.display = 'none';
-    ttAutoAnalyze().then(ttRender);
-  } else {
-    document.getElementById('tt-pin-err').style.display = 'block';
-  }
+// ── 진입 시 자동 초기화 ──────────────────────────────────
+function ttInit() {
+  ttAutoAnalyze().then(ttRender);
+}
+
+// 페이지 진입 시 (탭 활성화 등에서 호출)
+if (typeof window !== 'undefined') {
+  window.ttInit = ttInit;
 }
 
 // ── 시간 유틸 ────────────────────────────────────────────
@@ -321,33 +317,65 @@ function ttSimulate(inp) {
   const packEndMin = Math.max(packSelfEndMin, packAfterCrushEndMin);
   const packMin = packEndMin - packStartMin;
 
-  // 레토르트: 회차별 시작 시점 동적 계산 (모든 공정 연결성 보장)
-  //  - 각 회차 384EA씩, 1대 운영, 사이클 2.5h
-  //  - 누적 도달 = 내포장이 그만큼 처리 완료된 시점
-  //  - 마지막 회차 시작 = max(이전 회차 종료, 내포장 종료)
-  //    → 내포장 마지막 EA 나와야 마지막 회차 가능 (사용자분 짚어주신 핵심)
+  // 레토르트: 3대 병렬 가능 + 대차 8개 한도
+  //  - 설비 3대: 동시 최대 3개 회차 진행 가능
+  //  - 대차 8개: 회차당 4대차 사용 시 동시 최대 2회차만 가능 (4+4=8)
+  //  - 회차 끝나야 그 회차 대차 4개 회수 → 재투입 가능
+  //  - 사이클 2.5h, 회차당 384EA(4대차)
+  //  - 마지막 회차 = 내포장 종료 후 (마지막 EA 나와야)
   const retortCycles = Math.ceil(pouches / TT_FIXED.retortPerCycle);
   const eaPerMin = inp.pPackEa;
+  const NUM_RETORTS = 3;       // 설비 3대
+  const TOTAL_CARTS = 8;       // 대차 총 8개
+  const CARTS_PER_BATCH = 4;   // 회차당 4대차
   const retortStartTimes = [];
   const retortEndTimes = [];
+  // 각 설비가 비는 시각 (3대)
+  const retortFreeAt = [0, 0, 0];
+  // 대차 회수 일정: [(회차종료시각, 회수대차수), ...]
+  const cartReturns = [];
+
   for (let i = 0; i < retortCycles; i++) {
     const isLast = i === retortCycles - 1;
     const cumEa = isLast ? pouches : (i + 1) * TT_FIXED.retortPerCycle;
-    // 누적 도달 시점 = 내포장 시작 + (누적EA / 속도)
+    // 누적 도달 시점
     let accumulateMin = packStartMin + Math.round(cumEa / eaPerMin);
-    // 마지막 회차는 반드시 내포장 종료 이후 시작 (마지막 EA가 나와야)
     if (isLast) accumulateMin = Math.max(accumulateMin, packEndMin);
-    // 그 외 회차도 내포장 종료 시점 초과 못 함
     else if (accumulateMin > packEndMin) accumulateMin = packEndMin;
-    // 시작 = max(이전 회차 종료, 누적 도달 시점)
-    const prevEnd = i > 0 ? retortEndTimes[i - 1] : 0;
-    const start = Math.max(prevEnd, accumulateMin);
+
+    // 가용 설비 (가장 빨리 비는 설비)
+    const earliestRetort = retortFreeAt.indexOf(Math.min(...retortFreeAt));
+    const retortAvailMin = retortFreeAt[earliestRetort];
+
+    // 대차 가용 여부 — 시각 t에 사용 가능한 대차 수
+    const cartsAvailableAt = (t) => {
+      let inUse = 0;
+      // t 시각에 진행 중인 회차 = 시작 ≤ t < 종료
+      for (let k = 0; k < retortStartTimes.length; k++) {
+        if (retortStartTimes[k] <= t && t < retortEndTimes[k]) {
+          inUse += CARTS_PER_BATCH;
+        }
+      }
+      return TOTAL_CARTS - inUse;
+    };
+    // 이 회차가 시작될 수 있는 가장 빠른 시점 = 대차 4개 가용 + 설비 가용 + EA 누적
+    let candidateStart = Math.max(retortAvailMin, accumulateMin);
+    // 대차 부족하면 → 가장 빨리 대차가 회수되는 시점까지 기다림
+    while (cartsAvailableAt(candidateStart) < CARTS_PER_BATCH) {
+      // 진행중인 회차 중 가장 빨리 끝나는 시각으로 점프
+      const ongoing = retortEndTimes.filter((e, k) => retortStartTimes[k] <= candidateStart && candidateStart < e);
+      if (ongoing.length === 0) break;
+      candidateStart = Math.min(...ongoing);
+    }
+
+    const start = candidateStart;
     const end = start + TT_FIXED.retortCycleMin;
     retortStartTimes.push(start);
     retortEndTimes.push(end);
+    retortFreeAt[earliestRetort] = end;
   }
   const retortStartMin = retortStartTimes[0];
-  const retortEndMin = retortEndTimes[retortEndTimes.length - 1];
+  const retortEndMin = Math.max(...retortEndTimes);
 
   return {
     preIn, preOut, cookIn, cookOut, crushIn, crushOut, packIn, packOut, pouches,

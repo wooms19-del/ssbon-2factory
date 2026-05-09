@@ -143,6 +143,8 @@ function showTab(mode,tab){
   } else if(tab==='recipe'){
     updDD();
     renderRcList();
+  } else if(tab==='timetable'){
+    if(typeof ttInit === 'function') ttInit();
   }
 }
 
