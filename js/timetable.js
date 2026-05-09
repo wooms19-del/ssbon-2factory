@@ -359,13 +359,13 @@ function ttSimulate(inp) {
   // 내포장은 그 산출이 충분히 누적된 뒤 시작 가능
   // 단순화: 전처리 끝났으면 → 12:30부터 시작 가능 (파쇄가 1시간 가동했으니까)
   //         전처리 안 끝났으면 → 13:30부터 (모드 A 동일)
-  const halfPack = Math.ceil(inp.wkPack / 2);
-  // 내포장 시작:
-  //  - 전처리가 11:30 전에 끝났으면 → 점심 1차 동안 전처리조가 파쇄 → 12:30에 충분히 누적 → 12:30 시작
-  //  - 전처리가 진행 중이면 → 파쇄도 정지였으므로 13:30 시작
-  const packStartMin = (preEndMin <= LUNCH1_S)
-    ? Math.max(crushStartMin + 60, LUNCH1_E)  // 12:30
-    : Math.max(crushStartMin + 60, LUNCH2_E); // 13:30
+  // 내포장 시작 시점 = max(파쇄 시작 + 1h, 13:30)
+  // 13:30 이전엔 인원 부족으로 내포장 가동 불가:
+  //   · 11:30~12:30 (점심 1차): 후공정조 점심 → 내포장 0명
+  //   · 12:30~13:30 (점심 2차): 전처리조+관리 1명 점심 → 가용 17명 = 파쇄 14+이송 2 + 내포장 6 = 22 (불가능)
+  //   · 13:30~ (풀가동): 28명 풀가동 → 내포장 6명 가능
+  // 즉 점심 1차에 전처리조가 파쇄로 합류하더라도 내포장은 못 돌림 (인원 부족)
+  const packStartMin = Math.max(crushStartMin + 60, LUNCH2_E);  // 항상 13:30 이후
   const packWorkersAt = (t) => {
     if (t < packStartMin) return 0;
     return inp.wkPack;
@@ -804,43 +804,56 @@ function ttRender() {
     isFull: slot.sum === inp.totalWorkers,
   }));
   const wkTbl = `
-    <div style="border:2px solid #185FA5;border-radius:6px;overflow:hidden">
-    <table style="width:100%;border-collapse:collapse;font-size:15px;background:#fff">
+    <div style="border:2px solid #185FA5;border-radius:6px;flex:1;display:flex;overflow:hidden">
+    <table style="width:100%;height:100%;border-collapse:collapse;font-size:13px;background:#fff;table-layout:fixed">
+      <colgroup>
+        <col style="width:14%">
+        ${wkHeads.map(() => `<col>`).join('')}
+        <col style="width:9%">
+      </colgroup>
       <thead>
         <tr style="background:linear-gradient(135deg,#185FA5,#1a6db5);color:#fff">
-          <th style="padding:14px 12px;font-weight:700;text-align:left;letter-spacing:0.5px;white-space:nowrap;border:1px solid #0d4a8a;font-size:14px">시간대</th>
-          ${wkHeads.map((h,i) => `<th style="padding:14px 8px;font-weight:700;border:1px solid #0d4a8a;font-size:14px">${h}</th>`).join('')}
-          <th style="padding:14px 12px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:14px">합계</th>
+          <th style="padding:10px 4px;font-weight:700;text-align:left;letter-spacing:0.3px;border:1px solid #0d4a8a;font-size:12px">시간대</th>
+          ${wkHeads.map((h,i) => `<th style="padding:10px 2px;font-weight:700;border:1px solid #0d4a8a;font-size:12px;text-align:center">${h}</th>`).join('')}
+          <th style="padding:10px 4px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:12px;text-align:center">합계</th>
         </tr>
       </thead>
       <tbody>
       ${slotsRows.map((r, idx) => {
         const stripe = idx % 2 === 1 ? 'background:#f7f9fc' : '';
-        return `<tr style="${stripe}">
-          <td class="tt-cell" style="padding:14px 12px;font-weight:600;border:1px solid #ddd;font-size:14px;vertical-align:middle">${r.range}</td>
+        return `<tr style="${stripe}height:1px">
+          <td class="tt-cell" style="padding:8px 4px;font-weight:600;border:1px solid #ddd;font-size:11.5px;vertical-align:middle">${r.range}</td>
           ${r.cells.map((v, ci) => {
             const isZero = v === 0;
             const color = isZero ? '#ccc' : wkColors[ci];
             const fw = isZero ? 'normal' : (v >= 10 ? 700 : 600);
-            return `<td class="tt-cell" style="padding:14px 8px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw};font-size:15px;vertical-align:middle">${v||'·'}</td>`;
+            return `<td class="tt-cell" style="padding:8px 2px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw};font-size:13px;vertical-align:middle">${v||'·'}</td>`;
           }).join('')}
-          <td class="tt-cell" style="padding:14px 12px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:15px;border:1px solid #ddd;vertical-align:middle">${r.sum}${r.isFull?' ✓':''}</td>
+          <td class="tt-cell" style="padding:8px 4px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:13px;border:1px solid #ddd;vertical-align:middle">${r.sum}${r.isFull?' ✓':''}</td>
         </tr>`;
       }).join('')}
       </tbody>
     </table>
     </div>`;
 
-  // 타임라인 위, 인원표 아래 (전체 너비)
+  // 좌(타임라인) + 우(인원표) - 1:1 비율, 세로 같이 늘어남
+  // SVG의 viewBox 높이가 좌측 카드 높이를 결정 → 우측 카드는 align-items:stretch로 따라감
+  const svgRatio = svgH / SVG_W;  // SVG 높이/너비 비율
   const splitView = `
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:10px">📋 공정 타임라인</div>
-      <div style="overflow-x:auto">${timelineSvg}</div>
-    </div>
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:16px">
-      <div style="font-size:14px;font-weight:600;margin-bottom:4px">👥 시간대별 인원 활용</div>
-      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">정원 ${inp.totalWorkers}명 · 합계 일치 ✓</div>
-      ${wkTbl}
+    <style>
+      @media (max-width: 900px) { #tt-split { grid-template-columns: 1fr !important; } }
+      #ttTimelineSvg { display:block; width:100%; height:auto; }
+    </style>
+    <div id="tt-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:stretch">
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px;flex-shrink:0">📋 공정 타임라인</div>
+        <div style="flex:1;display:flex;align-items:flex-start;min-height:0">${timelineSvg}</div>
+      </div>
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;flex-shrink:0">👥 시간대별 인원 활용</div>
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;flex-shrink:0">정원 ${inp.totalWorkers}명 · 합계 일치 ✓</div>
+        <div style="flex:1;display:flex;flex-direction:column;min-height:0">${wkTbl}</div>
+      </div>
     </div>`;
 
   // 공정별 현황 표 (수율·생산성 직접 수정 가능)
