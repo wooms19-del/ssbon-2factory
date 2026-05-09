@@ -775,6 +775,26 @@ function ttRender() {
     yCursor += ROW_H;
   }
 
+  // ── 점심 (1차 + 2차) ──
+  bars += rowLabel(yCursor, BAR_H, '점심');
+  // 점심 1차: 11:30~12:30 — 인원 동적 계산
+  const lunch1Cnt = sim.preEndMin <= LUNCH1_S
+    ? inp.totalWorkers - inp.wkPre - 1  // 전처리조가 파쇄로 합류했으므로 후공정조+외포장조가 점심
+    : inp.totalWorkers - inp.wkPre - 1; // 전처리 진행 중이라도 후공정조 점심
+  bars += segBar(yCursor, BAR_H, LUNCH1_S, LUNCH1_E, '#888780',
+    `1차 ${lunch1Cnt}명`,
+    '점심 1차',
+    `시각: 11:30~12:30|인원: ${lunch1Cnt}명 (후공정조 + 외포장조)|${sim.preEndMin <= LUNCH1_S ? '전처리조 '+inp.wkPre+'명은 파쇄 합류' : '전처리조는 작업 계속'}`,
+    {fillOpacity: 0.7});
+  // 점심 2차: 12:30~13:30
+  const lunch2Cnt = inp.totalWorkers - inp.wkCrush - inp.wkTrans - 1;
+  bars += segBar(yCursor, BAR_H, LUNCH1_E, LUNCH2_E, '#888780',
+    `2차 ${lunch2Cnt}명`,
+    '점심 2차',
+    `시각: 12:30~13:30|인원: ${lunch2Cnt}명 (전처리조 + 외포장조)|후공정조 ${inp.wkCrush + inp.wkTrans}명은 파쇄 가동 (이송 합류)`,
+    {fillOpacity: 0.85});
+  yCursor += ROW_H;
+
   // 점선 (내포장 종료 + 전체 종료)
   const lineBottom = yCursor + 4;
   bars += `
@@ -811,29 +831,29 @@ function ttRender() {
     <div style="border:2px solid #185FA5;border-radius:6px;flex:1;display:flex;overflow:hidden">
     <table style="width:100%;height:100%;border-collapse:collapse;font-size:13px;background:#fff;table-layout:fixed">
       <colgroup>
-        <col style="width:14%">
-        ${wkHeads.map(() => `<col style="width:8.55%">`).join('')}
-        <col style="width:9%">
+        ${Array(11).fill(0).map(() => `<col style="width:9.09%">`).join('')}
       </colgroup>
       <thead>
-        <tr style="background:linear-gradient(135deg,#185FA5,#1a6db5);color:#fff">
-          <th style="padding:10px 4px;font-weight:700;text-align:left;letter-spacing:0.3px;border:1px solid #0d4a8a;font-size:12px">시간대</th>
-          ${wkHeads.map((h,i) => `<th style="padding:10px 2px;font-weight:700;border:1px solid #0d4a8a;font-size:12px;text-align:center">${h}</th>`).join('')}
-          <th style="padding:10px 4px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:12px;text-align:center">합계</th>
+        <tr style="background:linear-gradient(135deg,#185FA5,#1a6db5);color:#fff;height:36px">
+          <th style="padding:0 4px;font-weight:700;text-align:center;border:1px solid #0d4a8a;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">시간대</th>
+          ${wkHeads.map((h,i) => `<th style="padding:0 2px;font-weight:700;border:1px solid #0d4a8a;font-size:12px;text-align:center">${h}</th>`).join('')}
+          <th style="padding:0 4px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:12px;text-align:center">합계</th>
         </tr>
       </thead>
       <tbody>
       ${slotsRows.map((r, idx) => {
         const stripe = idx % 2 === 1 ? 'background:#f7f9fc' : '';
-        return `<tr style="${stripe}height:1px">
-          <td class="tt-cell" style="padding:8px 4px;font-weight:600;border:1px solid #ddd;font-size:11.5px;vertical-align:middle">${r.range}</td>
+        // 모든 행 동일 높이 = 100% / 행수 (tbody 안에서)
+        const rowH = `height:${(100/slotsRows.length).toFixed(2)}%`;
+        return `<tr style="${stripe};${rowH}">
+          <td class="tt-cell" style="padding:6px 2px;font-weight:600;border:1px solid #ddd;font-size:11px;vertical-align:middle;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.range}</td>
           ${r.cells.map((v, ci) => {
             const isZero = v === 0;
             const color = isZero ? '#ccc' : wkColors[ci];
             const fw = isZero ? 'normal' : (v >= 10 ? 700 : 600);
-            return `<td class="tt-cell" style="padding:8px 2px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw};font-size:13px;vertical-align:middle">${v||'·'}</td>`;
+            return `<td class="tt-cell" style="padding:6px 2px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw};font-size:13px;vertical-align:middle">${v||'·'}</td>`;
           }).join('')}
-          <td class="tt-cell" style="padding:8px 4px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:13px;border:1px solid #ddd;vertical-align:middle">${r.sum}${r.isFull?' ✓':''}</td>
+          <td class="tt-cell" style="padding:6px 2px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:13px;border:1px solid #ddd;vertical-align:middle">${r.sum}${r.isFull?' ✓':''}</td>
         </tr>`;
       }).join('')}
       </tbody>
