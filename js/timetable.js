@@ -566,10 +566,10 @@ function ttPlanSlots(inp, sim) {
     },
     sum: total,
   });
-  // 슬롯 7: 내포장 종료 후 청소 전환
+  // 슬롯 7: 내포장 종료 후 청소 전환 → 레토르트 종료까지
   const cleanRest = total - inp.wkTrans - mgr;
   slots.push({
-    range: `${ttFmt(sim.packEndMin)}~17:30`,
+    range: `${ttFmt(sim.packEndMin)}~${ttFmt(sim.retortEndMin)}`,
     cells: { 청소: cleanRest, 이송: inp.wkTrans, 관리: mgr },
     sum: total,
   });
@@ -587,7 +587,7 @@ function ttPlanNarrative(inp, sim, slots) {
   lines.push(`<strong>11:30~12:30</strong> · 점심 1차 (후공정조)`);
   lines.push(`<strong>12:30~13:30</strong> · 점심 2차 (전처리조) — 파쇄 ${inp.wkCrush + inp.wkTrans}명 가동 (이송 인원도 파쇄 합류)`);
   lines.push(`<strong>13:30~${ttFmt(sim.packEndMin)}</strong> · <strong style="color:#7F77DD">파쇄 ${inp.wkPackPeak}명 + 내포장 ${inp.wkPack}명 + 이송 ${inp.wkTrans}명 풀가동</strong>`);
-  lines.push(`<strong>${ttFmt(sim.packEndMin)}~17:30</strong> · 내포장 종료 → 청소 전환`);
+  lines.push(`<strong>${ttFmt(sim.packEndMin)}~${ttFmt(sim.retortEndMin)}</strong> · 내포장 종료 → 청소 전환 (전 공정 종료까지)`);
   lines.push(`<strong>레토르트</strong> · ${ttFmt(sim.retortStartMin)} 시작 · ${sim.retortCycles}회차 · 최종 ${ttFmt(sim.retortEndMin)}`);
   return lines.join('<br>');
 }
