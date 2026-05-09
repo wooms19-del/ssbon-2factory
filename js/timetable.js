@@ -243,9 +243,7 @@ async function ttPeriodChange() {
 }
 
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
-function ttSimulate(inp, lunchMode) {
-  // lunchMode: 'A' (한꺼번에/기본), 'B' (교대/절반씩), 'C' (동시)
-  lunchMode = lunchMode || 'A';
+function ttSimulate(inp) {
   const startMin = ttToMin(inp.startTime);
   const joinMin = ttToMin(inp.joinTime);
   const cookYield = TT_COOK_YIELD[inp.meatType] || 56.8;
@@ -301,51 +299,50 @@ function ttSimulate(inp, lunchMode) {
   // 마지막 탱크 산출 = tankKg × cookYield (kg)
   const lastTankOutKg = TT_FIXED.tankKg * (cookYield / 100);
 
-  // ── 파쇄 시뮬: 시간대별 가용 인원 적용 (점심 모드별) ──
+  // ── 파쇄 시뮬: 시간대별 가용 인원 동적 계산 ──
+  //
+  // 핵심 원칙: 점심 시간대에 가용한 인원이 있으면 파쇄 라인에 자동 투입
+  //
+  // 11:30~12:30 (점심 1차 - 후공정조 차례):
+  //   · 전처리가 11:30 전에 끝났으면 → 전처리조 wkPre명이 파쇄 가능
+  //   · 전처리가 진행 중이면 → 전처리조는 자기 일, 파쇄 0명
+  //   · (후공정조는 점심이라 못 옴)
+  //
+  // 12:30~13:30 (점심 2차 - 전처리조 차례):
+  //   · 전처리조는 점심
+  //   · 후공정조 복귀 → 파쇄 = wkCrush + wkTrans (이송 합류, 내포장 시작 전)
+  //
+  // 13:30~ (풀가동):
+  //   · 파쇄 = wkPackPeak (전처리조 일부 합류)
   const LUNCH1_S = 11*60 + 30;
   const LUNCH1_E = 12*60 + 30;
   const LUNCH2_E = 13*60 + 30;
 
-  // 점심 모드별 파쇄 인원 함수
-  // A (한꺼번에): 11:30~12:30 후공정 통째 점심 → 파쇄 0명
-  //                12:30~13:30 전처리조 점심 → 파쇄 = wkCrush + wkTrans
-  // B (교대): 절반씩 — 11:30~13:30 사이 항상 절반 가동
-  //           11:30~12:00, 12:00~12:30 후공정 절반씩 점심 → 파쇄 절반씩 = ceil(wkPackPeak/2)
-  //           12:30~13:00, 13:00~13:30 전처리조 절반씩 점심 → 파쇄는 이송 포함 풀가동 절반
-  // C (동시): 11:30~12:30 모두 점심 → 파쇄 0명
-  //           12:30~ 풀가동 (wkPackPeak)
-  const halfPeak = Math.ceil(inp.wkPackPeak / 2);
   const crushWorkersAt = (t) => {
     if (t < LUNCH1_S) return inp.wkCrush;
-    if (lunchMode === 'A') {
-      if (t < LUNCH1_E) return 0;                          // 점심 1차 정지
-      if (t < LUNCH2_E) return inp.wkCrush + inp.wkTrans;  // 이송 합류
-      return inp.wkPackPeak;
+    // 11:30~12:30: 점심 1차
+    if (t < LUNCH1_E) {
+      // 전처리가 이미 끝났으면 → 전처리조가 파쇄로 합류
+      if (preEndMin <= LUNCH1_S) return inp.wkPre;
+      // 전처리가 진행 중 → 파쇄 0명
+      return 0;
     }
-    if (lunchMode === 'B') {
-      // 11:30~12:30: 후공정 교대 → 항상 절반 가동
-      if (t < LUNCH1_E) return halfPeak;
-      // 12:30~13:30: 전처리조 교대 → 후공정 풀가동
-      if (t < LUNCH2_E) return inp.wkPackPeak;
-      return inp.wkPackPeak;
+    // 12:30~13:30: 점심 2차
+    if (t < LUNCH2_E) {
+      return inp.wkCrush + inp.wkTrans;  // 후공정조 복귀 + 이송 합류
     }
-    if (lunchMode === 'C') {
-      // 11:30~12:30: 모두 점심
-      if (t < LUNCH1_E) return 0;
-      return inp.wkPackPeak;  // 12:30 부터 풀가동
-    }
+    // 13:30~: 풀가동
     return inp.wkPackPeak;
   };
-  // 파쇄 자체 시간: crushStart 부터 1분씩 진행, processed가 crushIn 도달하면 종료
+  // 파쇄 자체 시간: crushStart 부터 1분씩 진행
   let crushSelfEndMin = crushStartMin;
   let crushProcessed = 0;
   for (let t = crushStartMin; t < 26*60 && crushProcessed < crushIn; t++) {
     const w = crushWorkersAt(t);
-    if (w > 0) crushProcessed += inp.pCrush * w / 60;  // 분당 처리 kg
+    if (w > 0) crushProcessed += inp.pCrush * w / 60;
     crushSelfEndMin = t + 1;
   }
-  // 마지막 탱크 산출분이 파쇄 라인 통과 (마지막 와건 종료 후)
-  // 시간대별 인원 적용 시뮬레이션
+  // 마지막 탱크 산출분 처리
   let lastTankCrushEndMin = lastWagonEnd;
   let lastTankProcessed = 0;
   for (let t = lastWagonEnd; t < 26*60 && lastTankProcessed < lastTankOutKg; t++) {
@@ -356,24 +353,23 @@ function ttSimulate(inp, lunchMode) {
   const crushEndMin = Math.max(crushSelfEndMin, lastTankCrushEndMin);
   const crushHours = (crushEndMin - crushStartMin) / 60;
 
-  // ── 내포장 시뮬: 시간대별 가용 인원 (점심 모드별) ──
-  // A (한꺼번에): 13:30 이전 0명, 13:30~ wkPack
-  // B (교대): 11:30~12:30 절반 가동(중에 가능), 단순화 — 12:30 이후 풀가동
-  // C (동시): 12:30 이후 풀가동
+  // ── 내포장 시뮬: 동적 ──
+  //
+  // 점심 1차에 전처리조가 파쇄 합류 → 파쇄 산출도 그만큼 누적
+  // 내포장은 그 산출이 충분히 누적된 뒤 시작 가능
+  // 단순화: 전처리 끝났으면 → 12:30부터 시작 가능 (파쇄가 1시간 가동했으니까)
+  //         전처리 안 끝났으면 → 13:30부터 (모드 A 동일)
   const halfPack = Math.ceil(inp.wkPack / 2);
-  const packStartMin = (lunchMode === 'B')
-    ? Math.max(crushStartMin + 60, LUNCH1_E)   // 모드 B: 12:30 부터 시작 가능
-    : Math.max(crushStartMin + 60, LUNCH2_E);  // A, C: 13:30 이후
+  // 내포장 시작:
+  //  - 전처리가 11:30 전에 끝났으면 → 점심 1차 동안 전처리조가 파쇄 → 12:30에 충분히 누적 → 12:30 시작
+  //  - 전처리가 진행 중이면 → 파쇄도 정지였으므로 13:30 시작
+  const packStartMin = (preEndMin <= LUNCH1_S)
+    ? Math.max(crushStartMin + 60, LUNCH1_E)  // 12:30
+    : Math.max(crushStartMin + 60, LUNCH2_E); // 13:30
   const packWorkersAt = (t) => {
-    if (lunchMode === 'B') {
-      if (t < LUNCH1_E) return 0;          // 11:30~12:30 — 단순화: 내포장은 후공정조 교대 따라 0
-      return inp.wkPack;                    // 12:30~ 본격 가동
-    }
-    // A, C
-    if (t < LUNCH2_E) return 0;
+    if (t < packStartMin) return 0;
     return inp.wkPack;
   };
-  // packSpeedAt: 인원 있을 때 inp.pPackEa, 없을 때 0
   const packSpeedAt = (t) => packWorkersAt(t) > 0 ? inp.pPackEa : 0;
 
   // 자체 처리 시간: packStart부터 처리량이 pouches 도달까지
@@ -456,7 +452,6 @@ function ttSimulate(inp, lunchMode) {
   const retortEndMin = Math.max(...retortEndTimes);
 
   return {
-    lunchMode,
     preIn, preOut, cookIn, cookOut, crushIn, crushOut, packIn, packOut, pouches,
     preHours, crushHours, packMin,
     startMin, preEndMin, joinMin,
@@ -477,10 +472,9 @@ function ttPlanSlots(inp, sim) {
   const total = inp.totalWorkers;
   const mgr = inp.mgrWorkers;
   const early = inp.earlyWorkers;
-  const lunchMode = sim.lunchMode || 'A';
-  const halfPeak = Math.ceil(inp.wkPackPeak / 2);
-  const halfPack = Math.ceil(inp.wkPack / 2);
   const slots = [];
+  const LUNCH1_S = 11*60+30;
+  const preEndedBeforeLunch = sim.preEndMin <= LUNCH1_S;
 
   // 슬롯 1: 조출~관리자 출근
   const mgrTime = ttToMin(inp.mgrTime);
@@ -509,52 +503,38 @@ function ttPlanSlots(inp, sim) {
     sum: total,
   });
 
-  // ── 점심 시간대 슬롯 (모드별 분기) ──
-  if (lunchMode === 'A') {
-    // 모드 A: 한꺼번에 점심
-    // 11:30~12:30 점심 1차 (후공정조 통째)
+  // 슬롯 4: 점심 1차 (11:30~12:30)
+  // 전처리 끝났으면 → 전처리조가 파쇄로 합류
+  // 안 끝났으면 → 전처리 계속, 파쇄 0
+  if (preEndedBeforeLunch) {
+    // 후공정조 통째 점심 + 전처리조가 파쇄로 합류
+    const lunch1 = total - inp.wkPre - 1;  // 점심 = 후공정조 + 외포장조 등
+    slots.push({
+      range: `11:30~12:30`,
+      cells: { 파쇄: inp.wkPre, 점심: Math.max(0, lunch1), 관리: 1 },
+      sum: total,
+    });
+  } else {
+    // 전처리 진행 중 → 모드 A처럼
     slots.push({
       range: `11:30~12:30`,
       cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
       sum: total,
     });
-    // 12:30~13:30 점심 2차 (전처리조)
-    slots.push({
-      range: `12:30~13:30`,
-      cells: { 파쇄: inp.wkCrush + inp.wkTrans, 점심: total - inp.wkCrush - inp.wkTrans - 1, 관리: 1 },
-      sum: total,
-    });
-  } else if (lunchMode === 'B') {
-    // 모드 B: 교대 점심 - 11:30~12:30 후공정 절반씩, 12:30~13:30 전처리조 절반씩
-    // 11:30~12:30: 파쇄 절반(halfPeak) + 후공정 절반 점심 + 전처리조 가동 + 관리
-    // 단순화: 두 시간대로 분리해서 표시 (한 행만)
-    const lunch1 = total - halfPeak - inp.wkPre - 1;  // 점심 인원
-    slots.push({
-      range: `11:30~12:30 (교대)`,
-      cells: { 전처리: inp.wkPre, 파쇄: halfPeak, 점심: Math.max(0, lunch1), 관리: 1 },
-      sum: total,
-    });
-    // 12:30~13:30: 파쇄 풀가동(wkPackPeak) + 전처리조 절반 점심
-    const lunch2 = total - inp.wkPackPeak - 1;
-    slots.push({
-      range: `12:30~13:30 (교대)`,
-      cells: { 파쇄: inp.wkPackPeak, 점심: Math.max(0, lunch2), 관리: 1 },
-      sum: total,
-    });
-  } else {
-    // 모드 C: 동시 점심 (11:30~12:30 모두 점심, 12:30~ 풀가동)
-    slots.push({
-      range: `11:30~12:30 (동시)`,
-      cells: { 점심: total - 1, 관리: 1 },
-      sum: total,
-    });
   }
 
-  // 슬롯: 풀가동 (13:30~내포장종료) - 모드 B/C는 12:30부터 가능
-  const fullStart = (lunchMode === 'B' || lunchMode === 'C') ? '12:30' : '13:30';
-  const fullStartTime = (lunchMode === 'B' || lunchMode === 'C') ? '13:30~' + ttFmt(sim.packEndMin) : `13:30~${ttFmt(sim.packEndMin)}`;
+  // 슬롯 5: 점심 2차 (12:30~13:30)
+  // 후공정조 복귀 + 이송 합류 → 파쇄 = wkCrush + wkTrans
+  // 전처리조 점심
   slots.push({
-    range: fullStartTime,
+    range: `12:30~13:30`,
+    cells: { 파쇄: inp.wkCrush + inp.wkTrans, 점심: total - inp.wkCrush - inp.wkTrans - 1, 관리: 1 },
+    sum: total,
+  });
+
+  // 슬롯 6: 풀가동 (13:30~내포장종료)
+  slots.push({
+    range: `13:30~${ttFmt(sim.packEndMin)}`,
     cells: {
       파쇄: inp.wkPackPeak,
       내포장: inp.wkPack,
@@ -564,7 +544,7 @@ function ttPlanSlots(inp, sim) {
     },
     sum: total,
   });
-  // 슬롯: 내포장 종료 후 청소 전환
+  // 슬롯 7: 내포장 종료 후 청소 전환
   const cleanRest = total - inp.wkTrans - mgr;
   slots.push({
     range: `${ttFmt(sim.packEndMin)}~17:30`,
@@ -607,50 +587,13 @@ function ttRender() {
       </div>`;
     return;
   }
-  // ★ 3가지 점심 모드 자동 시뮬 → 가장 빨리 끝나는 모드 자동 선택
-  const simA = ttSimulate(inp, 'A');
-  const simB = ttSimulate(inp, 'B');
-  const simC = ttSimulate(inp, 'C');
-  const modeResults = [
-    { mode: 'A', name: '한꺼번에', desc: '후공정조 통째 점심 (11:30~12:30)', sim: simA },
-    { mode: 'B', name: '교대 점심', desc: '절반씩 교대로 점심 (파쇄 끊김 없음)', sim: simB },
-    { mode: 'C', name: '동시 점심', desc: '전체 11:30~12:30 점심', sim: simC },
-  ];
-  // 가장 빨리 끝나는 모드
-  modeResults.sort((a, b) => a.sim.retortEndMin - b.sim.retortEndMin);
-  const bestResult = modeResults[0];
-  const sim = bestResult.sim;
+  const sim = ttSimulate(inp);
   const slots = ttPlanSlots(inp, sim);
   const narrative = ttPlanNarrative(inp, sim, slots);
 
-  // 모드 비교 박스
-  const modeCompare = `
-    <div style="background:linear-gradient(135deg,#fff8e0 0%,#fffdf2 100%);border:1px solid #d4a82c;border-radius:12px;padding:16px 20px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700;color:#9a7a1a;margin-bottom:4px">🤖 자동 분석 — 점심 운영 베스트 시나리오</div>
-      <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:12px">3가지 점심 운영 방식 시뮬 → 가장 빨리 끝나는 방식 자동 선택</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
-        ${[...modeResults].sort((a,b)=>a.mode.localeCompare(b.mode)).map(r => {
-          const isBest = r.mode === bestResult.mode;
-          const bg = isBest ? 'linear-gradient(135deg,#0F6E56,#1a8970)' : '#fff';
-          const color = isBest ? '#fff' : 'var(--color-text-primary)';
-          const subColor = isBest ? 'rgba(255,255,255,0.85)' : 'var(--color-text-secondary)';
-          const border = isBest ? 'none' : '1px solid #e5e3da';
-          return `<div style="background:${bg};border:${border};border-radius:10px;padding:12px 14px;color:${color};box-shadow:${isBest?'0 2px 8px rgba(15,110,86,0.3)':'none'}">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-              <strong style="font-size:13px">모드 ${r.mode} — ${r.name}</strong>
-              ${isBest ? '<span style="font-size:10px;background:#fff;color:#0F6E56;padding:2px 8px;border-radius:10px;font-weight:700">★ 베스트</span>' : ''}
-            </div>
-            <div style="font-size:10.5px;color:${subColor};margin-bottom:6px">${r.desc}</div>
-            <div style="font-size:18px;font-weight:700">${ttFmt(r.sim.retortEndMin)}</div>
-            <div style="font-size:10px;color:${subColor}">전체 종료 · 내포장 ${ttFmt(r.sim.packEndMin)}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-
   const conclusion = `
     <div style="background:linear-gradient(135deg,#E6F1FB 0%,#f3f9fd 100%);border:1px solid #185FA5;border-radius:12px;padding:18px 22px;margin-bottom:16px">
-      <div style="font-size:11px;color:#185FA5;font-weight:600;letter-spacing:0.5px;margin-bottom:6px">📊 데이터 기반 분석 결과 · 점심 모드 ${bestResult.mode} (${bestResult.name}) 자동 선택</div>
+      <div style="font-size:11px;color:#185FA5;font-weight:600;letter-spacing:0.5px;margin-bottom:6px">📊 데이터 기반 분석 결과</div>
       <div style="font-size:19px;font-weight:600;color:var(--color-text-primary);margin-bottom:6px">
         ${inp.meatType} ${inp.meatKg.toLocaleString()}kg → 약 <span style="color:#0F6E56">${sim.pouches.toLocaleString()}개</span> 생산 ·
         <strong style="color:#185FA5">${ttFmt(sim.packEndMin)} 종료</strong>
@@ -749,12 +692,11 @@ function ttRender() {
     yCursor += ROW_H;
   });
 
-  // ── 파쇄 (분할: 점심 모드별 다르게) ──
+  // ── 파쇄 (동적 분할) ──
   bars += rowLabel(yCursor, BAR_H, '파쇄');
-  const lunchMode = sim.lunchMode || 'A';
-  const halfPeak = Math.ceil(inp.wkPackPeak / 2);
+  const preEndedBeforeLunch = sim.preEndMin <= LUNCH1_S;
 
-  // 시작 ~ 11:30 (와건 종료 직후 짧음, 모든 모드 공통)
+  // 시작 ~ 11:30
   if (sim.crushStartMin < LUNCH1_S) {
     bars += segBar(yCursor, BAR_H, sim.crushStartMin, LUNCH1_S, '#BA7517',
       `${inp.wkCrush}명`,
@@ -763,68 +705,45 @@ function ttRender() {
       {fillOpacity: 0.55});
   }
 
-  if (lunchMode === 'A') {
-    // A: 11:30~12:30 정지, 12:30~13:30 wkCrush+wkTrans, 13:30~ wkPackPeak
-    if (sim.crushEndMin > LUNCH1_S) {
-      const stopE = Math.min(LUNCH1_E, sim.crushEndMin);
-      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), stopE, '#fff',
-        ``, '파쇄 정지 (점심 1차)',
-        `시각: 11:30~12:30|후공정조 통째 점심|파쇄 인원 0명`,
-        {stroke: '#BA7517', strokeWidth: 1, dash: '3 2'});
-      if (stopE > LUNCH1_S + 15) {
-        const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(stopE)) / 2;
-        bars += `<text x="${cx}" y="${yCursor+BAR_H/2+4}" text-anchor="middle" font-size="9" fill="#BA7517" font-weight="600" pointer-events="none">점심·정지</text>`;
-      }
-    }
-    if (sim.crushEndMin > LUNCH1_E) {
-      const segE = Math.min(LUNCH2_E, sim.crushEndMin);
-      bars += segBar(yCursor, BAR_H, LUNCH1_E, segE, '#BA7517',
-        `${inp.wkCrush + inp.wkTrans}명`,
-        '파쇄 (점심 2차)',
-        `시각: 12:30~13:30|인원: ${inp.wkCrush + inp.wkTrans}명 (이송 합류)`,
-        {fillOpacity: 0.75});
-    }
-    if (sim.crushEndMin > LUNCH2_E) {
-      bars += segBar(yCursor, BAR_H, LUNCH2_E, sim.crushEndMin, '#BA7517',
-        `${inp.wkPackPeak}명 풀가동`,
-        '파쇄 풀가동',
-        `시각: 13:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명 (전처리조 합류)`);
-    }
-  } else if (lunchMode === 'B') {
-    // B 교대: 11:30~12:30 절반(halfPeak), 12:30~ wkPackPeak
-    if (sim.crushEndMin > LUNCH1_S) {
-      const segE = Math.min(LUNCH1_E, sim.crushEndMin);
+  // 11:30~12:30 점심 1차
+  if (sim.crushEndMin > LUNCH1_S) {
+    const segE = Math.min(LUNCH1_E, sim.crushEndMin);
+    if (preEndedBeforeLunch) {
+      // 전처리 끝났으면 → 전처리조가 파쇄 합류
       bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), segE, '#BA7517',
-        `${halfPeak}명 (교대)`,
-        '파쇄 (교대 점심)',
-        `시각: 11:30~12:30|인원: ${halfPeak}명 (절반 가동, 절반 점심)|교대로 끊김 없음`,
+        `${inp.wkPre}명 (전처리조)`,
+        '파쇄 (점심 1차 시간 - 전처리조 합류)',
+        `시각: 11:30~12:30|전처리 ${ttFmt(sim.preEndMin)}에 끝나서 전처리조 ${inp.wkPre}명이 파쇄로 합류|후공정조는 점심`,
         {fillOpacity: 0.7});
-    }
-    if (sim.crushEndMin > LUNCH1_E) {
-      bars += segBar(yCursor, BAR_H, LUNCH1_E, sim.crushEndMin, '#BA7517',
-        `${inp.wkPackPeak}명 풀가동`,
-        '파쇄 풀가동',
-        `시각: 12:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명`);
-    }
-  } else {
-    // C 동시: 11:30~12:30 정지, 12:30~ wkPackPeak
-    if (sim.crushEndMin > LUNCH1_S) {
-      const stopE = Math.min(LUNCH1_E, sim.crushEndMin);
-      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), stopE, '#fff',
-        ``, '파쇄 정지 (동시 점심)',
-        `시각: 11:30~12:30|모두 점심|파쇄 0명`,
+    } else {
+      // 전처리 진행 중 → 파쇄 정지
+      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), segE, '#fff',
+        ``, '파쇄 정지 (점심 1차)',
+        `시각: 11:30~12:30|후공정조 점심|전처리도 진행 중이라 파쇄 인원 없음`,
         {stroke: '#BA7517', strokeWidth: 1, dash: '3 2'});
-      if (stopE > LUNCH1_S + 15) {
-        const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(stopE)) / 2;
+      if (segE > LUNCH1_S + 15) {
+        const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(segE)) / 2;
         bars += `<text x="${cx}" y="${yCursor+BAR_H/2+4}" text-anchor="middle" font-size="9" fill="#BA7517" font-weight="600" pointer-events="none">점심·정지</text>`;
       }
     }
-    if (sim.crushEndMin > LUNCH1_E) {
-      bars += segBar(yCursor, BAR_H, LUNCH1_E, sim.crushEndMin, '#BA7517',
-        `${inp.wkPackPeak}명 풀가동`,
-        '파쇄 풀가동',
-        `시각: 12:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명`);
-    }
+  }
+
+  // 12:30~13:30 점심 2차 (후공정조 복귀 + 이송)
+  if (sim.crushEndMin > LUNCH1_E) {
+    const segE = Math.min(LUNCH2_E, sim.crushEndMin);
+    bars += segBar(yCursor, BAR_H, LUNCH1_E, segE, '#BA7517',
+      `${inp.wkCrush + inp.wkTrans}명`,
+      '파쇄 (점심 2차)',
+      `시각: 12:30~13:30|인원: ${inp.wkCrush + inp.wkTrans}명 (파쇄 ${inp.wkCrush} + 이송 ${inp.wkTrans} 합류)|전처리조 점심`,
+      {fillOpacity: 0.75});
+  }
+
+  // 13:30~ 풀가동
+  if (sim.crushEndMin > LUNCH2_E) {
+    bars += segBar(yCursor, BAR_H, LUNCH2_E, sim.crushEndMin, '#BA7517',
+      `${inp.wkPackPeak}명 풀가동`,
+      '파쇄 풀가동',
+      `시각: 13:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명 (전처리조 합류)`);
   }
   yCursor += ROW_H;
 
@@ -885,49 +804,43 @@ function ttRender() {
     isFull: slot.sum === inp.totalWorkers,
   }));
   const wkTbl = `
-    <div style="border:2px solid #185FA5;border-radius:6px;flex:1;display:flex;overflow:hidden">
-    <table style="width:100%;height:100%;border-collapse:collapse;font-size:13px;background:#fff">
+    <div style="border:2px solid #185FA5;border-radius:6px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:15px;background:#fff">
       <thead>
         <tr style="background:linear-gradient(135deg,#185FA5,#1a6db5);color:#fff">
-          <th style="padding:10px 8px;font-weight:700;text-align:left;letter-spacing:0.5px;white-space:nowrap;border:1px solid #0d4a8a;font-size:12px">시간대</th>
-          ${wkHeads.map((h,i) => `<th style="padding:10px 6px;font-weight:700;border:1px solid #0d4a8a;font-size:12px">${h}</th>`).join('')}
-          <th style="padding:10px 8px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:12px">합계</th>
+          <th style="padding:14px 12px;font-weight:700;text-align:left;letter-spacing:0.5px;white-space:nowrap;border:1px solid #0d4a8a;font-size:14px">시간대</th>
+          ${wkHeads.map((h,i) => `<th style="padding:14px 8px;font-weight:700;border:1px solid #0d4a8a;font-size:14px">${h}</th>`).join('')}
+          <th style="padding:14px 12px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:14px">합계</th>
         </tr>
       </thead>
       <tbody>
       ${slotsRows.map((r, idx) => {
         const stripe = idx % 2 === 1 ? 'background:#f7f9fc' : '';
-        // height:1px + height:100% trick: 모든 행 균등 분배
-        return `<tr style="${stripe}height:1px">
-          <td class="tt-cell" style="padding:8px;font-weight:600;border:1px solid #ddd;font-size:12px;vertical-align:middle">${r.range}</td>
+        return `<tr style="${stripe}">
+          <td class="tt-cell" style="padding:14px 12px;font-weight:600;border:1px solid #ddd;font-size:14px;vertical-align:middle">${r.range}</td>
           ${r.cells.map((v, ci) => {
             const isZero = v === 0;
             const color = isZero ? '#ccc' : wkColors[ci];
             const fw = isZero ? 'normal' : (v >= 10 ? 700 : 600);
-            return `<td class="tt-cell" style="padding:8px 6px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw};vertical-align:middle">${v||'·'}</td>`;
+            return `<td class="tt-cell" style="padding:14px 8px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw};font-size:15px;vertical-align:middle">${v||'·'}</td>`;
           }).join('')}
-          <td class="tt-cell" style="padding:8px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:13px;border:1px solid #ddd;vertical-align:middle">${r.sum}${r.isFull?' ✓':''}</td>
+          <td class="tt-cell" style="padding:14px 12px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:15px;border:1px solid #ddd;vertical-align:middle">${r.sum}${r.isFull?' ✓':''}</td>
         </tr>`;
       }).join('')}
       </tbody>
     </table>
     </div>`;
 
-  // 좌(타임라인) + 우(인원활용)
+  // 타임라인 위, 인원표 아래 (전체 너비)
   const splitView = `
-    <style>
-      @media (max-width: 900px) { #tt-split { grid-template-columns: 1fr !important; } }
-    </style>
-    <div id="tt-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:stretch">
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
-        <div style="font-size:13px;font-weight:600;margin-bottom:10px">📋 공정 타임라인</div>
-        <div style="overflow-x:auto;flex:1">${timelineSvg}</div>
-      </div>
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">👥 시간대별 인원 활용</div>
-        <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:8px">정원 ${inp.totalWorkers}명 · 합계 일치 ✓</div>
-        <div style="overflow-x:auto;flex:1;display:flex;flex-direction:column">${wkTbl}</div>
-      </div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">📋 공정 타임라인</div>
+      <div style="overflow-x:auto">${timelineSvg}</div>
+    </div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">👥 시간대별 인원 활용</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">정원 ${inp.totalWorkers}명 · 합계 일치 ✓</div>
+      ${wkTbl}
     </div>`;
 
   // 공정별 현황 표 (수율·생산성 직접 수정 가능)
@@ -1122,7 +1035,6 @@ function ttRender() {
 
   document.getElementById('tt-result').innerHTML = `
     ${conclusion}
-    ${modeCompare}
     ${planBox}
     ${splitView}
     ${whyCards}
