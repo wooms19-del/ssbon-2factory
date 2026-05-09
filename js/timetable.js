@@ -285,36 +285,76 @@ function ttSimulate(inp) {
   //  (2) 자숙 마지막 와건 종료 + 잔량 처리 시간 (마지막 탱크 출하 후 그 분량 파쇄)
   const crushStartMin = wagonEndTimes[0];
   const lastWagonEnd = wagonEndTimes[wagonEndTimes.length - 1];
-  const crushSpeedKgPerMin = inp.pCrush * inp.wkPackPeak / 60;  // kg/분
-  const crushSelfMin = crushIn / crushSpeedKgPerMin;
-  const crushSelfEndMin = crushStartMin + Math.round(crushSelfMin);
   // 마지막 탱크 산출 = tankKg × cookYield (kg)
   const lastTankOutKg = TT_FIXED.tankKg * (cookYield / 100);
-  const lastTankCrushMin = lastTankOutKg / crushSpeedKgPerMin;
-  const crushAfterLastWagonEndMin = lastWagonEnd + Math.round(lastTankCrushMin);
-  const crushEndMin = Math.max(crushSelfEndMin, crushAfterLastWagonEndMin);
+
+  // ── 파쇄 시뮬: 시간대별 가용 인원 적용 ──
+  // 시간대:
+  //  · crushStart ~ 11:30 : 파쇄 14명 (점심 1차 진입 전, 짧음)
+  //  · 11:30 ~ 12:30 : 0명 (후공정조 점심 1차, 파쇄 정지)
+  //  · 12:30 ~ 13:30 : wkCrush + wkTrans 명 (이송 합류)
+  //  · 13:30 ~ : wkPackPeak 명 (전처리조 일부 합류, 풀가동)
+  const LUNCH1_S = 11*60 + 30;
+  const LUNCH1_E = 12*60 + 30;
+  const LUNCH2_E = 13*60 + 30;
+  const crushWorkersAt = (t) => {
+    if (t < LUNCH1_S) return inp.wkCrush;
+    if (t < LUNCH1_E) return 0;          // 점심 1차 정지
+    if (t < LUNCH2_E) return inp.wkCrush + inp.wkTrans;  // 이송 합류
+    return inp.wkPackPeak;                // 풀가동
+  };
+  // 파쇄 자체 시간: crushStart 부터 1분씩 진행, processed가 crushIn 도달하면 종료
+  let crushSelfEndMin = crushStartMin;
+  let crushProcessed = 0;
+  for (let t = crushStartMin; t < 26*60 && crushProcessed < crushIn; t++) {
+    const w = crushWorkersAt(t);
+    if (w > 0) crushProcessed += inp.pCrush * w / 60;  // 분당 처리 kg
+    crushSelfEndMin = t + 1;
+  }
+  // 마지막 탱크 산출분이 파쇄 라인 통과 (마지막 와건 종료 후)
+  // 시간대별 인원 적용 시뮬레이션
+  let lastTankCrushEndMin = lastWagonEnd;
+  let lastTankProcessed = 0;
+  for (let t = lastWagonEnd; t < 26*60 && lastTankProcessed < lastTankOutKg; t++) {
+    const w = crushWorkersAt(t);
+    if (w > 0) lastTankProcessed += inp.pCrush * w / 60;
+    lastTankCrushEndMin = t + 1;
+  }
+  const crushEndMin = Math.max(crushSelfEndMin, lastTankCrushEndMin);
   const crushHours = (crushEndMin - crushStartMin) / 60;
 
-  // 내포장: 파쇄 시작 1시간 후 시작 (대차 1개 누적 후 안정 가동)
-  // 종료 = 파쇄 종료 시점에서 마지막 파쇄 산출분이 내포장 라인 통과하는 시간 추가
-  //
-  // 정확한 계산:
-  //  - 파쇄에서 마지막에 나오는 산출 = 마지막 자숙 탱크 분량 × 파쇄 수율
-  //  - 그 마지막 산출량이 내포장 라인 통과하는 시간 = 마지막 산출 EA / 내포장 속도
-  //  - 내포장 종료 = max(자체 처리 종료, 파쇄 종료 + 마지막 산출분 처리 시간)
-  const packStartMin = crushStartMin + 60;
-  const packSelfMin = pouches / inp.pPackEa;
-  const packSelfEndMin = packStartMin + Math.round(packSelfMin);
+  // ── 내포장 시뮬: 시간대별 가용 인원 적용 ──
+  // 시간대:
+  //  · packStart 이후 ~ 11:30 : 내포장 6명 (계산상 시작이지만 인원 배치 시점 따라 다름)
+  //  · 11:30 ~ 12:30 : 0명 (점심 1차)
+  //  · 12:30 ~ 13:30 : 0명 (아직 본격 가동 전, 인원 점심 후 13:30 부터)
+  //  · 13:30 ~ : 6명 (wkPack)
+  // 단순화: 13:30 이전엔 사실상 가동 안 하므로 packStart는 max(crushStart+60, 13:30)으로 보정
+  const packStartMin = Math.max(crushStartMin + 60, LUNCH2_E);
+  const packWorkersAt = (t) => {
+    if (t < LUNCH2_E) return 0;
+    return inp.wkPack;
+  };
+  // packSpeedAt: 인원 있을 때 inp.pPackEa, 없을 때 0
+  const packSpeedAt = (t) => packWorkersAt(t) > 0 ? inp.pPackEa : 0;
 
-  // 마지막 파쇄 산출분 (= 마지막 자숙 탱크 산출 × 파쇄 수율)
+  // 자체 처리 시간: packStart부터 처리량이 pouches 도달까지
+  let packSelfEndMin = packStartMin;
+  let packProcessed = 0;
+  for (let t = packStartMin; t < 28*60 && packProcessed < pouches; t++) {
+    packProcessed += packSpeedAt(t);
+    packSelfEndMin = t + 1;
+  }
+  // 마지막 파쇄 산출분이 내포장 라인 통과 (파쇄 종료 후)
   const lastTankPackEa = Math.round(lastTankOutKg * (inp.yCrush / 100) / TT_PACK_KG_PER_POUCH);
-  // 그 분량이 내포장 라인 통과하는 시간
-  const lastBatchPackMin = Math.round(lastTankPackEa / inp.pPackEa);
-  // 파쇄 종료 + 마지막 분량 통과 시간
-  const packAfterCrushEndMin = crushEndMin + lastBatchPackMin;
-
+  let lastBatchPackEndMin = crushEndMin;
+  let lastBatchProcessed = 0;
+  for (let t = crushEndMin; t < 28*60 && lastBatchProcessed < lastTankPackEa; t++) {
+    lastBatchProcessed += packSpeedAt(t);
+    lastBatchPackEndMin = t + 1;
+  }
   // 둘 중 늦은 쪽
-  const packEndMin = Math.max(packSelfEndMin, packAfterCrushEndMin);
+  const packEndMin = Math.max(packSelfEndMin, lastBatchPackEndMin);
   const packMin = packEndMin - packStartMin;
 
   // 레토르트: 3대 병렬 가능 + 대차 8개 한도
