@@ -477,6 +477,9 @@ function ttPlanSlots(inp, sim) {
   const total = inp.totalWorkers;
   const mgr = inp.mgrWorkers;
   const early = inp.earlyWorkers;
+  const lunchMode = sim.lunchMode || 'A';
+  const halfPeak = Math.ceil(inp.wkPackPeak / 2);
+  const halfPack = Math.ceil(inp.wkPack / 2);
   const slots = [];
 
   // 슬롯 1: 조출~관리자 출근
@@ -496,9 +499,7 @@ function ttPlanSlots(inp, sim) {
       sum: early + mgr,
     });
   }
-  // 슬롯 3: 한국인 합류~점심 1차 (풀가동)
-  // 09:00~11:30 = 전처리 + 외포장(제수 포함) + 세팅 + 관리
-  // 제수 인원이 있으면 외포장에 포함, 나머지 = 세팅
+  // 슬롯 3: 한국인 합류~점심 1차
   const remainPeak1 = total - inp.wkPre - mgr;
   const settingDefault = 3;
   const outerPack1 = Math.max(0, remainPeak1 - settingDefault);
@@ -507,23 +508,53 @@ function ttPlanSlots(inp, sim) {
     cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
     sum: total,
   });
-  // 슬롯 4: 점심 1차 (11:30~12:30)
+
+  // ── 점심 시간대 슬롯 (모드별 분기) ──
+  if (lunchMode === 'A') {
+    // 모드 A: 한꺼번에 점심
+    // 11:30~12:30 점심 1차 (후공정조 통째)
+    slots.push({
+      range: `11:30~12:30`,
+      cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
+      sum: total,
+    });
+    // 12:30~13:30 점심 2차 (전처리조)
+    slots.push({
+      range: `12:30~13:30`,
+      cells: { 파쇄: inp.wkCrush + inp.wkTrans, 점심: total - inp.wkCrush - inp.wkTrans - 1, 관리: 1 },
+      sum: total,
+    });
+  } else if (lunchMode === 'B') {
+    // 모드 B: 교대 점심 - 11:30~12:30 후공정 절반씩, 12:30~13:30 전처리조 절반씩
+    // 11:30~12:30: 파쇄 절반(halfPeak) + 후공정 절반 점심 + 전처리조 가동 + 관리
+    // 단순화: 두 시간대로 분리해서 표시 (한 행만)
+    const lunch1 = total - halfPeak - inp.wkPre - 1;  // 점심 인원
+    slots.push({
+      range: `11:30~12:30 (교대)`,
+      cells: { 전처리: inp.wkPre, 파쇄: halfPeak, 점심: Math.max(0, lunch1), 관리: 1 },
+      sum: total,
+    });
+    // 12:30~13:30: 파쇄 풀가동(wkPackPeak) + 전처리조 절반 점심
+    const lunch2 = total - inp.wkPackPeak - 1;
+    slots.push({
+      range: `12:30~13:30 (교대)`,
+      cells: { 파쇄: inp.wkPackPeak, 점심: Math.max(0, lunch2), 관리: 1 },
+      sum: total,
+    });
+  } else {
+    // 모드 C: 동시 점심 (11:30~12:30 모두 점심, 12:30~ 풀가동)
+    slots.push({
+      range: `11:30~12:30 (동시)`,
+      cells: { 점심: total - 1, 관리: 1 },
+      sum: total,
+    });
+  }
+
+  // 슬롯: 풀가동 (13:30~내포장종료) - 모드 B/C는 12:30부터 가능
+  const fullStart = (lunchMode === 'B' || lunchMode === 'C') ? '12:30' : '13:30';
+  const fullStartTime = (lunchMode === 'B' || lunchMode === 'C') ? '13:30~' + ttFmt(sim.packEndMin) : `13:30~${ttFmt(sim.packEndMin)}`;
   slots.push({
-    range: `11:30~12:30`,
-    cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
-    sum: total,
-  });
-  // 슬롯 5: 점심 2차 (12:30~13:30)
-  // ★ 내포장 시작 전에는 이송 인원도 파쇄로 합류
-  slots.push({
-    range: `12:30~13:30`,
-    cells: { 파쇄: inp.wkCrush + inp.wkTrans, 점심: total - inp.wkCrush - inp.wkTrans - 1, 관리: 1 },
-    sum: total,
-  });
-  // 슬롯 6: 풀가동 (13:30~내포장종료)
-  // 자동 분배: 파쇄 = wkPackPeak (자동 계산), 내포장+이송+관리+제수 고정
-  slots.push({
-    range: `13:30~${ttFmt(sim.packEndMin)}`,
+    range: fullStartTime,
     cells: {
       파쇄: inp.wkPackPeak,
       내포장: inp.wkPack,
@@ -533,7 +564,7 @@ function ttPlanSlots(inp, sim) {
     },
     sum: total,
   });
-  // 슬롯 7: 내포장 종료 후 청소 전환
+  // 슬롯: 내포장 종료 후 청소 전환
   const cleanRest = total - inp.wkTrans - mgr;
   slots.push({
     range: `${ttFmt(sim.packEndMin)}~17:30`,
@@ -718,45 +749,82 @@ function ttRender() {
     yCursor += ROW_H;
   });
 
-  // ── 파쇄 (분할: 시작 / 점심정지 / 점심2차 / 풀가동) ──
+  // ── 파쇄 (분할: 점심 모드별 다르게) ──
   bars += rowLabel(yCursor, BAR_H, '파쇄');
-  // 시작 ~ 11:30 (와건 종료 직후 짧음)
+  const lunchMode = sim.lunchMode || 'A';
+  const halfPeak = Math.ceil(inp.wkPackPeak / 2);
+
+  // 시작 ~ 11:30 (와건 종료 직후 짧음, 모든 모드 공통)
   if (sim.crushStartMin < LUNCH1_S) {
     bars += segBar(yCursor, BAR_H, sim.crushStartMin, LUNCH1_S, '#BA7517',
       `${inp.wkCrush}명`,
       '파쇄 시작 직후',
-      `시각: ${ttFmt(sim.crushStartMin)}~11:30 (${LUNCH1_S - sim.crushStartMin}분)|인원: ${inp.wkCrush}명|점심 1차 진입 직전`,
+      `시각: ${ttFmt(sim.crushStartMin)}~11:30|인원: ${inp.wkCrush}명`,
       {fillOpacity: 0.55});
   }
-  // 11:30 ~ 12:30 점심 정지
-  if (sim.crushEndMin > LUNCH1_S) {
-    const stopE = Math.min(LUNCH1_E, sim.crushEndMin);
-    bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), stopE, '#fff',
-      ``,
-      '파쇄 정지 (점심 1차)',
-      `시각: 11:30~12:30|후공정조 점심|파쇄 인원 0명`,
-      {stroke: '#BA7517', strokeWidth: 1, dash: '3 2'});
-    // 정지 텍스트
-    if (stopE > LUNCH1_S + 15) {
-      const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(stopE)) / 2;
-      bars += `<text x="${cx}" y="${yCursor+BAR_H/2+4}" text-anchor="middle" font-size="9" fill="#BA7517" font-weight="600" pointer-events="none">점심·정지</text>`;
+
+  if (lunchMode === 'A') {
+    // A: 11:30~12:30 정지, 12:30~13:30 wkCrush+wkTrans, 13:30~ wkPackPeak
+    if (sim.crushEndMin > LUNCH1_S) {
+      const stopE = Math.min(LUNCH1_E, sim.crushEndMin);
+      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), stopE, '#fff',
+        ``, '파쇄 정지 (점심 1차)',
+        `시각: 11:30~12:30|후공정조 통째 점심|파쇄 인원 0명`,
+        {stroke: '#BA7517', strokeWidth: 1, dash: '3 2'});
+      if (stopE > LUNCH1_S + 15) {
+        const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(stopE)) / 2;
+        bars += `<text x="${cx}" y="${yCursor+BAR_H/2+4}" text-anchor="middle" font-size="9" fill="#BA7517" font-weight="600" pointer-events="none">점심·정지</text>`;
+      }
     }
-  }
-  // 12:30 ~ 13:30 점심 2차 (이송 합류, 16명)
-  if (sim.crushEndMin > LUNCH1_E) {
-    const segE = Math.min(LUNCH2_E, sim.crushEndMin);
-    bars += segBar(yCursor, BAR_H, LUNCH1_E, segE, '#BA7517',
-      `${inp.wkCrush + inp.wkTrans}명`,
-      '파쇄 (점심 2차 시간)',
-      `시각: 12:30~13:30|인원: ${inp.wkCrush + inp.wkTrans}명 (파쇄 ${inp.wkCrush} + 이송 ${inp.wkTrans} 합류)|시간당 처리: ${(inp.pCrush * (inp.wkCrush + inp.wkTrans)).toFixed(0)}kg/h`,
-      {fillOpacity: 0.75});
-  }
-  // 13:30 ~ 종료 (풀가동)
-  if (sim.crushEndMin > LUNCH2_E) {
-    bars += segBar(yCursor, BAR_H, LUNCH2_E, sim.crushEndMin, '#BA7517',
-      `${inp.wkPackPeak}명 풀가동`,
-      '파쇄 풀가동',
-      `시각: 13:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명 (전처리조 합류)|시간당 처리: ${(inp.pCrush * inp.wkPackPeak).toFixed(0)}kg/h|총 파쇄: ${Math.round(sim.crushIn).toLocaleString()}kg → 산출 ${Math.round(sim.crushOut).toLocaleString()}kg`);
+    if (sim.crushEndMin > LUNCH1_E) {
+      const segE = Math.min(LUNCH2_E, sim.crushEndMin);
+      bars += segBar(yCursor, BAR_H, LUNCH1_E, segE, '#BA7517',
+        `${inp.wkCrush + inp.wkTrans}명`,
+        '파쇄 (점심 2차)',
+        `시각: 12:30~13:30|인원: ${inp.wkCrush + inp.wkTrans}명 (이송 합류)`,
+        {fillOpacity: 0.75});
+    }
+    if (sim.crushEndMin > LUNCH2_E) {
+      bars += segBar(yCursor, BAR_H, LUNCH2_E, sim.crushEndMin, '#BA7517',
+        `${inp.wkPackPeak}명 풀가동`,
+        '파쇄 풀가동',
+        `시각: 13:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명 (전처리조 합류)`);
+    }
+  } else if (lunchMode === 'B') {
+    // B 교대: 11:30~12:30 절반(halfPeak), 12:30~ wkPackPeak
+    if (sim.crushEndMin > LUNCH1_S) {
+      const segE = Math.min(LUNCH1_E, sim.crushEndMin);
+      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), segE, '#BA7517',
+        `${halfPeak}명 (교대)`,
+        '파쇄 (교대 점심)',
+        `시각: 11:30~12:30|인원: ${halfPeak}명 (절반 가동, 절반 점심)|교대로 끊김 없음`,
+        {fillOpacity: 0.7});
+    }
+    if (sim.crushEndMin > LUNCH1_E) {
+      bars += segBar(yCursor, BAR_H, LUNCH1_E, sim.crushEndMin, '#BA7517',
+        `${inp.wkPackPeak}명 풀가동`,
+        '파쇄 풀가동',
+        `시각: 12:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명`);
+    }
+  } else {
+    // C 동시: 11:30~12:30 정지, 12:30~ wkPackPeak
+    if (sim.crushEndMin > LUNCH1_S) {
+      const stopE = Math.min(LUNCH1_E, sim.crushEndMin);
+      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), stopE, '#fff',
+        ``, '파쇄 정지 (동시 점심)',
+        `시각: 11:30~12:30|모두 점심|파쇄 0명`,
+        {stroke: '#BA7517', strokeWidth: 1, dash: '3 2'});
+      if (stopE > LUNCH1_S + 15) {
+        const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(stopE)) / 2;
+        bars += `<text x="${cx}" y="${yCursor+BAR_H/2+4}" text-anchor="middle" font-size="9" fill="#BA7517" font-weight="600" pointer-events="none">점심·정지</text>`;
+      }
+    }
+    if (sim.crushEndMin > LUNCH1_E) {
+      bars += segBar(yCursor, BAR_H, LUNCH1_E, sim.crushEndMin, '#BA7517',
+        `${inp.wkPackPeak}명 풀가동`,
+        '파쇄 풀가동',
+        `시각: 12:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명`);
+    }
   }
   yCursor += ROW_H;
 
