@@ -353,6 +353,27 @@ function ttSimulate(inp) {
   const crushEndMin = Math.max(crushSelfEndMin, lastTankCrushEndMin);
   const crushHours = (crushEndMin - crushStartMin) / 60;
 
+  // ── 각 자숙 호별 파쇄 처리 종료 시점 시뮬 ──
+  // i호 와건 종료 → 그 산출(tankOutKg)이 파쇄 처리되는 종료 시점
+  // 단 이전 호 처리가 끝나야 시작 (FIFO)
+  const tankCrushTimes = []; // [{호:i, start:와건종료, end:처리종료, kg:산출량}]
+  let prevTankEnd = wagonEndTimes[0];  // 첫 호는 자기 와건 종료 시점부터 시작
+  for (let i = 0; i < tankInTimes.length; i++) {
+    const isLast = i === tankInTimes.length - 1;
+    const tankKg = isLast ? Math.max(0, cookIn - i*TT_FIXED.tankKg) : TT_FIXED.tankKg;
+    const tankOutKg = tankKg * cookYield / 100;
+    // 시작 = max(이전 호 처리 종료, 이 호의 와건 종료)
+    const startMin = Math.max(prevTankEnd, wagonEndTimes[i]);
+    let processed = 0;
+    let endMin = startMin;
+    for (let t = startMin; t < 28*60 && processed < tankOutKg; t++) {
+      const w = crushWorkersAt(t);
+      if (w > 0) processed += inp.pCrush * w / 60;
+      endMin = t + 1;
+    }
+    tankCrushTimes.push({ idx: i+1, start: startMin, end: endMin, kg: tankOutKg, tankInKg: tankKg });
+    prevTankEnd = endMin;
+  }
   // ── 내포장 시뮬: 동적 ──
   //
   // 점심 1차에 전처리조가 파쇄 합류 → 파쇄 산출도 그만큼 누적
@@ -457,6 +478,7 @@ function ttSimulate(inp) {
     startMin, preEndMin, joinMin,
     phase1Min, phase1Kg,
     tankInTimes, tankOutTimes, wagonEndTimes,
+    tankCrushTimes,
     crushStartMin, crushEndMin,
     crushSelfEndMin, lastTankCrushEndMin, lastTankOutKg,
     packStartMin, packEndMin,
@@ -692,59 +714,41 @@ function ttRender() {
     yCursor += ROW_H;
   });
 
-  // ── 파쇄 (동적 분할) ──
+  // ── 파쇄 (자숙 호별 분할) ──
   bars += rowLabel(yCursor, BAR_H, '파쇄');
-  const preEndedBeforeLunch = sim.preEndMin <= LUNCH1_S;
-
-  // 시작 ~ 11:30
-  if (sim.crushStartMin < LUNCH1_S) {
-    bars += segBar(yCursor, BAR_H, sim.crushStartMin, LUNCH1_S, '#BA7517',
-      `${inp.wkCrush}명`,
-      '파쇄 시작 직후',
-      `시각: ${ttFmt(sim.crushStartMin)}~11:30|인원: ${inp.wkCrush}명`,
-      {fillOpacity: 0.55});
-  }
-
-  // 11:30~12:30 점심 1차
-  if (sim.crushEndMin > LUNCH1_S) {
-    const segE = Math.min(LUNCH1_E, sim.crushEndMin);
-    if (preEndedBeforeLunch) {
-      // 전처리 끝났으면 → 전처리조가 파쇄 합류
-      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), segE, '#BA7517',
-        `${inp.wkPre}명 (전처리조)`,
-        '파쇄 (점심 1차 시간 - 전처리조 합류)',
-        `시각: 11:30~12:30|전처리 ${ttFmt(sim.preEndMin)}에 끝나서 전처리조 ${inp.wkPre}명이 파쇄로 합류|후공정조는 점심`,
-        {fillOpacity: 0.7});
-    } else {
-      // 전처리 진행 중 → 파쇄 정지
-      bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), segE, '#fff',
-        ``, '파쇄 정지 (점심 1차)',
-        `시각: 11:30~12:30|후공정조 점심|전처리도 진행 중이라 파쇄 인원 없음`,
-        {stroke: '#BA7517', strokeWidth: 1, dash: '3 2'});
-      if (segE > LUNCH1_S + 15) {
-        const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(segE)) / 2;
-        bars += `<text x="${cx}" y="${yCursor+BAR_H/2+4}" text-anchor="middle" font-size="9" fill="#BA7517" font-weight="600" pointer-events="none">점심·정지</text>`;
-      }
+  // 각 호별 막대 + 호버 툴팁에 모든 정보
+  // 색상: 호별로 살짝 다르게 (구분 잘 보이게)
+  const tankCrushColors = ['#BA7517', '#A66616', '#925815', '#7E4A14'];
+  sim.tankCrushTimes.forEach((tc, i) => {
+    const color = tankCrushColors[i % tankCrushColors.length];
+    const durMin = tc.end - tc.start;
+    // 막대에 시간대별 인원 변화 정보를 툴팁에 포함
+    const crossLunch1 = tc.start < LUNCH1_S && tc.end > LUNCH1_S;
+    const crossLunch2 = tc.start < LUNCH1_E && tc.end > LUNCH1_E;
+    const crossPeak = tc.start < LUNCH2_E && tc.end > LUNCH2_E;
+    const segmentInfo = [];
+    if (tc.start < LUNCH1_S) segmentInfo.push(`${ttFmt(tc.start)}~${ttFmt(Math.min(LUNCH1_S, tc.end))}: ${inp.wkCrush}명`);
+    if (crossLunch1 || (tc.start >= LUNCH1_S && tc.start < LUNCH1_E)) {
+      const segS = Math.max(tc.start, LUNCH1_S);
+      const segE = Math.min(tc.end, LUNCH1_E);
+      const w = sim.preEndMin <= LUNCH1_S ? inp.wkPre : 0;
+      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${w}명${w>0?' (전처리조)':' (정지)'}`);
     }
-  }
-
-  // 12:30~13:30 점심 2차 (후공정조 복귀 + 이송)
-  if (sim.crushEndMin > LUNCH1_E) {
-    const segE = Math.min(LUNCH2_E, sim.crushEndMin);
-    bars += segBar(yCursor, BAR_H, LUNCH1_E, segE, '#BA7517',
-      `${inp.wkCrush + inp.wkTrans}명`,
-      '파쇄 (점심 2차)',
-      `시각: 12:30~13:30|인원: ${inp.wkCrush + inp.wkTrans}명 (파쇄 ${inp.wkCrush} + 이송 ${inp.wkTrans} 합류)|전처리조 점심`,
-      {fillOpacity: 0.75});
-  }
-
-  // 13:30~ 풀가동
-  if (sim.crushEndMin > LUNCH2_E) {
-    bars += segBar(yCursor, BAR_H, LUNCH2_E, sim.crushEndMin, '#BA7517',
-      `${inp.wkPackPeak}명 풀가동`,
-      '파쇄 풀가동',
-      `시각: 13:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명 (전처리조 합류)`);
-  }
+    if (crossLunch2 || (tc.start >= LUNCH1_E && tc.start < LUNCH2_E)) {
+      const segS = Math.max(tc.start, LUNCH1_E);
+      const segE = Math.min(tc.end, LUNCH2_E);
+      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${inp.wkCrush + inp.wkTrans}명 (이송 합류)`);
+    }
+    if (tc.end > LUNCH2_E) {
+      const segS = Math.max(tc.start, LUNCH2_E);
+      segmentInfo.push(`${ttFmt(segS)}~${ttFmt(tc.end)}: ${inp.wkPackPeak}명 풀가동`);
+    }
+    bars += segBar(yCursor, BAR_H, tc.start, tc.end, color,
+      `자숙${tc.idx}호 ${Math.round(tc.kg)}kg`,
+      `자숙 ${tc.idx}호분 파쇄`,
+      `자숙 ${tc.idx}호 산출: ${Math.round(tc.kg)}kg|시각: ${ttFmt(tc.start)}~${ttFmt(tc.end)} (${durMin}분)|와건 종료: ${ttFmt(sim.wagonEndTimes[i])}|${segmentInfo.join('|')}`,
+      {fillOpacity: 0.85});
+  });
   yCursor += ROW_H;
 
   // ── 내포장 ──
@@ -808,7 +812,7 @@ function ttRender() {
     <table style="width:100%;height:100%;border-collapse:collapse;font-size:13px;background:#fff;table-layout:fixed">
       <colgroup>
         <col style="width:14%">
-        ${wkHeads.map(() => `<col>`).join('')}
+        ${wkHeads.map(() => `<col style="width:8.55%">`).join('')}
         <col style="width:9%">
       </colgroup>
       <thead>
