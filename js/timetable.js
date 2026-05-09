@@ -243,7 +243,9 @@ async function ttPeriodChange() {
 }
 
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
-function ttSimulate(inp) {
+function ttSimulate(inp, lunchMode) {
+  // lunchMode: 'A' (한꺼번에/기본), 'B' (교대/절반씩), 'C' (동시)
+  lunchMode = lunchMode || 'A';
   const startMin = ttToMin(inp.startTime);
   const joinMin = ttToMin(inp.joinTime);
   const cookYield = TT_COOK_YIELD[inp.meatType] || 56.8;
@@ -299,20 +301,40 @@ function ttSimulate(inp) {
   // 마지막 탱크 산출 = tankKg × cookYield (kg)
   const lastTankOutKg = TT_FIXED.tankKg * (cookYield / 100);
 
-  // ── 파쇄 시뮬: 시간대별 가용 인원 적용 ──
-  // 시간대:
-  //  · crushStart ~ 11:30 : 파쇄 14명 (점심 1차 진입 전, 짧음)
-  //  · 11:30 ~ 12:30 : 0명 (후공정조 점심 1차, 파쇄 정지)
-  //  · 12:30 ~ 13:30 : wkCrush + wkTrans 명 (이송 합류)
-  //  · 13:30 ~ : wkPackPeak 명 (전처리조 일부 합류, 풀가동)
+  // ── 파쇄 시뮬: 시간대별 가용 인원 적용 (점심 모드별) ──
   const LUNCH1_S = 11*60 + 30;
   const LUNCH1_E = 12*60 + 30;
   const LUNCH2_E = 13*60 + 30;
+
+  // 점심 모드별 파쇄 인원 함수
+  // A (한꺼번에): 11:30~12:30 후공정 통째 점심 → 파쇄 0명
+  //                12:30~13:30 전처리조 점심 → 파쇄 = wkCrush + wkTrans
+  // B (교대): 절반씩 — 11:30~13:30 사이 항상 절반 가동
+  //           11:30~12:00, 12:00~12:30 후공정 절반씩 점심 → 파쇄 절반씩 = ceil(wkPackPeak/2)
+  //           12:30~13:00, 13:00~13:30 전처리조 절반씩 점심 → 파쇄는 이송 포함 풀가동 절반
+  // C (동시): 11:30~12:30 모두 점심 → 파쇄 0명
+  //           12:30~ 풀가동 (wkPackPeak)
+  const halfPeak = Math.ceil(inp.wkPackPeak / 2);
   const crushWorkersAt = (t) => {
     if (t < LUNCH1_S) return inp.wkCrush;
-    if (t < LUNCH1_E) return 0;          // 점심 1차 정지
-    if (t < LUNCH2_E) return inp.wkCrush + inp.wkTrans;  // 이송 합류
-    return inp.wkPackPeak;                // 풀가동
+    if (lunchMode === 'A') {
+      if (t < LUNCH1_E) return 0;                          // 점심 1차 정지
+      if (t < LUNCH2_E) return inp.wkCrush + inp.wkTrans;  // 이송 합류
+      return inp.wkPackPeak;
+    }
+    if (lunchMode === 'B') {
+      // 11:30~12:30: 후공정 교대 → 항상 절반 가동
+      if (t < LUNCH1_E) return halfPeak;
+      // 12:30~13:30: 전처리조 교대 → 후공정 풀가동
+      if (t < LUNCH2_E) return inp.wkPackPeak;
+      return inp.wkPackPeak;
+    }
+    if (lunchMode === 'C') {
+      // 11:30~12:30: 모두 점심
+      if (t < LUNCH1_E) return 0;
+      return inp.wkPackPeak;  // 12:30 부터 풀가동
+    }
+    return inp.wkPackPeak;
   };
   // 파쇄 자체 시간: crushStart 부터 1분씩 진행, processed가 crushIn 도달하면 종료
   let crushSelfEndMin = crushStartMin;
@@ -334,15 +356,20 @@ function ttSimulate(inp) {
   const crushEndMin = Math.max(crushSelfEndMin, lastTankCrushEndMin);
   const crushHours = (crushEndMin - crushStartMin) / 60;
 
-  // ── 내포장 시뮬: 시간대별 가용 인원 적용 ──
-  // 시간대:
-  //  · packStart 이후 ~ 11:30 : 내포장 6명 (계산상 시작이지만 인원 배치 시점 따라 다름)
-  //  · 11:30 ~ 12:30 : 0명 (점심 1차)
-  //  · 12:30 ~ 13:30 : 0명 (아직 본격 가동 전, 인원 점심 후 13:30 부터)
-  //  · 13:30 ~ : 6명 (wkPack)
-  // 단순화: 13:30 이전엔 사실상 가동 안 하므로 packStart는 max(crushStart+60, 13:30)으로 보정
-  const packStartMin = Math.max(crushStartMin + 60, LUNCH2_E);
+  // ── 내포장 시뮬: 시간대별 가용 인원 (점심 모드별) ──
+  // A (한꺼번에): 13:30 이전 0명, 13:30~ wkPack
+  // B (교대): 11:30~12:30 절반 가동(중에 가능), 단순화 — 12:30 이후 풀가동
+  // C (동시): 12:30 이후 풀가동
+  const halfPack = Math.ceil(inp.wkPack / 2);
+  const packStartMin = (lunchMode === 'B')
+    ? Math.max(crushStartMin + 60, LUNCH1_E)   // 모드 B: 12:30 부터 시작 가능
+    : Math.max(crushStartMin + 60, LUNCH2_E);  // A, C: 13:30 이후
   const packWorkersAt = (t) => {
+    if (lunchMode === 'B') {
+      if (t < LUNCH1_E) return 0;          // 11:30~12:30 — 단순화: 내포장은 후공정조 교대 따라 0
+      return inp.wkPack;                    // 12:30~ 본격 가동
+    }
+    // A, C
     if (t < LUNCH2_E) return 0;
     return inp.wkPack;
   };
@@ -429,6 +456,7 @@ function ttSimulate(inp) {
   const retortEndMin = Math.max(...retortEndTimes);
 
   return {
+    lunchMode,
     preIn, preOut, cookIn, cookOut, crushIn, crushOut, packIn, packOut, pouches,
     preHours, crushHours, packMin,
     startMin, preEndMin, joinMin,
@@ -548,13 +576,50 @@ function ttRender() {
       </div>`;
     return;
   }
-  const sim = ttSimulate(inp);
+  // ★ 3가지 점심 모드 자동 시뮬 → 가장 빨리 끝나는 모드 자동 선택
+  const simA = ttSimulate(inp, 'A');
+  const simB = ttSimulate(inp, 'B');
+  const simC = ttSimulate(inp, 'C');
+  const modeResults = [
+    { mode: 'A', name: '한꺼번에', desc: '후공정조 통째 점심 (11:30~12:30)', sim: simA },
+    { mode: 'B', name: '교대 점심', desc: '절반씩 교대로 점심 (파쇄 끊김 없음)', sim: simB },
+    { mode: 'C', name: '동시 점심', desc: '전체 11:30~12:30 점심', sim: simC },
+  ];
+  // 가장 빨리 끝나는 모드
+  modeResults.sort((a, b) => a.sim.retortEndMin - b.sim.retortEndMin);
+  const bestResult = modeResults[0];
+  const sim = bestResult.sim;
   const slots = ttPlanSlots(inp, sim);
   const narrative = ttPlanNarrative(inp, sim, slots);
 
+  // 모드 비교 박스
+  const modeCompare = `
+    <div style="background:linear-gradient(135deg,#fff8e0 0%,#fffdf2 100%);border:1px solid #d4a82c;border-radius:12px;padding:16px 20px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:#9a7a1a;margin-bottom:4px">🤖 자동 분석 — 점심 운영 베스트 시나리오</div>
+      <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:12px">3가지 점심 운영 방식 시뮬 → 가장 빨리 끝나는 방식 자동 선택</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        ${[...modeResults].sort((a,b)=>a.mode.localeCompare(b.mode)).map(r => {
+          const isBest = r.mode === bestResult.mode;
+          const bg = isBest ? 'linear-gradient(135deg,#0F6E56,#1a8970)' : '#fff';
+          const color = isBest ? '#fff' : 'var(--color-text-primary)';
+          const subColor = isBest ? 'rgba(255,255,255,0.85)' : 'var(--color-text-secondary)';
+          const border = isBest ? 'none' : '1px solid #e5e3da';
+          return `<div style="background:${bg};border:${border};border-radius:10px;padding:12px 14px;color:${color};box-shadow:${isBest?'0 2px 8px rgba(15,110,86,0.3)':'none'}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <strong style="font-size:13px">모드 ${r.mode} — ${r.name}</strong>
+              ${isBest ? '<span style="font-size:10px;background:#fff;color:#0F6E56;padding:2px 8px;border-radius:10px;font-weight:700">★ 베스트</span>' : ''}
+            </div>
+            <div style="font-size:10.5px;color:${subColor};margin-bottom:6px">${r.desc}</div>
+            <div style="font-size:18px;font-weight:700">${ttFmt(r.sim.retortEndMin)}</div>
+            <div style="font-size:10px;color:${subColor}">전체 종료 · 내포장 ${ttFmt(r.sim.packEndMin)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
   const conclusion = `
     <div style="background:linear-gradient(135deg,#E6F1FB 0%,#f3f9fd 100%);border:1px solid #185FA5;border-radius:12px;padding:18px 22px;margin-bottom:16px">
-      <div style="font-size:11px;color:#185FA5;font-weight:600;letter-spacing:0.5px;margin-bottom:6px">📊 데이터 기반 분석 결과</div>
+      <div style="font-size:11px;color:#185FA5;font-weight:600;letter-spacing:0.5px;margin-bottom:6px">📊 데이터 기반 분석 결과 · 점심 모드 ${bestResult.mode} (${bestResult.name}) 자동 선택</div>
       <div style="font-size:19px;font-weight:600;color:var(--color-text-primary);margin-bottom:6px">
         ${inp.meatType} ${inp.meatKg.toLocaleString()}kg → 약 <span style="color:#0F6E56">${sim.pouches.toLocaleString()}개</span> 생산 ·
         <strong style="color:#185FA5">${ttFmt(sim.packEndMin)} 종료</strong>
@@ -1000,6 +1065,7 @@ function ttRender() {
 
   document.getElementById('tt-result').innerHTML = `
     ${conclusion}
+    ${modeCompare}
     ${planBox}
     ${splitView}
     ${whyCards}
