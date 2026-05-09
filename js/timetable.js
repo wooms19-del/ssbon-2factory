@@ -69,20 +69,31 @@ function ttGetInputs() {
     return isFinite(v) ? v : def;
   };
   const getStr = (id, def) => document.getElementById(id)?.value || def;
+  const total = get('tt-total', 28);
+  const wkPack = get('tt-wk-pack', 6);
+  const wkTrans = get('tt-wk-trans', 2);
+  const mgr = get('tt-mgr', 2);
+  const wkLeftover = get('tt-wk-leftover', 0);  // 제수 (전날 제품 외포장)
+  // 파쇄 풀가동 (13:30~) = 총원 - 내포장 - 이송 - 관리 - 제수
+  const autoCrushPeak = Math.max(0, total - wkPack - wkTrans - mgr - wkLeftover);
+  // 파쇄 점심후 (12:30~13:30, 이송 합류 전) = autoCrushPeak - 4 (전처리조 4명 뒤늦게 합류)
+  // 단순 가정: 풀가동에서 4명 빼면 점심후 (운영 모델)
+  const autoCrushBeforePeak = Math.max(0, autoCrushPeak - 4);
   return {
     meatType: getStr('tt-meat', '홍두깨'),
     meatKg: get('tt-kg', 1600),
-    startTime: getStr('tt-start', '05:00'),       // 조출 시각 (외국인 출근)
-    earlyWorkers: get('tt-early', 7),              // 조출 인원 (외국인)
-    mgrTime: getStr('tt-mgr-time', '07:00'),       // 관리자 출근 시각
-    mgrWorkers: get('tt-mgr', 2),                  // 관리자 인원
-    joinTime: getStr('tt-join', '09:00'),          // 한국인 합류 시각
-    totalWorkers: get('tt-total', 28),
+    startTime: getStr('tt-start', '05:00'),
+    earlyWorkers: get('tt-early', 7),
+    mgrTime: getStr('tt-mgr-time', '07:00'),
+    mgrWorkers: mgr,
+    joinTime: getStr('tt-join', '09:00'),
+    totalWorkers: total,
     wkPre: get('tt-wk-pre', 10),
-    wkCrush: get('tt-wk-crush', 14),
-    wkPackPeak: get('tt-wk-crush-peak', 18),
-    wkPack: get('tt-wk-pack', 6),
-    wkTrans: get('tt-wk-trans', 2),
+    wkCrush: autoCrushBeforePeak,           // ★ 자동 계산
+    wkPackPeak: autoCrushPeak,              // ★ 자동 계산
+    wkPack: wkPack,
+    wkTrans: wkTrans,
+    wkLeftover: wkLeftover,                 // 제수
     yPre: get('tt-y-pre', TT_AUTO.yPre.val),
     yCrush: get('tt-y-crush', TT_AUTO.yCrush.val),
     pPre: get('tt-p-pre', TT_AUTO.pPre.val),
@@ -458,14 +469,14 @@ function ttPlanSlots(inp, sim) {
     });
   }
   // 슬롯 3: 한국인 합류~점심 1차 (풀가동)
-  // 한국인 합류 후 = total - early - mgr 명이 추가
-  const koreanArrived = total - early - mgr;
-  // 전처리 인원은 wkPre로 (외국인 일부 + 한국인 일부)
-  // 나머지(외포장·세팅) = total - wkPre - mgr
+  // 09:00~11:30 = 전처리 + 외포장(제수 포함) + 세팅 + 관리
+  // 제수 인원이 있으면 외포장에 포함, 나머지 = 세팅
   const remainPeak1 = total - inp.wkPre - mgr;
+  const settingDefault = 3;
+  const outerPack1 = Math.max(0, remainPeak1 - settingDefault);
   slots.push({
     range: `${inp.joinTime}~11:30`,
-    cells: { 전처리: inp.wkPre, 외포장: Math.max(0, remainPeak1 - 3), 세팅: 3, 관리: mgr },
+    cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
     sum: total,
   });
   // 슬롯 4: 점심 1차 (11:30~12:30)
@@ -482,14 +493,14 @@ function ttPlanSlots(inp, sim) {
     sum: total,
   });
   // 슬롯 6: 풀가동 (13:30~내포장종료)
-  const peakRest = total - inp.wkPackPeak - inp.wkPack - inp.wkTrans - mgr;
+  // 자동 분배: 파쇄 = wkPackPeak (자동 계산), 내포장+이송+관리+제수 고정
   slots.push({
     range: `13:30~${ttFmt(sim.packEndMin)}`,
     cells: {
       파쇄: inp.wkPackPeak,
       내포장: inp.wkPack,
       이송: inp.wkTrans,
-      ...(peakRest > 0 ? { 외포장: peakRest } : {}),
+      ...(inp.wkLeftover > 0 ? { 외포장: inp.wkLeftover } : {}),
       관리: mgr,
     },
     sum: total,
@@ -523,6 +534,13 @@ function ttPlanNarrative(inp, sim, slots) {
 // ── 메인 렌더링 ──────────────────────────────────────────
 function ttRender() {
   const inp = ttGetInputs();
+
+  // 자동 계산된 파쇄 인원을 입력란 영역에 표시
+  const dispPeak = document.getElementById('tt-crush-peak-display');
+  const dispPre = document.getElementById('tt-crush-pre-display');
+  if (dispPeak) dispPeak.textContent = `풀가동: ${inp.wkPackPeak}명`;
+  if (dispPre) dispPre.textContent = `점심후: ${inp.wkCrush}명`;
+
   if (!inp.meatKg || inp.meatKg <= 0) {
     document.getElementById('tt-result').innerHTML = `
       <div style="background:var(--color-background-secondary);border-radius:12px;padding:30px;text-align:center;color:var(--color-text-secondary);font-size:13px">
