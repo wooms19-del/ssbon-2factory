@@ -424,7 +424,9 @@ function ttSimulate(inp) {
     phase1Min, phase1Kg,
     tankInTimes, tankOutTimes, wagonEndTimes,
     crushStartMin, crushEndMin,
+    crushSelfEndMin, lastTankCrushEndMin, lastTankOutKg,
     packStartMin, packEndMin,
+    packSelfEndMin, lastBatchPackEndMin, lastTankPackEa,
     retortStartMin, retortEndMin, retortCycles,
     retortStartTimes, retortEndTimes,
     cookYield,
@@ -554,57 +556,177 @@ function ttRender() {
   const tlMin = sim.startMin;
   const tlMax = Math.max(sim.retortEndMin, sim.packEndMin) + 30;
   const span = tlMax - tlMin;
-  const SVG_W = 620, LEFT = 90, RIGHT = 600;
+  const SVG_W = 800, LEFT = 100, RIGHT = 780;
   const xPos = m => LEFT + (m - tlMin) / span * (RIGHT - LEFT);
   let ticks = '', grid = '';
   for (let h = Math.floor(tlMin/60); h <= Math.ceil(tlMax/60); h++) {
     const x = xPos(h*60);
     if (x >= LEFT && x <= RIGHT + 10) {
-      ticks += `<text x="${x}" y="20" text-anchor="middle" font-size="10" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
+      ticks += `<text x="${x}" y="20" text-anchor="middle" font-size="11" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
       grid += `<line x1="${x}" y1="28" x2="${x}" y2="380" stroke="#e5e3da" stroke-width="0.5" stroke-dasharray="2 3"/>`;
     }
   }
-  const bar = (y, label, s, e, color, txt) => `
-    <text x="${LEFT-6}" y="${y+14}" text-anchor="end" font-size="11" fill="var(--color-text-secondary)">${label}</text>
-    <rect x="${xPos(s)}" y="${y}" width="${Math.max(xPos(e)-xPos(s),2)}" height="20" rx="4" fill="${color}"/>
-    <text x="${(xPos(s)+xPos(e))/2}" y="${y+14}" text-anchor="middle" font-size="9" fill="#fff" font-weight="500">${txt}</text>`;
+
+  // 점심 영역 음영
+  const LUNCH1_S = 11*60+30, LUNCH1_E = 12*60+30, LUNCH2_E = 13*60+30;
+  const lunchBg = `
+    <rect x="${xPos(LUNCH1_S)}" y="28" width="${xPos(LUNCH1_E)-xPos(LUNCH1_S)}" height="999" fill="#FFF7ED" opacity="0.6"/>
+    <rect x="${xPos(LUNCH1_E)}" y="28" width="${xPos(LUNCH2_E)-xPos(LUNCH1_E)}" height="999" fill="#FFF7ED" opacity="0.4"/>`;
+
+  // 분할 막대 함수: 호버 데이터 포함
+  const segBar = (y, h, s, e, color, txt, tipTitle, tipInfo, opts={}) => {
+    const x1 = xPos(s), x2 = xPos(e);
+    const w = Math.max(x2-x1, 2);
+    const fillOp = opts.fillOpacity || 1;
+    const stroke = opts.stroke || 'none';
+    const strokeW = opts.strokeWidth || 0;
+    const dash = opts.dash || '';
+    const fontSize = opts.fontSize || 10;
+    const fontWeight = opts.fontWeight || 600;
+    return `<g class="tt-bar" data-tip-title="${tipTitle}" data-tip-info="${tipInfo}">
+      <rect x="${x1}" y="${y}" width="${w}" height="${h}" rx="3" fill="${color}" fill-opacity="${fillOp}" stroke="${stroke}" stroke-width="${strokeW}" stroke-dasharray="${dash}"/>
+      ${txt && w > 30 ? `<text x="${(x1+x2)/2}" y="${y+h/2+4}" text-anchor="middle" font-size="${fontSize}" fill="#fff" font-weight="${fontWeight}" pointer-events="none">${txt}</text>` : ''}
+    </g>`;
+  };
+  const rowLabel = (y, h, label) => `<text x="${LEFT-8}" y="${y+h/2+4}" text-anchor="end" font-size="12" fill="var(--color-text-secondary)" font-weight="500">${label}</text>`;
+
   let bars = '';
-  bars += bar(40, '전처리', sim.startMin, sim.preEndMin, '#185FA5',
-    `${ttFmt(sim.startMin)}~${ttFmt(sim.preEndMin)}`);
+  let yCursor = 36;
+  const ROW_H = 28;
+  const WAGON_H = 24;
+  const BAR_H = 26;
+
+  // ── 전처리 (2분할: Phase1 / Phase2) ──
+  bars += rowLabel(yCursor, BAR_H, '전처리');
+  // Phase 1: startMin ~ joinMin (외국인)
+  if (sim.joinMin > sim.startMin) {
+    const p1Kg = Math.round(sim.phase1Kg);
+    bars += segBar(yCursor, BAR_H, sim.startMin, Math.min(sim.joinMin, sim.preEndMin), '#185FA5',
+      `${inp.earlyWorkers}명 · ${p1Kg.toLocaleString()}kg`,
+      `전처리 Phase 1`,
+      `시각: ${ttFmt(sim.startMin)}~${ttFmt(Math.min(sim.joinMin, sim.preEndMin))}|인원: 외국인 ${inp.earlyWorkers}명|처리량: ${p1Kg.toLocaleString()} kg|계산: ${inp.pPre} × ${inp.earlyWorkers} × ${(sim.phase1Min/60).toFixed(1)}h = ${p1Kg.toLocaleString()}kg`,
+      {fillOpacity: 0.7});
+  }
+  // Phase 2: joinMin ~ preEndMin (한국인 합류)
+  if (sim.preEndMin > sim.joinMin) {
+    const p2Kg = Math.max(0, Math.round(sim.preIn - sim.phase1Kg));
+    bars += segBar(yCursor, BAR_H, sim.joinMin, sim.preEndMin, '#185FA5',
+      `${inp.wkPre}명 · ${p2Kg.toLocaleString()}kg`,
+      `전처리 Phase 2`,
+      `시각: ${ttFmt(sim.joinMin)}~${ttFmt(sim.preEndMin)}|인원: ${inp.wkPre}명 (한국인 합류 후)|처리량: ${p2Kg.toLocaleString()} kg|계산: 잔량 ${p2Kg.toLocaleString()}kg ÷ (${inp.pPre}×${inp.wkPre}) × 60 = ${(sim.preEndMin-sim.joinMin)}분`);
+  }
+  yCursor += ROW_H;
+
+  // ── 자숙 (각 호별 + 와건) ──
   sim.tankInTimes.forEach((t, i) => {
-    bars += bar(70 + i*26, `자숙 ${i+1}호`, t, sim.tankOutTimes[i], '#0F6E56',
-      `${ttFmt(t)}~${ttFmt(sim.tankOutTimes[i])}`);
+    const isLast = i === sim.tankInTimes.length - 1;
+    const lastTankKg = isLast ? Math.max(0, sim.cookIn - i*TT_FIXED.tankKg) : TT_FIXED.tankKg;
+    const tankOutKg = lastTankKg * sim.cookYield / 100;
+    bars += rowLabel(yCursor, BAR_H, `자숙 ${i+1}호`);
+    bars += segBar(yCursor, BAR_H, t, sim.tankOutTimes[i], '#0F6E56',
+      `${Math.round(lastTankKg)}kg → ${Math.round(tankOutKg)}kg`,
+      `자숙 ${i+1}호`,
+      `투입: ${ttFmt(t)}|자숙 종료: ${ttFmt(sim.tankOutTimes[i])}|와건 종료: ${ttFmt(sim.wagonEndTimes[i])}|용량: ${Math.round(lastTankKg)}kg|산출: ${Math.round(tankOutKg)}kg (수율 ${sim.cookYield}%)|사이클: 4h + 와건 30분`);
+    // 와건 (자숙 종료 ~ 와건 종료)
+    bars += segBar(yCursor, BAR_H, sim.tankOutTimes[i], sim.wagonEndTimes[i], '#D85A30',
+      ``,
+      `자숙 ${i+1}호 와건`,
+      `시각: ${ttFmt(sim.tankOutTimes[i])}~${ttFmt(sim.wagonEndTimes[i])} (30분)|자숙 후 냉각|이후 파쇄 라인 투입`);
+    yCursor += ROW_H;
   });
-  const wagonY = 70 + sim.tankInTimes.length*26;
-  sim.tankOutTimes.forEach((t) => {
-    const x1 = xPos(t), x2 = xPos(t + TT_FIXED.wagonMin);
-    bars += `<rect x="${x1}" y="${wagonY}" width="${Math.max(x2-x1,2)}" height="20" rx="3" fill="#D85A30"/>`;
-  });
-  bars += `<text x="${LEFT-6}" y="${wagonY+14}" text-anchor="end" font-size="11" fill="var(--color-text-secondary)">와건</text>`;
-  bars += bar(wagonY + 28, '파쇄', sim.crushStartMin, sim.crushEndMin, '#BA7517',
-    `${inp.wkPackPeak}명 · ${ttFmt(sim.crushStartMin)}~${ttFmt(sim.crushEndMin)}`);
-  bars += bar(wagonY + 56, '내포장', sim.packStartMin, sim.packEndMin, '#7F77DD',
-    `${inp.pPackEa}EA/분 · ${ttFmt(sim.packStartMin)}~${ttFmt(sim.packEndMin)}`);
+
+  // ── 파쇄 (분할: 시작 / 점심정지 / 점심2차 / 풀가동) ──
+  bars += rowLabel(yCursor, BAR_H, '파쇄');
+  // 시작 ~ 11:30 (와건 종료 직후 짧음)
+  if (sim.crushStartMin < LUNCH1_S) {
+    bars += segBar(yCursor, BAR_H, sim.crushStartMin, LUNCH1_S, '#BA7517',
+      `${inp.wkCrush}명`,
+      '파쇄 시작 직후',
+      `시각: ${ttFmt(sim.crushStartMin)}~11:30 (${LUNCH1_S - sim.crushStartMin}분)|인원: ${inp.wkCrush}명|점심 1차 진입 직전`,
+      {fillOpacity: 0.55});
+  }
+  // 11:30 ~ 12:30 점심 정지
+  if (sim.crushEndMin > LUNCH1_S) {
+    const stopE = Math.min(LUNCH1_E, sim.crushEndMin);
+    bars += segBar(yCursor, BAR_H, Math.max(sim.crushStartMin, LUNCH1_S), stopE, '#fff',
+      ``,
+      '파쇄 정지 (점심 1차)',
+      `시각: 11:30~12:30|후공정조 점심|파쇄 인원 0명`,
+      {stroke: '#BA7517', strokeWidth: 1, dash: '3 2'});
+    // 정지 텍스트
+    if (stopE > LUNCH1_S + 15) {
+      const cx = (xPos(Math.max(sim.crushStartMin, LUNCH1_S)) + xPos(stopE)) / 2;
+      bars += `<text x="${cx}" y="${yCursor+BAR_H/2+4}" text-anchor="middle" font-size="9" fill="#BA7517" font-weight="600" pointer-events="none">점심·정지</text>`;
+    }
+  }
+  // 12:30 ~ 13:30 점심 2차 (이송 합류, 16명)
+  if (sim.crushEndMin > LUNCH1_E) {
+    const segE = Math.min(LUNCH2_E, sim.crushEndMin);
+    bars += segBar(yCursor, BAR_H, LUNCH1_E, segE, '#BA7517',
+      `${inp.wkCrush + inp.wkTrans}명`,
+      '파쇄 (점심 2차 시간)',
+      `시각: 12:30~13:30|인원: ${inp.wkCrush + inp.wkTrans}명 (파쇄 ${inp.wkCrush} + 이송 ${inp.wkTrans} 합류)|시간당 처리: ${(inp.pCrush * (inp.wkCrush + inp.wkTrans)).toFixed(0)}kg/h`,
+      {fillOpacity: 0.75});
+  }
+  // 13:30 ~ 종료 (풀가동)
+  if (sim.crushEndMin > LUNCH2_E) {
+    bars += segBar(yCursor, BAR_H, LUNCH2_E, sim.crushEndMin, '#BA7517',
+      `${inp.wkPackPeak}명 풀가동`,
+      '파쇄 풀가동',
+      `시각: 13:30~${ttFmt(sim.crushEndMin)}|인원: ${inp.wkPackPeak}명 (전처리조 합류)|시간당 처리: ${(inp.pCrush * inp.wkPackPeak).toFixed(0)}kg/h|총 파쇄: ${Math.round(sim.crushIn).toLocaleString()}kg → 산출 ${Math.round(sim.crushOut).toLocaleString()}kg`);
+  }
+  yCursor += ROW_H;
+
+  // ── 내포장 ──
+  bars += rowLabel(yCursor, BAR_H, '내포장');
+  bars += segBar(yCursor, BAR_H, sim.packStartMin, sim.packEndMin, '#7F77DD',
+    `${inp.wkPack}명 · ${inp.pPackEa}EA/분`,
+    '내포장',
+    `시각: ${ttFmt(sim.packStartMin)}~${ttFmt(sim.packEndMin)}|인원: ${inp.wkPack}명|속도: ${inp.pPackEa} EA/분 (기계 1대 한도)|총: ${sim.pouches.toLocaleString()} EA|자체 처리 종료: ${ttFmt(sim.packSelfEndMin)}|마지막 산출분 통과: ${ttFmt(sim.lastBatchPackEndMin)} (둘 중 늦은쪽)`);
+  yCursor += ROW_H;
+
+  // ── 레토르트 (각 회차별) ──
   for (let i = 0; i < sim.retortCycles; i++) {
     const s = sim.retortStartTimes[i];
     const e = sim.retortEndTimes[i];
-    bars += bar(wagonY + 84 + i*26, `레토르트 ${i+1}`, s, e, '#A32D2D',
-      `${ttFmt(s)}~${ttFmt(e)}`);
+    const isLast = i === sim.retortCycles - 1;
+    const cumEa = isLast ? sim.pouches : (i+1)*TT_FIXED.retortPerCycle;
+    const cycleEa = isLast ? sim.pouches - i*TT_FIXED.retortPerCycle : TT_FIXED.retortPerCycle;
+    bars += rowLabel(yCursor, BAR_H-2, `레토르트 ${i+1}${isLast ? ' ★' : ''}`);
+    bars += segBar(yCursor, BAR_H-2, s, e, '#A32D2D',
+      `${cycleEa} EA · 2.5h`,
+      `레토르트 ${i+1}회차${isLast ? ' (마지막)' : ''}`,
+      `시각: ${ttFmt(s)}~${ttFmt(e)}|EA: ${cycleEa}개${isLast ? ' (잔량)' : ' (4대차)'}|사이클: 2.5h${isLast ? '|★ 내포장 종료('+ttFmt(sim.packEndMin)+') 후 시작' : ''}`,
+      isLast ? {stroke: '#7a1a1a', strokeWidth: 1.5} : {});
+    yCursor += ROW_H;
   }
-  const lineBottom = wagonY + 84 + sim.retortCycles*26;
+
+  // 점선 (내포장 종료 + 전체 종료)
+  const lineBottom = yCursor + 4;
   bars += `
-    <line x1="${xPos(sim.packEndMin)}" y1="36" x2="${xPos(sim.packEndMin)}" y2="${lineBottom - 4}" stroke="#7F77DD" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="${xPos(sim.packEndMin)}" y="${lineBottom + 12}" text-anchor="middle" font-size="10" fill="#7F77DD" font-weight="600">${ttFmt(sim.packEndMin)} 내포장</text>`;
-  const svgH = lineBottom + 22;
+    <line x1="${xPos(sim.packEndMin)}" y1="36" x2="${xPos(sim.packEndMin)}" y2="${lineBottom}" stroke="#7F77DD" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="${xPos(sim.packEndMin)}" y="${lineBottom + 14}" text-anchor="middle" font-size="11" fill="#7F77DD" font-weight="700">${ttFmt(sim.packEndMin)} 내포장</text>
+    <line x1="${xPos(sim.retortEndMin)}" y1="36" x2="${xPos(sim.retortEndMin)}" y2="${lineBottom}" stroke="#A32D2D" stroke-width="1.5" stroke-dasharray="5 3"/>
+    <text x="${xPos(sim.retortEndMin)}" y="${lineBottom + 28}" text-anchor="middle" font-size="11" fill="#A32D2D" font-weight="700">${ttFmt(sim.retortEndMin)} 종료</text>`;
+  const svgH = lineBottom + 38;
 
   const timelineSvg = `
-    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img">
-      ${ticks}${grid}${bars}
-    </svg>`;
+    <style>
+      .tt-bar { cursor:pointer; transition:filter 0.15s; }
+      .tt-bar:hover rect { filter:brightness(1.15); stroke:#000 !important; stroke-width:1 !important; stroke-dasharray:none !important; }
+      .tt-tip { position:fixed; background:#222; color:#fff; padding:10px 14px; border-radius:6px; font-size:12px; line-height:1.7; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:9999; pointer-events:none; max-width:340px; display:none; }
+      .tt-tip-title { color:#FFD27A; font-weight:700; margin-bottom:4px; }
+      .tt-cell { transition:background 0.1s; }
+      .tt-cell:hover { background:#FFF5CC !important; cursor:default; }
+    </style>
+    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img" id="ttTimelineSvg">
+      ${lunchBg}${ticks}${grid}${bars}
+    </svg>
+    <div id="ttTip" class="tt-tip"></div>`;
 
-  // 시간대별 인원 활용 표
+  // 시간대별 인원 활용 표 (시안 3 + 격자 + 호버)
   const wkHeads = ['전처리','파쇄','내포장','이송','외포장','세팅','청소','점심','관리'];
-  const wkColors = ['#185FA5','#BA7517','#7F77DD','#534AB7','#1D9E75','#EF9F27','#888780','var(--color-text-secondary)','#5F5E5A'];
+  const wkColors = ['#185FA5','#BA7517','#7F77DD','#534AB7','#1D9E75','#EF9F27','#888780','#BA7517','#5F5E5A'];
   const slotsRows = slots.map(slot => ({
     range: slot.range,
     cells: wkHeads.map(h => slot.cells[h] || 0),
@@ -612,21 +734,32 @@ function ttRender() {
     isFull: slot.sum === inp.totalWorkers,
   }));
   const wkTbl = `
-    <table style="width:100%;height:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
-      <thead><tr style="border-bottom:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)">
-        <th style="text-align:left;padding:10px 6px;font-weight:500;font-size:11px">시간대</th>
-        ${wkHeads.map((h,i) => `<th style="text-align:right;padding:10px 5px;font-weight:500;color:${wkColors[i]};font-size:11px">${h}</th>`).join('')}
-        <th style="text-align:right;padding:10px 6px;font-weight:500;font-size:11px">합계</th>
-      </tr></thead>
-      <tbody>${slotsRows.map(r => {
-        const bg = r.isFull ? 'rgba(232,243,222,0.4)' : '';
-        return `<tr style="border-bottom:0.5px solid var(--color-border-tertiary);background:${bg}">
-          <td style="padding:14px 6px;font-weight:500;font-size:11px">${r.range}</td>
-          ${r.cells.map(v => `<td style="padding:14px 5px;text-align:right;${v===0?'color:var(--color-text-tertiary)':'font-weight:500'}">${v||'·'}</td>`).join('')}
-          <td style="padding:14px 6px;text-align:right;font-weight:600;color:${r.isFull?'#0F6E56':'var(--color-text-tertiary)'}">${r.sum}${r.isFull?' ✓':''}</td>
+    <div style="overflow-x:auto;border:2px solid #185FA5;border-radius:6px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff">
+      <thead>
+        <tr style="background:linear-gradient(135deg,#185FA5,#1a6db5);color:#fff">
+          <th style="padding:12px 8px;font-weight:700;text-align:left;letter-spacing:0.5px;white-space:nowrap;border:1px solid #0d4a8a;font-size:12px">시간대</th>
+          ${wkHeads.map((h,i) => `<th style="padding:12px 6px;font-weight:700;border:1px solid #0d4a8a;font-size:12px">${h}</th>`).join('')}
+          <th style="padding:12px 8px;font-weight:700;background:#0d4a8a;border:1px solid #0d4a8a;font-size:12px">합계</th>
+        </tr>
+      </thead>
+      <tbody>
+      ${slotsRows.map((r, idx) => {
+        const stripe = idx % 2 === 1 ? 'background:#f7f9fc' : '';
+        return `<tr style="${stripe}">
+          <td class="tt-cell" style="padding:11px 8px;font-weight:600;border:1px solid #ddd;font-size:12px">${r.range}</td>
+          ${r.cells.map((v, ci) => {
+            const isZero = v === 0;
+            const color = isZero ? '#ccc' : wkColors[ci];
+            const fw = isZero ? 'normal' : (v >= 10 ? 700 : 600);
+            return `<td class="tt-cell" style="padding:11px 6px;text-align:center;border:1px solid #ddd;color:${color};font-weight:${fw}">${v||'·'}</td>`;
+          }).join('')}
+          <td class="tt-cell" style="padding:11px 8px;text-align:center;font-weight:700;color:${r.isFull?'#0F6E56':'#999'};font-size:13px;border:1px solid #ddd">${r.sum}${r.isFull?' ✓':''}</td>
         </tr>`;
-      }).join('')}</tbody>
-    </table>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>`;
 
   // 좌(타임라인) + 우(인원활용)
   const splitView = `
@@ -853,4 +986,27 @@ function ttRender() {
     ${splitView}
     ${whyCards}
     ${procTbl}`;
+
+  // 호버 툴팁 활성화 (SVG 막대)
+  setTimeout(() => {
+    const tip = document.getElementById('ttTip');
+    if (!tip) return;
+    document.querySelectorAll('.tt-bar').forEach(bar => {
+      bar.addEventListener('mouseenter', () => {
+        const title = bar.dataset.tipTitle || '';
+        const info = (bar.dataset.tipInfo || '').split('|').filter(s => s);
+        tip.innerHTML = `<div class="tt-tip-title">${title}</div>` + info.map(line => `<div>${line}</div>`).join('');
+        tip.style.display = 'block';
+      });
+      bar.addEventListener('mousemove', e => {
+        const x = Math.min(e.clientX + 16, window.innerWidth - 360);
+        const y = Math.min(e.clientY + 16, window.innerHeight - 200);
+        tip.style.left = x + 'px';
+        tip.style.top = y + 'px';
+      });
+      bar.addEventListener('mouseleave', () => {
+        tip.style.display = 'none';
+      });
+    });
+  }, 0);
 }
