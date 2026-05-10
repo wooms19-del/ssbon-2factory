@@ -243,7 +243,9 @@ async function ttPeriodChange() {
 }
 
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
-function ttSimulate(inp) {
+function ttSimulate(inp, tankMode) {
+  // tankMode: 'A' (1호 가득 + 잔량 - 현재), 'B' (N등분 균등), 'E' (1호 작게 빨리시작 + 나머지 균등)
+  tankMode = tankMode || 'A';
   const startMin = ttToMin(inp.startTime);
   const joinMin = ttToMin(inp.joinTime);
   const cookYield = TT_COOK_YIELD[inp.meatType] || 56.8;
@@ -258,25 +260,48 @@ function ttSimulate(inp) {
   const packOut = packIn * TT_PACK_YIELD / 100;
   const pouches = Math.floor(packOut / TT_PACK_KG_PER_POUCH);
 
-  // 전처리 시간: 조출(early) → 합류(join) 후 풀(wkPre) 단계
-  // Phase 1: 조출 인원으로 startMin~joinMin 시간 동안 처리
+  // 전처리 시간
   const phase1Min = Math.max(0, joinMin - startMin);
   const phase1Kg = inp.pPre * inp.earlyWorkers * (phase1Min / 60);
-  // Phase 2: 풀 인원으로 나머지 처리
   const remainingKg = Math.max(0, preIn - phase1Kg);
   const phase2Min = remainingKg / (inp.pPre * inp.wkPre) * 60;
   const preEndMin = joinMin + Math.round(phase2Min);
   const preHours = (preEndMin - startMin) / 60;
 
-  // 자숙 탱크 수 = 전처리 산출량 기준 (자숙에 실제 들어가는 양)
-  // ※ 원육 투입량(preIn) 아니라 전처리 산출(preOut/cookIn) 기준이 맞음
+  // 자숙 탱크 분배 (tankMode별)
   const cookCycles = Math.max(1, Math.ceil(cookIn / TT_FIXED.tankKg));
+  let tankKgs;  // 각 탱크 자숙 산출 량 (= 자숙 투입 - 자숙수율 손실 후)... 정확히는 자숙 투입량
+  if (tankMode === 'A') {
+    // 1호 가득 → 마지막에 잔량
+    tankKgs = [];
+    for (let i = 0; i < cookCycles; i++) {
+      const isLast = i === cookCycles - 1;
+      tankKgs.push(isLast ? Math.max(0, cookIn - i * TT_FIXED.tankKg) : TT_FIXED.tankKg);
+    }
+  } else if (tankMode === 'B') {
+    // N등분 균등
+    tankKgs = Array(cookCycles).fill(cookIn / cookCycles);
+  } else if (tankMode === 'E') {
+    // 1호 작게 (외국인 1.5h 분량) → 나머지 균등
+    // 외국인 7명 1.5h = 약 552kg 원육 → 자숙 투입 = 552 × yPre = ~510kg
+    const firstTankIn = Math.min(510, cookIn);
+    if (cookCycles === 1) {
+      tankKgs = [cookIn];
+    } else {
+      const rest = (cookIn - firstTankIn) / (cookCycles - 1);
+      tankKgs = [firstTankIn, ...Array(cookCycles - 1).fill(rest)];
+    }
+  } else {
+    tankKgs = Array(cookCycles).fill(cookIn / cookCycles);
+  }
+
+  // 각 탱크 투입 시각 = 그 탱크의 cumulative 자숙 투입량 도달 시점
   const tankInTimes = [];
+  let cumOut = 0;  // 자숙 투입 누적 (= 전처리 산출 누적)
   for (let i = 0; i < cookCycles; i++) {
-    // i+1번째 탱크 투입 = 전처리 누적 산출이 (i+1)*tankKg 도달 시점
-    // 전처리 산출 누적 = 전처리 투입 누적 × 수율
-    const targetOutKg = (i + 1) * TT_FIXED.tankKg;  // 누적 산출 목표
-    const targetInKg = targetOutKg / (inp.yPre / 100);  // 그때까지 전처리 투입해야 하는 양
+    cumOut += tankKgs[i];
+    // 전처리 누적 투입 = 자숙 투입 누적 / yPre%
+    const targetInKg = cumOut / (inp.yPre / 100);
     let tankInMin;
     if (targetInKg <= phase1Kg) {
       tankInMin = startMin + Math.round(targetInKg / (inp.pPre * inp.earlyWorkers) * 60);
@@ -296,8 +321,9 @@ function ttSimulate(inp) {
   //  (2) 자숙 마지막 와건 종료 + 잔량 처리 시간 (마지막 탱크 출하 후 그 분량 파쇄)
   const crushStartMin = wagonEndTimes[0];
   const lastWagonEnd = wagonEndTimes[wagonEndTimes.length - 1];
-  // 마지막 탱크 산출 = tankKg × cookYield (kg)
-  const lastTankOutKg = TT_FIXED.tankKg * (cookYield / 100);
+  // 마지막 탱크 자숙 산출 = 마지막 탱크 자숙 투입량 × 수율 (모드별 다를 수 있음)
+  const lastTankInKg = tankKgs[tankKgs.length - 1];
+  const lastTankOutKg = lastTankInKg * (cookYield / 100);
 
   // ── 파쇄 시뮬: 시간대별 가용 인원 동적 계산 ──
   //
@@ -359,8 +385,7 @@ function ttSimulate(inp) {
   const tankCrushTimes = []; // [{호:i, start:와건종료, end:처리종료, kg:산출량}]
   let prevTankEnd = wagonEndTimes[0];  // 첫 호는 자기 와건 종료 시점부터 시작
   for (let i = 0; i < tankInTimes.length; i++) {
-    const isLast = i === tankInTimes.length - 1;
-    const tankKg = isLast ? Math.max(0, cookIn - i*TT_FIXED.tankKg) : TT_FIXED.tankKg;
+    const tankKg = tankKgs[i];  // 모드별 분배된 탱크 투입량
     const tankOutKg = tankKg * cookYield / 100;
     // 시작 = max(이전 호 처리 종료, 이 호의 와건 종료)
     const startMin = Math.max(prevTankEnd, wagonEndTimes[i]);
@@ -473,6 +498,8 @@ function ttSimulate(inp) {
   const retortEndMin = Math.max(...retortEndTimes);
 
   return {
+    tankMode,
+    tankKgs,
     preIn, preOut, cookIn, cookOut, crushIn, crushOut, packIn, packOut, pouches,
     preHours, crushHours, packMin,
     startMin, preEndMin, joinMin,
@@ -604,7 +631,19 @@ function ttRender() {
       </div>`;
     return;
   }
-  const sim = ttSimulate(inp);
+  // ★ 3가지 자숙 탱크 분배 방식 자동 시뮬 → 가장 빨리 끝나는 방식 자동 선택
+  const tankSimA = ttSimulate(inp, 'A');
+  const tankSimB = ttSimulate(inp, 'B');
+  const tankSimE = ttSimulate(inp, 'E');
+  const tankResults = [
+    { mode: 'A', name: '1호 가득 채우기', desc: '1호 750kg + 잔량 마지막 (현재)', sim: tankSimA },
+    { mode: 'B', name: 'N등분 균등', desc: '총량 ÷ 탱크수 = 모든 탱크 동일량', sim: tankSimB },
+    { mode: 'E', name: '1호 작게 빨리시작', desc: '1호 510kg(외국인 1.5h) + 나머지 균등', sim: tankSimE },
+  ];
+  // 가장 빨리 끝나는 = 레토르트 종료 시각 기준
+  tankResults.sort((a, b) => a.sim.retortEndMin - b.sim.retortEndMin);
+  const tankBest = tankResults[0];
+  const sim = tankBest.sim;
   const slots = ttPlanSlots(inp, sim);
   const narrative = ttPlanNarrative(inp, sim, slots);
 
@@ -694,7 +733,7 @@ function ttRender() {
   // ── 자숙 (각 호별 + 와건) ──
   sim.tankInTimes.forEach((t, i) => {
     const isLast = i === sim.tankInTimes.length - 1;
-    const lastTankKg = isLast ? Math.max(0, sim.cookIn - i*TT_FIXED.tankKg) : TT_FIXED.tankKg;
+    const lastTankKg = sim.tankKgs[i];
     const tankOutKg = lastTankKg * sim.cookYield / 100;
     bars += rowLabel(yCursor, BAR_H, `자숙 ${i+1}호`);
     bars += segBar(yCursor, BAR_H, t, sim.tankOutTimes[i], '#0F6E56',
@@ -1065,12 +1104,104 @@ function ttRender() {
       </div>
     </div>`;
 
+  // ── 분석 보고서 (숫자로 검증된 의사결정 근거) ──
+  const dT = (a, b) => {
+    const d = b - a;
+    if (d === 0) return '동일';
+    return d > 0 ? `+${d}분` : `${d}분`;
+  };
+  const tankReport = tankResults.map(r => {
+    const isBest = r.mode === tankBest.mode;
+    const diff = r.sim.retortEndMin - tankBest.sim.retortEndMin;
+    const tankKgsStr = r.sim.tankKgs.map(k => Math.round(k)).join(', ');
+    return `<tr style="${isBest?'background:#E8F3DE;font-weight:600':''}">
+      <td style="padding:8px 10px;border:1px solid #ddd;font-size:12px">${isBest?'★ ':''}<strong>${r.mode}</strong> ${r.name}</td>
+      <td style="padding:8px 10px;border:1px solid #ddd;font-size:11px;color:#666">[${tankKgsStr}]</td>
+      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px">${ttFmt(r.sim.tankInTimes[0])}</td>
+      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px">${ttFmt(r.sim.crushEndMin)}</td>
+      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px">${ttFmt(r.sim.packEndMin)}</td>
+      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px;${isBest?'color:#0F6E56':''}">${ttFmt(r.sim.retortEndMin)}</td>
+      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:11px;color:${isBest?'#0F6E56':'#A32D2D'}">${diff===0?'★ 베스트':`+${diff}분`}</td>
+    </tr>`;
+  }).join('');
+
+  // 점심 운영 분석
+  const preEndedBefore = sim.preEndMin <= 11*60+30;
+  const lunchAnalysis = preEndedBefore
+    ? `전처리 ${ttFmt(sim.preEndMin)} 종료 → 11:30 시점에 전처리조 ${inp.wkPre}명 가용 → 파쇄 라인 합류 (정지 시간 0분)`
+    : `전처리 ${ttFmt(sim.preEndMin)} 종료 (11:30 이후) → 11:30~12:30 파쇄 정지 (1시간 손실)`;
+
+  // 병목 분석
+  const isLastBottleneck = sim.lastTankCrushEndMin > sim.crushSelfEndMin;
+  const crushBottleneck = isLastBottleneck
+    ? `마지막 자숙 와건(${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])}) 후 처리에 묶임 — 인원 늘려도 큰 단축 어려움`
+    : `자체 처리 시간이 결정 — 인원 늘리면 단축 가능`;
+  const packBottleneck = `8 EA/분 기계 한도 (인원 무관) — 내포장 인원 늘려도 시간 동일`;
+  const retortBottleneck = `2.5h × ${sim.retortCycles}회차 + 마지막 회차는 내포장 종료(${ttFmt(sim.packEndMin)}) 후 시작`;
+
+  // 인원 자동 계산 근거
+  const autoPersonnel = `총원 ${inp.totalWorkers}명 - 내포장 ${inp.wkPack} - 이송 ${inp.wkTrans} - 관리 ${inp.mgrWorkers} - 제수 ${inp.wkLeftover} = <strong>파쇄 풀가동 ${inp.wkPackPeak}명</strong> (점심후 ${inp.wkCrush}명)`;
+
+  const reportBox = `
+    <div style="background:var(--color-background-primary);border:1px solid #d4a82c;border-radius:12px;padding:18px 22px;margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700;color:#9a7a1a;margin-bottom:14px">📋 분석 보고서 — 의사결정 근거 (숫자 기반)</div>
+
+      <!-- ① 자숙 탱크 분배 -->
+      <div style="margin-bottom:18px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--color-text-primary)">① 자숙 탱크 분배 방식 — 3가지 시뮬 비교</div>
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px">자숙 1호를 어떻게 채울지 = 시작 시각 + 마지막 탱크 종료 시각이 다름 → 전체 종료 시각 차이 발생</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff">
+          <thead>
+            <tr style="background:#185FA5;color:#fff">
+              <th style="padding:8px 10px;text-align:left;border:1px solid #185FA5;font-size:11px">방식</th>
+              <th style="padding:8px 10px;text-align:left;border:1px solid #185FA5;font-size:11px">탱크 분배 (kg)</th>
+              <th style="padding:8px 10px;text-align:center;border:1px solid #185FA5;font-size:11px">자숙 1호 투입</th>
+              <th style="padding:8px 10px;text-align:center;border:1px solid #185FA5;font-size:11px">파쇄 종료</th>
+              <th style="padding:8px 10px;text-align:center;border:1px solid #185FA5;font-size:11px">내포장 종료</th>
+              <th style="padding:8px 10px;text-align:center;border:1px solid #185FA5;font-size:11px">레토르트 종료</th>
+              <th style="padding:8px 10px;text-align:center;border:1px solid #185FA5;font-size:11px">차이</th>
+            </tr>
+          </thead>
+          <tbody>${tankReport}</tbody>
+        </table>
+        <div style="font-size:11px;color:#0F6E56;margin-top:6px;font-weight:600">→ ${tankBest.mode} 방식 (${tankBest.name}) 자동 선택 — 레토르트 종료 ${ttFmt(tankBest.sim.retortEndMin)}</div>
+      </div>
+
+      <!-- ② 점심 운영 -->
+      <div style="margin-bottom:18px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--color-text-primary)">② 점심 시간대 인원 운영</div>
+        <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace;background:#f7f9fc;padding:8px 12px;border-radius:6px">
+          ${lunchAnalysis}<br>
+          <strong>11:30~12:30</strong>: ${preEndedBefore ? `파쇄 ${inp.wkPre}명 (전처리조 합류)` : '파쇄 0명 (정지)'} · 점심 ${inp.totalWorkers - (preEndedBefore ? inp.wkPre : inp.wkPre) - 1}명<br>
+          <strong>12:30~13:30</strong>: 파쇄 ${inp.wkCrush + inp.wkTrans}명 (이송 합류) · 점심 ${inp.totalWorkers - inp.wkCrush - inp.wkTrans - 1}명<br>
+          <strong>13:30~${ttFmt(sim.packEndMin)}</strong>: 파쇄 ${inp.wkPackPeak} + 내포장 ${inp.wkPack} + 이송 ${inp.wkTrans} + 관리 ${inp.mgrWorkers} 풀가동
+        </div>
+      </div>
+
+      <!-- ③ 인원 자동 분배 근거 -->
+      <div style="margin-bottom:18px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--color-text-primary)">③ 파쇄 인원 자동 계산</div>
+        <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace;background:#f7f9fc;padding:8px 12px;border-radius:6px">
+          ${autoPersonnel}
+        </div>
+      </div>
+
+      <!-- ④ 병목 분석 -->
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--color-text-primary)">④ 병목 분석 — 어디서 시간이 결정되는가</div>
+        <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.7;font-family:monospace;background:#FFF7ED;padding:8px 12px;border-radius:6px">
+          <strong style="color:#BA7517">파쇄 ${ttFmt(sim.crushEndMin)}</strong>: ${crushBottleneck}<br>
+          <strong style="color:#7F77DD">내포장 ${ttFmt(sim.packEndMin)}</strong>: ${packBottleneck}<br>
+          <strong style="color:#A32D2D">레토르트 ${ttFmt(sim.retortEndMin)}</strong>: ${retortBottleneck}
+        </div>
+      </div>
+    </div>`;
+
   document.getElementById('tt-result').innerHTML = `
     ${conclusion}
     ${planBox}
     ${splitView}
-    ${whyCards}
-    ${procTbl}`;
+    ${reportBox}`;
 
   // 호버 툴팁 활성화 (SVG 막대)
   setTimeout(() => {
