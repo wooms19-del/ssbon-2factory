@@ -412,20 +412,50 @@ function ttSimulate(inp, tankMode) {
   // 내포장은 그 산출이 충분히 누적된 뒤 시작 가능
   // 단순화: 전처리 끝났으면 → 12:30부터 시작 가능 (파쇄가 1시간 가동했으니까)
   //         전처리 안 끝났으면 → 13:30부터 (모드 A 동일)
-  // 내포장 시작 시점 = max(파쇄 시작 + 1h, 13:30)
-  // 13:30 이전엔 인원 부족으로 내포장 가동 불가:
-  //   · 11:30~12:30 (점심 1차): 후공정조 점심 → 내포장 0명
-  //   · 12:30~13:30 (점심 2차): 전처리조+관리 1명 점심 → 가용 17명 = 파쇄 14+이송 2 + 내포장 6 = 22 (불가능)
-  //   · 13:30~ (풀가동): 28명 풀가동 → 내포장 6명 가능
-  // 즉 점심 1차에 전처리조가 파쇄로 합류하더라도 내포장은 못 돌림 (인원 부족)
-  const packStartMin = Math.max(crushStartMin + 60, LUNCH2_E);  // 항상 13:30 이후
+  // ── 내포장 시작 시점 동적 계산 ──
+  //
+  // 두 조건 만족 시점:
+  //   1) 파쇄 산출 1대차분(96 EA = 약 130kg) 누적
+  //   2) 내포장 6명 인원 가용
+  //
+  // 인원 가용 시간대:
+  //   · 05:00~11:30: 가능 (후공정조 외포장 작업 중, 6명 내포장으로 빼도 됨)
+  //                  단 파쇄 시작 후여야 함 (산출이 있어야)
+  //   · 11:30~12:30: 후공정조 점심 → 불가
+  //   · 12:30~13:30: 전처리조 점심, 후공정조 복귀 → 가능
+  //   · 13:30~: 풀가동 → 항상 가능
+  const FIRST_PACK_KG = 130;  // 1대차분 약 130kg (96EA × 1.35kg)
+  const firstPackOutKg = FIRST_PACK_KG / (TT_PACK_YIELD/100);  // 파쇄 산출 기준
+  // 파쇄 산출이 firstPackOutKg 도달하는 시점 시뮬
+  let firstPackReadyMin = crushStartMin;
+  let firstAccum = 0;
+  for (let t = crushStartMin; t < 28*60 && firstAccum < firstPackOutKg; t++) {
+    const w = crushWorkersAt(t);
+    if (w > 0) firstAccum += inp.pCrush * w / 60;
+    firstPackReadyMin = t + 1;
+  }
+  // 인원 가용 시간대 매핑: t에서 내포장 6명 가용한지
+  // 11:30~12:30 점심 1차 = 불가
+  // 12:30~13:30 점심 2차 = 전처리 끝났으면 가능
+  const packAvailableAt = (t) => {
+    if (t < LUNCH1_S) return true;      // 점심 전 = 외포장 인원에서 6명
+    if (t < LUNCH1_E) return false;     // 점심 1차 = 후공정조 점심 → 불가
+    if (t < LUNCH2_E) return preEndMin <= LUNCH1_S;  // 점심 2차 = 전처리 끝났을 때만
+    return true;                         // 13:30~ 풀가동
+  };
+  // 내포장 시작 시점 = max(첫 산출 도달, 인원 가용 시점)
+  let packStartMin = firstPackReadyMin;
+  while (packStartMin < 28*60 && !packAvailableAt(packStartMin)) {
+    packStartMin++;  // 다음 가용 시점까지
+  }
   const packWorkersAt = (t) => {
     if (t < packStartMin) return 0;
+    if (!packAvailableAt(t)) return 0;  // 점심 시간대 등 정지
     return inp.wkPack;
   };
   const packSpeedAt = (t) => packWorkersAt(t) > 0 ? inp.pPackEa : 0;
 
-  // 자체 처리 시간: packStart부터 처리량이 pouches 도달까지
+  // 자체 처리 시간: packStart부터 처리량이 pouches 도달까지 (정지 시간 자동 반영)
   let packSelfEndMin = packStartMin;
   let packProcessed = 0;
   for (let t = packStartMin; t < 28*60 && packProcessed < pouches; t++) {
