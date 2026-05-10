@@ -103,6 +103,49 @@ db.collection('_config').doc('version').onSnapshot(function(snap){
 });
 
 // ============================================================
+// 🔄 listener fault tolerance — onSnapshot 끊겨도 새 버전 감지
+// 문제: 모바일/태블릿 백그라운드·절전·장시간 켜둔 경우 onSnapshot 연결 끊김.
+//       이 디바이스는 _config/version PATCH 받지 못해 영영 옛 코드 실행.
+// 해결: (1) 탭 다시 활성화될 때 (2) 창 focus될 때 (3) 60초마다
+//       manual fetch로 version 비교 → onSnapshot과 같은 reload 분기 실행.
+// 영향: listener 살아있으면 중복 동작이지만 무해 (같은 _appVer면 분기 통과 X).
+//       listener 끊긴 디바이스는 이 셋 중 하나라도 trigger되면 reload.
+// ============================================================
+window._checkVersionNow = function(reason){
+  db.collection('_config').doc('version').get().then(function(snap){
+    if(!snap.exists) return;
+    var v = snap.data() && snap.data().value;
+    if(!v) return;
+    if(window._appVer && window._appVer !== v){
+      if(_isUserBusy()){
+        console.log('[version-check:'+reason+'] 입력 중 — reload 대기:', window._appVer, '→', v);
+        window._pendingNewVer = v;
+        _showReloadToast(v);
+      } else {
+        console.log('[version-check:'+reason+'] 새 버전 감지 — 즉시 reload:', window._appVer, '→', v);
+        location.reload(true);
+      }
+    }
+    if(!window._pendingNewVer && !window._appVer) window._appVer = v;
+  }).catch(function(err){
+    console.warn('[version-check:'+reason+'] fetch 실패 (무시):', err && err.message);
+  });
+};
+
+// (1) 탭 visibility — 백그라운드에서 다시 보일 때
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden) window._checkVersionNow('visibility');
+});
+
+// (2) 창 focus — 다른 앱에서 돌아올 때
+window.addEventListener('focus', function(){
+  window._checkVersionNow('focus');
+});
+
+// (3) 60초 폴링 — 위 둘 다 안 트리거되는 극단 케이스 안전망
+setInterval(function(){ window._checkVersionNow('poll'); }, 60000);
+
+// ============================================================
 // 🔄 BFCache 무효화 — 태블릿 잠금 풀고 페이지 부활 시 강제 reload
 // 문제: Chrome Android는 페이지를 메모리에 통째로 보존하는 BFCache 사용.
 //      잠금 풀 때 메모리에서 부활 → 옛 코드 그대로 실행.
