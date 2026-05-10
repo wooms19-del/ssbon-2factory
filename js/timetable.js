@@ -444,52 +444,63 @@ function ttSimulate(inp, tankMode) {
   const packEndMin = Math.max(packSelfEndMin, lastBatchPackEndMin);
   const packMin = packEndMin - packStartMin;
 
-  // 레토르트: 3대 병렬 가능 + 대차 8개 한도
-  //  - 설비 3대: 동시 최대 3개 회차 진행 가능
-  //  - 대차 8개: 회차당 4대차 사용 시 동시 최대 2회차만 가능 (4+4=8)
-  //  - 회차 끝나야 그 회차 대차 4개 회수 → 재투입 가능
-  //  - 사이클 2.5h, 회차당 384EA(4대차)
-  //  - 마지막 회차 = 내포장 종료 후 (마지막 EA 나와야)
+  // 레토르트: 3대 병렬 + 대차 8개, EA 균등 분배 (전체 회차에 고르게)
+  //
+  // 룰:
+  //  - 회차 수 = ceil(pouches / 384) (대차 4개 한도, 최소 회차 수)
+  //  - 회차당 EA = 균등 분배 (예: 796 EA / 3회차 = 265, 265, 266)
+  //  - 회차당 대차 = ceil(EA / 96)
+  //  - 가동 시점 = 그 회차 EA 누적 + 대차 가용 + 설비 가용
+  //  - 마지막 회차 = max(누적 시점, 내포장 종료)
+  //
+  // 효과: 4대차 가득 모을 필요 없음 → 회차 빨리 시작 → 전체 종료 빠름
   const retortCycles = Math.ceil(pouches / TT_FIXED.retortPerCycle);
   const eaPerMin = inp.pPackEa;
-  const NUM_RETORTS = 3;       // 설비 3대
-  const TOTAL_CARTS = 8;       // 대차 총 8개
-  const CARTS_PER_BATCH = 4;   // 회차당 4대차
+  const NUM_RETORTS = 3;
+  const TOTAL_CARTS = 8;
+  const EA_PER_CART = 96;
+  const MAX_CARTS_PER_BATCH = 4;
+
+  // EA 균등 분배 (정수 단위, 마지막에 잔여 합산)
+  const eaPerBatch = Math.floor(pouches / retortCycles);
+  const eaRemainder = pouches - eaPerBatch * retortCycles;
+  const batchEa = [];
+  for (let i = 0; i < retortCycles; i++) {
+    // 잔여 EA를 마지막 회차에 합산
+    batchEa.push(i === retortCycles - 1 ? eaPerBatch + eaRemainder : eaPerBatch);
+  }
+  // 회차당 대차 수 = ceil(EA / 96), 최대 4
+  const batchCarts = batchEa.map(ea => Math.min(MAX_CARTS_PER_BATCH, Math.ceil(ea / EA_PER_CART)));
+
   const retortStartTimes = [];
   const retortEndTimes = [];
-  // 각 설비가 비는 시각 (3대)
   const retortFreeAt = [0, 0, 0];
-  // 대차 회수 일정: [(회차종료시각, 회수대차수), ...]
-  const cartReturns = [];
 
   for (let i = 0; i < retortCycles; i++) {
     const isLast = i === retortCycles - 1;
-    const cumEa = isLast ? pouches : (i + 1) * TT_FIXED.retortPerCycle;
-    // 누적 도달 시점
+    // i회차 누적 EA = 0~i까지 합
+    const cumEa = batchEa.slice(0, i + 1).reduce((a, b) => a + b, 0);
     let accumulateMin = packStartMin + Math.round(cumEa / eaPerMin);
     if (isLast) accumulateMin = Math.max(accumulateMin, packEndMin);
     else if (accumulateMin > packEndMin) accumulateMin = packEndMin;
 
-    // 가용 설비 (가장 빨리 비는 설비)
     const earliestRetort = retortFreeAt.indexOf(Math.min(...retortFreeAt));
     const retortAvailMin = retortFreeAt[earliestRetort];
 
-    // 대차 가용 여부 — 시각 t에 사용 가능한 대차 수
+    // 대차 가용 (현재 진행 중 대차 빼고)
     const cartsAvailableAt = (t) => {
       let inUse = 0;
-      // t 시각에 진행 중인 회차 = 시작 ≤ t < 종료
       for (let k = 0; k < retortStartTimes.length; k++) {
         if (retortStartTimes[k] <= t && t < retortEndTimes[k]) {
-          inUse += CARTS_PER_BATCH;
+          inUse += batchCarts[k];  // 그 회차의 실제 대차 수
         }
       }
       return TOTAL_CARTS - inUse;
     };
-    // 이 회차가 시작될 수 있는 가장 빠른 시점 = 대차 4개 가용 + 설비 가용 + EA 누적
+
     let candidateStart = Math.max(retortAvailMin, accumulateMin);
-    // 대차 부족하면 → 가장 빨리 대차가 회수되는 시점까지 기다림
-    while (cartsAvailableAt(candidateStart) < CARTS_PER_BATCH) {
-      // 진행중인 회차 중 가장 빨리 끝나는 시각으로 점프
+    // 이 회차에 필요한 대차 수만큼 가용까지 대기
+    while (cartsAvailableAt(candidateStart) < batchCarts[i]) {
       const ongoing = retortEndTimes.filter((e, k) => retortStartTimes[k] <= candidateStart && candidateStart < e);
       if (ongoing.length === 0) break;
       candidateStart = Math.min(...ongoing);
@@ -519,6 +530,7 @@ function ttSimulate(inp, tankMode) {
     packSelfEndMin, lastBatchPackEndMin, lastTankPackEa,
     retortStartMin, retortEndMin, retortCycles,
     retortStartTimes, retortEndTimes,
+    batchEa, batchCarts,
     cookYield,
   };
 }
@@ -814,18 +826,18 @@ function ttRender() {
     `시각: ${ttFmt(sim.packStartMin)}~${ttFmt(sim.packEndMin)}|인원: ${inp.wkPack}명|속도: ${inp.pPackEa} EA/분 (기계 1대 한도)|총: ${sim.pouches.toLocaleString()} EA|자체 처리 종료: ${ttFmt(sim.packSelfEndMin)}|마지막 산출분 통과: ${ttFmt(sim.lastBatchPackEndMin)} (둘 중 늦은쪽)`);
   yCursor += ROW_H;
 
-  // ── 레토르트 (각 회차별) ──
+  // ── 레토르트 (각 회차별 - EA 균등 분배) ──
   for (let i = 0; i < sim.retortCycles; i++) {
     const s = sim.retortStartTimes[i];
     const e = sim.retortEndTimes[i];
     const isLast = i === sim.retortCycles - 1;
-    const cumEa = isLast ? sim.pouches : (i+1)*TT_FIXED.retortPerCycle;
-    const cycleEa = isLast ? sim.pouches - i*TT_FIXED.retortPerCycle : TT_FIXED.retortPerCycle;
+    const cycleEa = sim.batchEa[i];
+    const cycleCarts = sim.batchCarts[i];
     bars += rowLabel(yCursor, BAR_H-2, `레토르트 ${i+1}${isLast ? ' ★' : ''}`);
     bars += segBar(yCursor, BAR_H-2, s, e, '#A32D2D',
-      `${cycleEa} EA · 2.5h`,
+      `${cycleEa} EA · ${cycleCarts}대차`,
       `레토르트 ${i+1}회차${isLast ? ' (마지막)' : ''}`,
-      `시각: ${ttFmt(s)}~${ttFmt(e)}|EA: ${cycleEa}개${isLast ? ' (잔량)' : ' (4대차)'}|사이클: 2.5h${isLast ? '|★ 내포장 종료('+ttFmt(sim.packEndMin)+') 후 시작' : ''}`,
+      `시각: ${ttFmt(s)}~${ttFmt(e)}|EA: ${cycleEa}개 (${cycleCarts}대차)|사이클: 2.5h|EA 균등 분배 (전체 ${sim.pouches}EA ÷ ${sim.retortCycles}회차)${isLast ? '|★ 내포장 종료('+ttFmt(sim.packEndMin)+') 후 시작' : ''}`,
       isLast ? {stroke: '#7a1a1a', strokeWidth: 1.5} : {});
     yCursor += ROW_H;
   }
