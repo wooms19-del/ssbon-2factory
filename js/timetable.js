@@ -761,12 +761,14 @@ function ttRender() {
 
   // ── 파쇄 (자숙 호별 분할) ──
   bars += rowLabel(yCursor, BAR_H, '파쇄');
-  // 각 호별 막대 + 호버 툴팁에 모든 정보
-  // 색상: 호별로 살짝 다르게 (구분 잘 보이게)
-  const tankCrushColors = ['#BA7517', '#A66616', '#925815', '#7E4A14'];
+  // 호별 색상 명확히 다르게 (구분 잘 보이도록)
+  const tankCrushColors = ['#BA7517', '#D89A3D', '#8B5A0F', '#E8B05A'];
   sim.tankCrushTimes.forEach((tc, i) => {
     const color = tankCrushColors[i % tankCrushColors.length];
     const durMin = tc.end - tc.start;
+    // 막대 사이 1px gap (다음 호 시작 1분 비움 = 시각적 구분)
+    const isLast = i === sim.tankCrushTimes.length - 1;
+    const adjustedEnd = isLast ? tc.end : tc.end - 1;
     // 막대에 시간대별 인원 변화 정보를 툴팁에 포함
     const crossLunch1 = tc.start < LUNCH1_S && tc.end > LUNCH1_S;
     const crossLunch2 = tc.start < LUNCH1_E && tc.end > LUNCH1_E;
@@ -788,11 +790,19 @@ function ttRender() {
       const segS = Math.max(tc.start, LUNCH2_E);
       segmentInfo.push(`${ttFmt(segS)}~${ttFmt(tc.end)}: ${inp.wkPackPeak}명 풀가동`);
     }
-    bars += segBar(yCursor, BAR_H, tc.start, tc.end, color,
-      `자숙${tc.idx}호 ${Math.round(tc.kg)}kg`,
+    // 막대 너비에 따라 텍스트 표시 분기
+    // 좁은 막대(< ~50px) = 호 번호만, 넓은 막대 = 호 + kg
+    const widthPx = xPos(adjustedEnd) - xPos(tc.start);
+    const label = widthPx >= 70
+      ? `${tc.idx}호 ${Math.round(tc.kg)}kg`
+      : widthPx >= 30
+        ? `${tc.idx}호`
+        : '';
+    bars += segBar(yCursor, BAR_H, tc.start, adjustedEnd, color,
+      label,
       `자숙 ${tc.idx}호분 파쇄`,
       `자숙 ${tc.idx}호 산출: ${Math.round(tc.kg)}kg|시각: ${ttFmt(tc.start)}~${ttFmt(tc.end)} (${durMin}분)|와건 종료: ${ttFmt(sim.wagonEndTimes[i])}|${segmentInfo.join('|')}`,
-      {fillOpacity: 0.85});
+      {fillOpacity: 0.9, stroke: '#fff', strokeWidth: 1});
   });
   yCursor += ROW_H;
 
