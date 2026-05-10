@@ -10,7 +10,7 @@ const TT_PIN = '1234';
 const TT_FIXED = {
   cookHours: 4,        // 자숙 사이클 (시간)
   wagonMin: 30,        // 와건 시간 (분)
-  tankKg: 750,         // 탱크당 자숙량 (kg)
+  tankKg: 800,         // 탱크당 자숙 max (kg) — 사용자분 시스템
   retortCycleMin: 150, // 레토르트 사이클 (2.5h)
   retortPerCycle: 384, // 1회차 처리량 (96 × 4대차)
 };
