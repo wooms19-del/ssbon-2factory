@@ -79,7 +79,8 @@
     <div class="ti" onclick="showTab('d','monthly')">월별현황</div>
     <div class="ti" onclick="showTab('d','trace')">이력추적</div>
     <div class="ti" onclick="showTab('d','recipe')">레시피</div>
-    <div class="ti" onclick="showTab('d','timetable')">타임테이블</div>
+    <div class="ti" onclick="showTab('d','timetable')">타임테이블 (고정)</div>
+    <div class="ti" onclick="showTab('d','timetable_dyn')">타임테이블 (동적)</div>
     <div class="ti" onclick="showTab('d','settings')">설정</div>
   </div>
 </div>
@@ -951,6 +952,29 @@
   </div>
 </div>
 
+<!-- ===== 타임테이블 (동적) - placeholder ===== -->
+<div class="pg" id="p-timetable_dyn">
+  <div style="padding:32px 24px;max-width:720px;margin:24px auto;background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:14px;text-align:center">
+    <div style="font-size:38px;margin-bottom:12px">🚧</div>
+    <div style="font-size:17px;font-weight:700;margin-bottom:10px;color:var(--color-text-primary)">타임테이블 (동적) — 준비 중</div>
+    <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.7;margin-bottom:14px">
+      진짜 동적 시뮬레이션 엔진 개발 예정.<br>
+      28명을 1분마다 어디에 배치할지 자동 추적, 작업 큐 기반 인원 흐름.
+    </div>
+    <div style="font-size:11.5px;color:var(--color-text-tertiary);background:var(--color-background-primary);padding:12px 14px;border-radius:8px;text-align:left;line-height:1.7">
+      <strong>예정 기능</strong><br>
+      · 인원 풀 동적 추적 (전처리 / 파쇄 / 내포장 / 외포장 자동 배치)<br>
+      · 내포장 정지·재가동 (파쇄 산출 누적 따라 자동)<br>
+      · 파쇄 인원 수요 기반 (시간대별 5~18명 유동)<br>
+      · 남는 인원 → 외포장(제수)으로 자동 전환<br>
+      · 인원 합 28명 항상 일치
+    </div>
+    <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:14px">
+      그동안은 <strong>타임테이블 (고정)</strong> 탭을 사용하세요.
+    </div>
+  </div>
+</div>
+
 <div class="pg" id="p-settings">
   <div class="card">
 
@@ -1276,6 +1300,6 @@
 <script src="js/globals.js?v=1778129561"></script>
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
-<script src="js/timetable.js?v=1778424524"></script>
+<script src="js/timetable.js?v=1778426587"></script>
 </body>
 </html>
