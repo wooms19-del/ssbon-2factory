@@ -40,9 +40,16 @@ function ttInit() {
   ttAutoAnalyze().then(ttRender);
 }
 
+// 사용자가 자숙 분배 방식 클릭 → 화면 전체 재렌더
+function ttSelectTankMode(mode) {
+  window.ttSelectedTankMode = mode;
+  ttRender();
+}
+
 // 페이지 진입 시 (탭 활성화 등에서 호출)
 if (typeof window !== 'undefined') {
   window.ttInit = ttInit;
+  window.ttSelectTankMode = ttSelectTankMode;
 }
 
 // ── 시간 유틸 ────────────────────────────────────────────
@@ -631,7 +638,7 @@ function ttRender() {
       </div>`;
     return;
   }
-  // ★ 3가지 자숙 탱크 분배 방식 자동 시뮬 → 가장 빨리 끝나는 방식 자동 선택
+  // ★ 3가지 자숙 탱크 분배 방식 자동 시뮬 → 사용자가 선택하거나 베스트 자동
   const tankSimA = ttSimulate(inp, 'A');
   const tankSimB = ttSimulate(inp, 'B');
   const tankSimE = ttSimulate(inp, 'E');
@@ -640,16 +647,20 @@ function ttRender() {
     { mode: 'B', name: 'N등분 균등', desc: '총량 ÷ 탱크수 = 모든 탱크 동일량', sim: tankSimB },
     { mode: 'E', name: '1호 작게 빨리시작', desc: '1호 510kg(외국인 1.5h) + 나머지 균등', sim: tankSimE },
   ];
-  // 가장 빨리 끝나는 = 레토르트 종료 시각 기준
-  tankResults.sort((a, b) => a.sim.retortEndMin - b.sim.retortEndMin);
-  const tankBest = tankResults[0];
-  const sim = tankBest.sim;
+  // 베스트 (레토르트 종료 빠른 순) — 정렬은 표에 차이 표시용
+  const tankBest = [...tankResults].sort((a, b) => a.sim.retortEndMin - b.sim.retortEndMin)[0];
+  // 사용자가 클릭한 모드 있으면 그것 사용, 없으면 베스트
+  const userTankMode = window.ttSelectedTankMode || null;
+  const tankSelected = userTankMode
+    ? tankResults.find(r => r.mode === userTankMode) || tankBest
+    : tankBest;
+  const sim = tankSelected.sim;
   const slots = ttPlanSlots(inp, sim);
   const narrative = ttPlanNarrative(inp, sim, slots);
 
   const conclusion = `
     <div style="background:linear-gradient(135deg,#E6F1FB 0%,#f3f9fd 100%);border:1px solid #185FA5;border-radius:12px;padding:18px 22px;margin-bottom:16px">
-      <div style="font-size:11px;color:#185FA5;font-weight:600;letter-spacing:0.5px;margin-bottom:6px">📊 데이터 기반 분석 결과</div>
+      <div style="font-size:11px;color:#185FA5;font-weight:600;letter-spacing:0.5px;margin-bottom:6px">📊 데이터 기반 분석 결과 · 자숙 분배 방식 ${tankSelected.mode} (${tankSelected.name})${tankSelected.mode===tankBest.mode?' ★ 베스트':' — 사용자 선택'}</div>
       <div style="font-size:19px;font-weight:600;color:var(--color-text-primary);margin-bottom:6px">
         ${inp.meatType} ${inp.meatKg.toLocaleString()}kg → 약 <span style="color:#0F6E56">${sim.pouches.toLocaleString()}개</span> 생산 ·
         <strong style="color:#185FA5">${ttFmt(sim.packEndMin)} 종료</strong>
@@ -1111,17 +1122,22 @@ function ttRender() {
     return d > 0 ? `+${d}분` : `${d}분`;
   };
   const tankReport = tankResults.map(r => {
+    const isSelected = r.mode === tankSelected.mode;
     const isBest = r.mode === tankBest.mode;
     const diff = r.sim.retortEndMin - tankBest.sim.retortEndMin;
     const tankKgsStr = r.sim.tankKgs.map(k => Math.round(k)).join(', ');
-    return `<tr style="${isBest?'background:#E8F3DE;font-weight:600':''}">
-      <td style="padding:8px 10px;border:1px solid #ddd;font-size:12px">${isBest?'★ ':''}<strong>${r.mode}</strong> ${r.name}</td>
+    const bg = isSelected ? 'background:#E8F3DE;font-weight:600' : 'background:#fff';
+    const cursor = 'cursor:pointer';
+    return `<tr style="${bg};${cursor}" onclick="ttSelectTankMode('${r.mode}')" onmouseover="this.style.background='#FFF5CC'" onmouseout="this.style.background='${isSelected?'#E8F3DE':'#fff'}'">
+      <td style="padding:8px 10px;border:1px solid #ddd;font-size:12px">
+        ${isSelected?'👁 ':''}${isBest?'★ ':''}<strong>${r.mode}</strong> ${r.name}
+      </td>
       <td style="padding:8px 10px;border:1px solid #ddd;font-size:11px;color:#666">[${tankKgsStr}]</td>
       <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px">${ttFmt(r.sim.tankInTimes[0])}</td>
       <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px">${ttFmt(r.sim.crushEndMin)}</td>
       <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px">${ttFmt(r.sim.packEndMin)}</td>
-      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px;${isBest?'color:#0F6E56':''}">${ttFmt(r.sim.retortEndMin)}</td>
-      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:11px;color:${isBest?'#0F6E56':'#A32D2D'}">${diff===0?'★ 베스트':`+${diff}분`}</td>
+      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:12px;${isBest?'color:#0F6E56;font-weight:700':''}">${ttFmt(r.sim.retortEndMin)}</td>
+      <td style="padding:8px 10px;text-align:center;border:1px solid #ddd;font-size:11px;color:${diff===0?'#0F6E56':'#A32D2D'}">${diff===0?'★ 베스트':`+${diff}분`}</td>
     </tr>`;
   }).join('');
 
@@ -1148,7 +1164,7 @@ function ttRender() {
 
       <!-- ① 자숙 탱크 분배 -->
       <div style="margin-bottom:18px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--color-text-primary)">① 자숙 탱크 분배 방식 — 3가지 시뮬 비교</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--color-text-primary)">① 자숙 탱크 분배 방식 — 3가지 시뮬 비교 <span style="font-size:11px;color:#185FA5;font-weight:500">(클릭하면 그 방식으로 타임라인·인원표가 바뀜)</span></div>
         <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px">자숙 1호를 어떻게 채울지 = 시작 시각 + 마지막 탱크 종료 시각이 다름 → 전체 종료 시각 차이 발생</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff">
           <thead>
@@ -1164,7 +1180,10 @@ function ttRender() {
           </thead>
           <tbody>${tankReport}</tbody>
         </table>
-        <div style="font-size:11px;color:#0F6E56;margin-top:6px;font-weight:600">→ ${tankBest.mode} 방식 (${tankBest.name}) 자동 선택 — 레토르트 종료 ${ttFmt(tankBest.sim.retortEndMin)}</div>
+        <div style="font-size:11px;margin-top:6px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span style="color:#0F6E56;font-weight:600">★ 베스트: ${tankBest.mode} (${tankBest.name}) — ${ttFmt(tankBest.sim.retortEndMin)}</span>
+          <span style="color:${tankSelected.mode===tankBest.mode?'#0F6E56':'#185FA5'};font-weight:600">👁 현재 표시: ${tankSelected.mode} ${tankSelected.mode===tankBest.mode?'(베스트)':'(사용자 선택)'}</span>
+        </div>
       </div>
 
       <!-- ② 점심 운영 -->
