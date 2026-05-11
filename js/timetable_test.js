@@ -2279,16 +2279,18 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
   const earlyFpCrush = sim.fp.crush.s < 8*60+30;
   const earlyFcCrush = (sim.fc.crushes?.[0]?.s ?? sim.fc.crush.s) < 8*60+30;
 
-  const crushEvents = (sim.fc.crushes || [sim.fc.crush]).flatMap(c => [c.s, c.e]);
+  // 슬롯: 1시간 단위 + 인원 변화 시각(조출/관리자/합류) + 점심 경계만
+  const startH = Math.floor(sim.fp.pre.s / 60) * 60;
+  const endH   = Math.ceil(sim.endMin / 60) * 60;
+  const hourBoundaries = [];
+  for (let h = startH; h <= endH; h += 60) hourBoundaries.push(h);
+
   const boundaries = new Set([
-    sim.fp.pre.s, sim.fp.pre.e,
-    sim.fc.pre.s, sim.fc.pre.e,
-    sim.fp.crush.s, sim.fp.crush.e,
-    ...crushEvents,
-    sim.fp.pack.s, sim.fp.pack.e,
-    sim.fc.pack.s, sim.fc.pack.e,
-    mgrTimeMin, joinTimeMin,
-    11*60+30, 12*60+30, 13*60+30,
+    ...hourBoundaries,
+    sim.fp.pre.s,         // 조출 시작
+    mgrTimeMin,           // 관리자 출근
+    joinTimeMin,          // 한국인 합류
+    11*60+30, 12*60+30, 13*60+30,  // 점심
     sim.endMin,
   ]);
   const sorted = Array.from(boundaries)
@@ -2324,16 +2326,13 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
     let lunch=0, outer=0, setting=0;
 
     if (isLunch1 || isLunch2) {
-      // 점심: 전원 반반 교대 (파쇄 포함)
-      // 1차: half1명 점심 → 나머지 half2명 일함
-      // 2차: half2명 점심 → 나머지 half1명 일함
+      // 점심: 절반 식사, 나머지 절반 일함
       lunch = isLunch1 ? half1 : half2;
-      // 파쇄도 반반: 일하는 쪽만 crush에 표시
-      const workingHalf = isLunch1 ? half2 : half1;
-      // 내포장+이송+관리 먼저 배치, 나머지 파쇄
+      const workingHalf = onsite - lunch;
+      // 내포장+이송+관리 고정, 남은 자리 파쇄
       const fixedWork = pack + trans + mgr;
-      crush = Math.max(0, workingHalf - fixedWork);
-      outer = Math.max(0, onsite - lunch - fixedWork - crush);
+      crush = Math.max(0, Math.min(crush, workingHalf - fixedWork));
+      outer = Math.max(0, workingHalf - fixedWork - crush);
     } else {
       // 비점심: 남는 인원 → 외포장/세팅 (유휴 없음)
       const occupied = pre + crush + pack + trans + mgr;
