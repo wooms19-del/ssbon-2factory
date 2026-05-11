@@ -15,8 +15,8 @@ const TT_FIXED = {
   retortPerCycle: 384, // 1회차 처리량 (96 × 4대차)
 };
 
-// 자숙 수율은 원육별 고정값 (DB 산출량 필드 없음)
-const TT_COOK_YIELD = {
+// 자숙 수율 기본값 (자동 분석 실패/데이터 없음 시 사용) — cooking 컬렉션에서 type별로 계산
+const TT_COOK_YIELD_DEFAULT = {
   '홍두깨': 56.8,
   '우둔':   55.0,
   '설도':   58.0,
@@ -29,6 +29,7 @@ const TT_PACK_KG_PER_POUCH = 1.35;
 // 자동 분석 결과 (UI에 표시할 자동값 + n)
 let TT_AUTO = {
   yPre: { val: 89.3, n: 0 },
+  yCook: { val: 56.8, n: 0 },
   yCrush: { val: 96.1, n: 0 },
   pPre: { val: 48.2, n: 0 },
   pCrush: { val: 17.2, n: 0 },
@@ -110,29 +111,40 @@ function ttGetInputs() {
 }
 
 // ── 누적 데이터 자동 분석 ────────────────────────────────
+// 수율 정의:
+//   - 전처리: 단계수율 = (kg - waste) / kg (원육 직접 측정이므로 단계=원육기준 동일)
+//   - 자숙:   단계수율 = kg / kgIn  (cooking 컬렉션 자체에 투입·산출 다 있음)
+//   - 파쇄:   원육 기준 누적수율 = 파쇄 산출 kg / 같은 chain의 원육 kg
+//             (chain: shredding.wagonIn → cooking.wagonOut 매칭 → cooking.cage/type → preprocess.kg)
+// 분류:
+//   - "홍두깨" 선택  = FC 제품 (product에 'FC' 포함)
+//   - "우둔/설도" 선택 = 비-FC 제품 (FC 미포함)
+//   - 원육 type은 preprocess/cooking 필터에만 사용
 async function ttAutoAnalyze() {
   const period = document.getElementById('tt-period')?.value || 'all';
   const meatType = document.getElementById('tt-meat')?.value || '홍두깨';
-  const today = new Date();
-  const fmt = d => d.toISOString().slice(0,10);
-  let fromDate = '2020-01-01', toDate = fmt(today);
-  if (period === 'today') fromDate = fmt(today);
+  const isFC = (meatType === '홍두깨');
+  const todayStr = (typeof tod === 'function') ? tod() : (new Date()).toISOString().slice(0,10);
+  // fromDate 계산 (로컬 시간 기준, tod() 사용)
+  const [ty,tm,td] = todayStr.split('-').map(Number);
+  const todayLocal = new Date(ty, tm-1, td);
+  const fmt = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  let fromDate = '2020-01-01', toDate = todayStr;
+  if (period === 'today') fromDate = todayStr;
   else if (period === 'week') {
-    const d = new Date(today); d.setDate(d.getDate() - 7);
-    fromDate = fmt(d);
+    const d = new Date(todayLocal); d.setDate(d.getDate() - 7); fromDate = fmt(d);
   }
   else if (period === 'month') {
-    const d = new Date(today.getFullYear(), today.getMonth(), 1);
-    fromDate = fmt(d);
+    fromDate = fmt(new Date(ty, tm-1, 1));
   }
   else if (period === 'last30') {
-    const d = new Date(today); d.setDate(d.getDate() - 30);
-    fromDate = fmt(d);
+    const d = new Date(todayLocal); d.setDate(d.getDate() - 30); fromDate = fmt(d);
   }
 
   try {
-    const [preDocs, crushDocs, packDocs] = await Promise.all([
+    const [preDocs, cookDocs, crushDocs, packDocs] = await Promise.all([
       db.collection('preprocess').get(),
+      db.collection('cooking').get(),
       db.collection('shredding').get(),
       db.collection('packing').get(),
     ]);
@@ -145,7 +157,7 @@ async function ttAutoAnalyze() {
       return diff < 0 ? diff + 1440 : diff;
     };
 
-    // 전처리
+    // ── 전처리: 단계수율 + 생산성 (선택된 원육 type 기준) ──
     let preInY=0, preOutY=0, preInP=0, prePH=0, preN=0;
     preDocs.forEach(d => {
       const r = d.data();
@@ -153,29 +165,91 @@ async function ttAutoAnalyze() {
       const kg = +r.kg||0, w = +r.waste||0, wk = +r.workers||0;
       const m = minutesBetween(r.start, r.end);
       if (kg <= 0 || wk <= 0 || m <= 0) return;
-      // 수율: 비가식부 입력된 레코드만
       if (w > 0) { preInY += kg; preOutY += (kg - w); }
-      // 생산성: 모든 레코드
       preInP += kg;
       prePH += wk * (m/60);
       preN++;
     });
 
-    // 파쇄 (type 필드 없음)
-    let crInY=0, crOutY=0, crInP=0, crPH=0, crN=0;
+    // ── 자숙: cooking.kgIn(투입) → cooking.kg(산출), type 필터 ──
+    let ckInY=0, ckOutY=0, ckN=0;
+    // 동시에 chain-trace용 인덱스 구축: cooking.wagonOut(콤마구분)별로 type 매핑
+    const cookByWagonOut = {}; // { 'YYYY-MM-DD|wagonNo': type }
+    cookDocs.forEach(d => {
+      const r = d.data();
+      if (!inRange(r.date)) return;
+      const kgIn = +r.kgIn||0, kgOut = +r.kg||0;
+      if (r.type === meatType && kgIn > 0 && kgOut > 0) {
+        ckInY += kgIn; ckOutY += kgOut; ckN++;
+      }
+      // chain-trace 인덱스 (해당 기간 모든 type)
+      const wOutStr = String(r.wagonOut||'');
+      if (wOutStr && r.type) {
+        wOutStr.split(',').map(s=>s.trim()).filter(Boolean).forEach(w => {
+          cookByWagonOut[r.date+'|'+w] = r.type;
+        });
+      }
+    });
+
+    // ── 파쇄: chain-trace로 type 추론, 원육 기준 누적수율 ──
+    // shredding.kg = 산출 (이전 코드의 큰 버그: 입력으로 잘못 사용했었음)
+    // 원육 기준 누적수율 = shredding.kg / (해당 chain의 원육 kg)
+    // 원육 kg = 같은 날짜 preprocess.kg (선택된 meatType 합산)
+    //
+    // 단순화: 같은 날 같은 type의 모든 shredding 산출 합 ÷ 같은 날 같은 type preprocess 입력 합
+    // type 추론: shredding.wagonIn → cookByWagonOut에서 type 가져옴
+    let crInP=0, crPH=0, crN=0;       // 생산성용 (모든 데이터)
+    const crByDay = {};  // { date: { sumOut: kg, hasMatchingType: bool } } — 원육기준 수율용
+
     crushDocs.forEach(d => {
       const r = d.data();
       if (!inRange(r.date)) return;
-      const kg = +r.kg||0, w = +r.waste||0, wk = +r.workers||0;
+      const kg = +r.kg||0, kgIn = +r.kgIn||0, wk = +r.workers||0;
       const m = minutesBetween(r.start, r.end);
       if (kg <= 0 || wk <= 0 || m <= 0) return;
-      if (w > 0) { crInY += kg; crOutY += (kg - w); }
-      crInP += kg;
+
+      // chain-trace: wagonIn 콤마구분 각각에 대해 cooking type 매칭
+      const wInStr = String(r.wagonIn||'');
+      const wIns = wInStr.split(',').map(s=>s.trim()).filter(Boolean);
+      let matchedType = null;
+      for (const w of wIns) {
+        const t = cookByWagonOut[r.date+'|'+w];
+        if (t) { matchedType = t; break; }
+      }
+      if (matchedType !== meatType) return; // 선택 원육 아닌 데이터 제외
+
+      // 생산성: kgIn 우선, 없으면 kg 사용
+      const prodKg = kgIn > 0 ? kgIn : kg;
+      crInP += prodKg;
       crPH += wk * (m/60);
       crN++;
+
+      // 원육기준 수율: 같은 날 산출량 합산
+      if (!crByDay[r.date]) crByDay[r.date] = { sumOut: 0 };
+      crByDay[r.date].sumOut += kg;
     });
 
-    // 내포장 (FC 3kg)
+    // 원육 기준 분모: 같은 날 같은 type의 preprocess.kg 합
+    const preByDay = {}; // { date: sumKg }
+    preDocs.forEach(d => {
+      const r = d.data();
+      if (!inRange(r.date) || r.type !== meatType) return;
+      const kg = +r.kg||0;
+      if (kg <= 0) return;
+      preByDay[r.date] = (preByDay[r.date]||0) + kg;
+    });
+
+    let crYldNum=0, crYldDen=0;
+    Object.keys(crByDay).forEach(date => {
+      const out = crByDay[date].sumOut;
+      const orig = preByDay[date];
+      if (out > 0 && orig > 0) {
+        crYldNum += out;
+        crYldDen += orig;
+      }
+    });
+
+    // ── 내포장: FC vs 비-FC 이분법 ──
     let pkEa=0, pkMin=0, pkN=0;
     packDocs.forEach(d => {
       const r = d.data();
@@ -183,14 +257,21 @@ async function ttAutoAnalyze() {
       const ea = +r.ea||0, m = minutesBetween(r.start, r.end);
       if (ea <= 0 || m <= 0) return;
       const prod = (r.product||'').toString();
-      if (meatType === '홍두깨' && !prod.match(/FC|3kg|3KG/)) return;
+      const isFCProd = /FC/i.test(prod);
+      if (isFC !== isFCProd) return; // FC면 FC제품만, 비-FC면 비-FC제품만
       pkEa += ea; pkMin += m; pkN++;
     });
 
+    // ── TT_AUTO 갱신 ──
     if (preInY > 0) TT_AUTO.yPre = { val: +(preOutY/preInY*100).toFixed(1), n: preN };
     else TT_AUTO.yPre = { ...TT_AUTO.yPre, n: preN };
-    if (crInY > 0) TT_AUTO.yCrush = { val: +(crOutY/crInY*100).toFixed(1), n: crN };
+
+    if (ckInY > 0) TT_AUTO.yCook = { val: +(ckOutY/ckInY*100).toFixed(1), n: ckN };
+    else TT_AUTO.yCook = { val: TT_COOK_YIELD_DEFAULT[meatType] || 56.8, n: 0 };
+
+    if (crYldDen > 0) TT_AUTO.yCrush = { val: +(crYldNum/crYldDen*100).toFixed(1), n: crN };
     else TT_AUTO.yCrush = { ...TT_AUTO.yCrush, n: crN };
+
     if (prePH > 0) TT_AUTO.pPre = { val: +(preInP/prePH).toFixed(1), n: preN };
     if (crPH > 0) TT_AUTO.pCrush = { val: +(crInP/crPH).toFixed(1), n: crN };
     if (pkMin > 0) TT_AUTO.pPackEa = { val: +(pkEa/pkMin).toFixed(1), n: pkN };
@@ -255,7 +336,7 @@ function ttSimulate(inp, tankMode) {
   tankMode = tankMode || 'A';
   const startMin = ttToMin(inp.startTime);
   const joinMin = ttToMin(inp.joinTime);
-  const cookYield = TT_COOK_YIELD[inp.meatType] || 56.8;
+  const cookYield = (TT_AUTO.yCook && TT_AUTO.yCook.n > 0) ? TT_AUTO.yCook.val : (TT_COOK_YIELD_DEFAULT[inp.meatType] || 56.8);
 
   const preIn = inp.meatKg;
   const preOut = preIn * inp.yPre / 100;
