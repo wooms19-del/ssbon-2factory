@@ -929,17 +929,21 @@ function ttPlanSlots(inp, sim) {
     sum: total,
   });
 
-  // 슬롯 4: 점심 1차 (11:30~12:30) — 후공정조 + 외포장조 점심, 전처리조는 파쇄 합류
+  // 슬롯 4: 점심 1차 (11:30~12:30)
+  // wms 룰: 점심2(전처리+내포장+이송=wkPre+wkPack+wkTrans)를 빼고 나머지가 점심1
+  // 점심1 인원 = 26(관리 제외 전체) - 점심2 인원
+  // 점심1 동안 일하는 사람 = 28 - 점심1 - 1(관리1명 점심) = 점심2조와 일부 파쇄조 합류
   if (preEndedBeforeLunch) {
-    // 점심1 = 후공정조(파쇄·내포장·이송) + 외포장조 + 세팅 등 = 총 - 전처리조 - 관리1
-    const lunch1 = total - inp.wkPre - 1;
+    const lunch2Count = inp.wkPre + inp.wkPack + inp.wkTrans; // 점심2: 전처리+내포장+이송
+    const lunch1Count = Math.max(0, total - 2 - lunch2Count); // 관리 2명 제외 후 점심2 빼면 점심1
+    // 점심1 동안 작업 = 전처리조(점심2 갈 사람)는 파쇄에 합류
+    const crushAtLunch1 = total - lunch1Count - 1; // 관리 1 점심
     slots.push({
       range: `11:30~12:30`,
-      cells: { 파쇄: inp.wkPre, 점심: Math.max(0, lunch1), 관리: 1 },
+      cells: { 파쇄: Math.max(0, crushAtLunch1), 점심: lunch1Count, 관리: 1 },
       sum: total,
     });
   } else {
-    // 전처리 진행 중
     slots.push({
       range: `11:30~12:30`,
       cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
@@ -947,20 +951,16 @@ function ttPlanSlots(inp, sim) {
     });
   }
 
-  // 슬롯 5: 점심 2차 (12:30~13:30) — 전처리조만 점심, 후공정조는 복귀해서 파쇄 가동
-  // 점심2 = 전처리조 = wkPre (점심1에 갔던 사람들은 다시 일터로 복귀)
-  // 파쇄 = wkCrush + wkTrans (후공정조 복귀 + 이송 합류)
-  // 외포장조는 이미 점심1에 다녀왔으므로 이제 작업 (외포장 계속 또는 다른 일)
-  // → 합 = 전처리(점심) + 파쇄 + 관리 + 외포장(작업) = 28
-  // 외포장 등 = 28 - wkPre - (wkCrush+wkTrans) - 1
-  const lunch2 = inp.wkPre; // 전처리조만 점심
-  const others2 = Math.max(0, total - inp.wkPre - (inp.wkCrush + inp.wkTrans) - 1);
+  // 슬롯 5: 점심 2차 (12:30~13:30)
+  // 전처리 + 내포장 + 이송이 점심 (= 13:30에 바로 본격 시작 가능)
+  // 파쇄: 점심1 다녀온 인원이 가동 (풀가동 아니어도 OK)
+  const lunch2 = inp.wkPre + inp.wkPack + inp.wkTrans;
+  const crushAtLunch2 = Math.max(0, total - lunch2 - 1);
   slots.push({
     range: `12:30~13:30`,
     cells: {
-      파쇄: inp.wkCrush + inp.wkTrans,
+      파쇄: crushAtLunch2,
       점심: lunch2,
-      외포장: others2, // 남는 사람은 외포장 (잔여 작업)
       관리: 1,
     },
     sum: total,
