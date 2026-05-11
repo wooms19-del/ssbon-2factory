@@ -1031,13 +1031,55 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
       fbGetRange('cooking',prevFrom,prevTo),
       fbGetRange('shredding',prevFrom,prevTo)
     ]);
+
+    // ── testRun 체인 역추적 (이번달과 동일 로직) ──────────────────
+    const _prevTestOpK = new Set(prevOp.filter(r=>r.testRun||r.isTest).map(r=>`${String(r.date||'').slice(0,10)}_${r.product||''}`));
+    const _prevIsTestPk = r => r.testRun || r.isTest || _prevTestOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`);
+    const _prevPkClean2 = prevPk.filter(r=>!_prevIsTestPk(r));
+
+    const _prevTestPpIds = new Set();
+    const _prevTestThWByDate = {};
+    const _prevTestDates = [...new Set(prevPk.filter(_prevIsTestPk).map(r=>String(r.date||'').slice(0,10)))];
+    _prevTestDates.forEach(d => {
+      const tPkD = prevPk.filter(_prevIsTestPk).filter(r=>String(r.date||'').slice(0,10)===d);
+      const shD  = (prevSh||[]).filter(r=>String(r.date||'').slice(0,10)===d);
+      const ckD  = (prevCk||[]).filter(r=>String(r.date||'').slice(0,10)===d);
+      const ppD  = (prevPp||[]).filter(r=>String(r.date||'').slice(0,10)===d);
+      const tPkW = new Set(tPkD.flatMap(r=>(r.wagon||'').split(',').map(w=>w.trim()).filter(Boolean)));
+      const tPkC = new Set(tPkD.flatMap(r=>(r.cart ||'').split(',').map(w=>w.trim()).filter(Boolean)));
+      const tSh  = shD.filter(r=>{
+        const woMatch = (r.wagonOut||'').split(',').map(w=>w.trim()).some(w=>tPkW.has(w));
+        const coMatch = (r.cartOut ||'').split(',').map(w=>w.trim()).some(w=>tPkC.has(w));
+        return woMatch || coMatch;
+      });
+      const tShW = new Set(tSh.flatMap(r=>(r.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean)));
+      const tCk  = ckD.filter(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).some(w=>tShW.has(w)));
+      const tCkC = new Set(tCk.flatMap(r=>(r.cage||'').split(',').map(c=>c.trim()).filter(Boolean)));
+      const tPp  = ppD.filter(r=>(r.cage||'').split(',').map(c=>c.trim()).some(c=>tCkC.has(c)));
+      const tPpW = new Set(tPp.flatMap(r=>(r.wagons||'').split(',').map(w=>w.trim()).filter(Boolean)));
+      tPp.forEach(r => _prevTestPpIds.add(r.fbId||r.id));
+      if(!_prevTestThWByDate[d]) _prevTestThWByDate[d] = new Set();
+      tPpW.forEach(w => _prevTestThWByDate[d].add(w));
+    });
+    const _prevPpClean = (prevPp||[]).filter(r => !_prevTestPpIds.has(r.fbId||r.id));
+    const _prevThClean = (prevTh||[]).filter(r => {
+      const thD = String(r.date||'').slice(0,10);
+      const w   = (r.cart||'').trim();
+      if(!w) return true;
+      if(_prevTestThWByDate[thD] && _prevTestThWByDate[thD].has(w)) return false;
+      const nxt = (()=>{const dt=new Date(thD);dt.setDate(dt.getDate()+1);return dt.toISOString().slice(0,10);})();
+      if(_prevTestThWByDate[nxt] && _prevTestThWByDate[nxt].has(w)) return false;
+      return true;
+    });
+    // ─────────────────────────────────────────────────────
+
     const prevOpMap={};
     prevOp.filter(r=>!r.testRun&&!r.isTest).forEach(r=>{
       const dk=String(r.date||'').slice(0,10)+'|'+(r.product||'');
       prevOpMap[dk]=(prevOpMap[dk]||0)+(parseInt(r.outerEa)||0);
     });
     const prevBDP={};
-    prevPk.forEach(r=>{
+    _prevPkClean2.forEach(r=>{
       const d=String(r.date||'').slice(0,10), prod=r.product||'기타', key=d+'|'+prod;
       if(!prevBDP[key]) prevBDP[key]={date:d,product:prod,pkKg:0};
       const p=L.products.find(x=>x.name===prod);
@@ -1047,8 +1089,8 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     Object.values(prevBDP).forEach(row=>{if(!prevGrouped[row.date])prevGrouped[row.date]=[];prevGrouped[row.date].push(row);});
     let pRm=0,pPk=0,pDays=0;
     Object.entries(prevGrouped).forEach(([date,allR])=>{
-      const ppDay=(prevPp||[]).filter(r=>String(r.date||'').slice(0,10)===date);
-      const dayRm=r2(getThKgByPP_(ppDay,prevTh||[],date));
+      const ppDay=_prevPpClean.filter(r=>String(r.date||'').slice(0,10)===date);
+      const dayRm=r2(getThKgByPP_(ppDay,_prevThClean,date));
       if(!dayRm) return;
       const effM={};
       allR.forEach(row=>{const oe=prevOpMap[date+'|'+row.product]||0;const p=L.products.find(x=>x.name===row.product);effM[row.product]=oe>0&&p?r2(oe*p.kgea):row.pkKg;});
@@ -1059,7 +1101,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
 
     // ★ 전월 차트 데이터 만들기 — 생산 일수 인덱스 비교용
     // 전월 (생산한 날만) 일별 = 불량률 / 내포장 EA·KG / 수율
-    const _prevPkClean = (prevPk||[]).filter(r=>!r.testRun&&!r.isTest);
+    const _prevPkClean = _prevPkClean2;  // 체인 역추적된 것 재사용 (단순 testRun 필터만 아님)
     const _pByDate = {};
     _prevPkClean.forEach(r => {
       const d = String(r.date||'').slice(0,10);
@@ -1140,12 +1182,10 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
       if (!m) return 0;
       return m[2].toUpperCase()==='KG' ? parseFloat(m[1])*1000 : parseFloat(m[1]);
     };
-    // testRun 필터 (이번달 막대와 동일) — prevOp 사용
-    const _prevTestOpK = new Set((prevOp||[]).filter(r => r.testRun||r.isTest).map(r => `${String(r.date||'').slice(0,10)}_${r.product||''}`));
-    const _prevIsTest = r => !!(r.testRun || r.isTest || _prevTestOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`));
-    // 1단계: 그 날 그 제품의 ea 합 (testRun 제외)
+    // testRun 체인 역추적 결과(_prevPkClean2)를 그대로 사용 (위에서 이미 계산)
+    // 1단계: 그 날 그 제품의 ea 합 (체인 제외 적용된 데이터로)
     const _prevByDateProd = {};
-    (prevPk||[]).filter(r => !_prevIsTest(r)).forEach(r=>{
+    _prevPkClean2.forEach(r=>{
       const d = String(r.date||'').slice(0,10);
       const prod = r.product||'기타';
       const key = d+'|'+prod;
