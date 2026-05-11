@@ -1124,11 +1124,11 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
         defectPct: pouch>0 ? parseFloat((v.def/pouch*100).toFixed(2)) : null
       };
     });
-    // 전월 일별 수율 (그날 원육 대비 그날 산출)
+    // 전월 일별 수율 (그날 원육 대비 그날 산출) — 체인 제외 데이터 사용
     const _pYldByIdx = [];
     Object.entries(prevGrouped).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([date,allR]) => {
-      const ppDay = (prevPp||[]).filter(r=>String(r.date||'').slice(0,10)===date);
-      const dayRm = r2(getThKgByPP_(ppDay,prevTh||[],date));
+      const ppDay = _prevPpClean.filter(r=>String(r.date||'').slice(0,10)===date);
+      const dayRm = r2(getThKgByPP_(ppDay,_prevThClean,date));
       if(!dayRm) return;
       const effM = {};
       allR.forEach(row=>{
@@ -1148,9 +1148,9 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     // 작업일 = 생산한 날 (prevGrouped 키, 정렬)
     const _prevWorkDates = Object.keys(prevGrouped).sort();
     const _prevByWorkDay = _prevWorkDates.map((date, i) => {
-      // 그날 원육
-      const ppDay = (prevPp||[]).filter(r=>String(r.date||'').slice(0,10)===date);
-      const rm = r2(getThKgByPP_(ppDay,prevTh||[],date));
+      // 그날 원육 — 체인 제외 데이터 사용
+      const ppDay = _prevPpClean.filter(r=>String(r.date||'').slice(0,10)===date);
+      const rm = r2(getThKgByPP_(ppDay,_prevThClean,date));
       // 그날 전처리/자숙/파쇄 합계
       const ppKg = ppDay.reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
       const ckKg = (prevCk||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
