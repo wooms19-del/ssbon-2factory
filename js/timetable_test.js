@@ -2321,27 +2321,35 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
 
     const isLunch1 = s >= 11*60+30 && e <= 12*60+30;
     const isLunch2 = s >= 12*60+30 && e <= 13*60+30;
-    let lunch=0, outer=0, setting=0, idle=0;
+    let lunch=0, outer=0, setting=0;
 
-    if (isLunch1) {
-      lunch = Math.min(half1, Math.max(0, onsite - crush - pack - trans - mgr));
-    } else if (isLunch2) {
-      lunch = Math.min(half2, Math.max(0, onsite - crush - pack - trans - mgr));
-    }
-
-    const occupied = pre + crush + pack + trans + mgr + lunch;
-    const slack = Math.max(0, onsite - occupied);
-    if (!isLunch1 && !isLunch2) {
+    if (isLunch1 || isLunch2) {
+      // 점심: 파쇄·내포장·이송·관리 제외한 나머지가 점심
+      // 점심 인원 = onsite - (파쇄+내포장+이송+관리), 반반 교대
+      const working = crush + pack + trans + mgr;
+      const lunchPool = Math.max(0, onsite - working);
+      lunch = isLunch1 ? Math.min(half1, lunchPool) : Math.min(half2, lunchPool);
+    } else {
+      // 비점심: 남는 인원 → 외포장/세팅 (유휴 없음)
+      const occupied = pre + crush + pack + trans + mgr;
+      const slack = Math.max(0, onsite - occupied);
       if (mid >= joinTimeMin && mid < 11*60+30 && crush === 0 && pack === 0) {
         setting = Math.min(3, slack);
         outer   = Math.max(0, slack - setting);
       } else {
-        idle = slack;
+        outer = slack; // 유휴 대신 외포장
       }
     }
 
-    const total = pre+crush+pack+trans+outer+setting+lunch+mgr+idle;
-    slots.push({ label:`${fmt(s)}~${fmt(e)}`, pre, crush, pack, trans, outer, setting, lunch, mgr, idle, total, onsite });
+    // 인원 초과 시 파쇄에서 삭감
+    let total = pre+crush+pack+trans+outer+setting+lunch+mgr;
+    if (total > onsite) {
+      const over = total - onsite;
+      crush = Math.max(0, crush - over);
+      total = pre+crush+pack+trans+outer+setting+lunch+mgr;
+    }
+
+    slots.push({ label:`${fmt(s)}~${fmt(e)}`, pre, crush, pack, trans, outer, setting, lunch, mgr, idle:0, total, onsite });
   }
 
   const wkColors = ['#185FA5','#BA7517','#7F77DD','#534AB7','#1D9E75','#EF9F27','#888780','#5F5E5A','#B4B2A9'];
