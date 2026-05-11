@@ -460,13 +460,23 @@ async function tttAutoAnalyzeOther() {
       db.collection('packing').get(),
       db.collection('thawing').get(),
     ]);
-    // FC가 아닌 원육 기준
+    // ── FP 전처리 수율: FC와 동일 방식 (thawing end 기준 날짜 매칭) ──
     let preKg=0,prePH=0,preN=0,preRmKg=0;
-    thawDocs.forEach(d => { const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return; preRmKg += +r.totalKg||0; });
     preDocs.forEach(d => {
       const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return;
       const kg=+r.kg||0,w=+r.waste||0,wk=+r.workers||0,m=minutesBetween(r.start,r.end);
       if (kg>0&&wk>0&&m>0) { preKg+=kg; prePH+=wk*(m/60); preN++; }
+    });
+    thawDocs.forEach(d => {
+      const r=d.data();
+      if ((r.type||'')==='홍두깨') return;
+      const endStr=String(r.end||'');
+      if (!endStr) return;
+      let endDate;
+      if (endStr.length>=10&&endStr[4]==='-') endDate=endStr.slice(0,10);
+      else endDate=String(r.date||'').slice(0,10);
+      if (!endDate||!inRange(endDate)) return;
+      preRmKg+=+r.totalKg||0;
     });
     let ckIn=0,ckOut=0,ckN=0;
     cookDocs.forEach(d => {
