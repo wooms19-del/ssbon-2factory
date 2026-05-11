@@ -2307,13 +2307,14 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
     else onsite = totalWorkers;
 
     const mgr = mid >= mgrTimeMin ? mgrMin : 0;
-    const pre = (ov(s,e,sim.fp.pre.s,sim.fp.pre.e) ? workers.preFp : 0)
-              + (ov(s,e,sim.fc.pre.s,sim.fc.pre.e) ? workers.preFc : 0);
-    let crush = ov(s,e,sim.fp.crush.s,sim.fp.crush.e) ? workers.crushFp : 0;
-    (sim.fc.crushes||[sim.fc.crush]).forEach(c => { if(ov(s,e,c.s,c.e)) crush += workers.crushFc; });
+    const act = (ps,pe) => mid >= ps && mid < pe;
+    const pre = (act(sim.fp.pre.s,sim.fp.pre.e) ? workers.preFp : 0)
+              + (act(sim.fc.pre.s,sim.fc.pre.e) ? workers.preFc : 0);
+    let crush = act(sim.fp.crush.s,sim.fp.crush.e) ? workers.crushFp : 0;
+    (sim.fc.crushes||[sim.fc.crush]).forEach(c => { if(act(c.s,c.e)) crush += workers.crushFc; });
     let pack=0, trans=0;
-    if (ov(s,e,sim.fp.pack.s,sim.fp.pack.e)) { pack+=workers.packFp; trans+=2; }
-    if (ov(s,e,sim.fc.pack.s,sim.fc.pack.e)) { pack+=workers.packFc; trans+=2; }
+    if (act(sim.fp.pack.s,sim.fp.pack.e)) { pack+=workers.packFp; trans+=2; }
+    if (act(sim.fc.pack.s,sim.fc.pack.e)) { pack+=workers.packFc; trans+=2; }
 
     const isLunch1 = mid >= 11*60+30 && mid < 12*60+30;
     const isLunch2 = mid >= 12*60+30 && mid < 13*60+30;
@@ -2542,12 +2543,12 @@ function ttmRender() {
         <div style="font-size:14px;font-weight:600">📅 시나리오 타임라인 + 시간대별 인원 활용</div>
         <button onclick="ttmDownloadExcel()" style="background:#185FA5;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">📥 엑셀 다운로드</button>
       </div>
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        <div style="flex:1;min-width:480px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
           <div style="font-size:13px;font-weight:600;margin-bottom:8px">📋 공정 타임라인</div>
           ${ttmRenderTimeline(scen, workers, sim)}
         </div>
-        <div style="flex:1;min-width:480px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
           <div style="font-size:13px;font-weight:600;margin-bottom:8px">👥 시간대별 인원 활용</div>
           ${ttmRenderWorkerSlots(scen, workers, sim)}
         </div>
