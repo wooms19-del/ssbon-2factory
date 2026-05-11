@@ -929,38 +929,28 @@ function ttPlanSlots(inp, sim) {
     sum: total,
   });
 
+  // 슬롯 4·5: 점심 (wms 룰)
+  // 파쇄 전담 인원 = 총원 - 전처리 - 내포장 - 이송 - 관리
+  // = 점심1에 점심 가는 순수 파쇄조
+  const crushOnly = Math.max(0, total - inp.wkPre - inp.wkPack - inp.wkTrans - mgr);
+
   // 슬롯 4: 점심 1차 (11:30~12:30)
-  // wms 룰: 점심2(전처리+내포장+이송) 빼고 나머지가 점심1
-  // 관리자 2명: 각 점심에 1명씩 (점심1·점심2 칸에 +1)
-  if (preEndedBeforeLunch) {
-    const lunch2Workers = inp.wkPre + inp.wkPack + inp.wkTrans; // 점심2: 작업조
-    const lunch1Workers = Math.max(0, total - 2 - lunch2Workers); // 관리 2 제외 → 작업조 제외 = 점심1 작업조
-    const lunch1Total = lunch1Workers + 1; // 관리자 1명 점심
-    const crushAtLunch1 = total - lunch1Total - 1; // 점심1 칸 외 작업 = 28 - 점심1(작업조+관리1) - 관리1
-    slots.push({
-      range: `11:30~12:30`,
-      cells: { 파쇄: Math.max(0, crushAtLunch1), 점심: lunch1Total, 관리: 1 },
-      sum: total,
-    });
-  } else {
-    slots.push({
-      range: `11:30~12:30`,
-      cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
-      sum: total,
-    });
-  }
+  // 파쇄 전담(crushOnly)이 점심 + 관리 1명 점심
+  // 작업: 전처리7 + 내포장6 + 이송2 = 15명 파쇄 라인 투입
+  const lunch1Total = crushOnly + 1; // 파쇄 전담 + 관리1 점심
+  const workAtLunch1 = inp.wkPre + inp.wkPack + inp.wkTrans; // 파쇄 합류
+  slots.push({
+    range: `11:30~12:30`,
+    cells: { 파쇄: workAtLunch1, 점심: lunch1Total, 관리: 1 },
+    sum: total,
+  });
 
   // 슬롯 5: 점심 2차 (12:30~13:30)
-  const lunch2Workers = inp.wkPre + inp.wkPack + inp.wkTrans;
-  const lunch2Total = lunch2Workers + 1; // 관리자 1명 점심
-  const crushAtLunch2 = Math.max(0, total - lunch2Total - 1);
+  // 전처리+내포장+이송 + 관리1명 점심, 파쇄 전담 복귀해서 파쇄 가동
+  const lunch2Total = inp.wkPre + inp.wkPack + inp.wkTrans + 1;
   slots.push({
     range: `12:30~13:30`,
-    cells: {
-      파쇄: crushAtLunch2,
-      점심: lunch2Total,
-      관리: 1,
-    },
+    cells: { 파쇄: crushOnly, 점심: lunch2Total, 관리: 1 },
     sum: total,
   });
 
@@ -1254,21 +1244,21 @@ function ttRender() {
   }
 
   // ── 점심 (1차 + 2차) — wms 룰 ──
-  // 점심2 = 전처리(wkPre) + 내포장(wkPack) + 이송(wkTrans) + 관리자 1명
-  // 점심1 = (총원 - 관리자 2명) - 점심2_작업조 + 관리자 1명
+  // 파쇄 전담 = 총원 - 전처리 - 내포장 - 이송 - 관리
   bars += rowLabel(yCursor, BAR_H, '점심');
-  const _lunch2Workers = inp.wkPre + inp.wkPack + inp.wkTrans;
-  const _lunch2 = _lunch2Workers + 1; // +1 관리자
-  const _lunch1 = Math.max(0, inp.totalWorkers - _lunch2Workers - 2) + 1; // 작업조 빼고 관리자 1명 추가
+  const _crushOnly = Math.max(0, inp.totalWorkers - inp.wkPre - inp.wkPack - inp.wkTrans - inp.mgrWorkers);
+  const _lunch1 = _crushOnly + 1; // 파쇄전담 + 관리1
+  const _lunch2 = inp.wkPre + inp.wkPack + inp.wkTrans + 1; // 전처리+내포장+이송 + 관리1
+  const _workLunch1 = inp.wkPre + inp.wkPack + inp.wkTrans; // 점심1 작업: 파쇄 라인 투입
   bars += segBar(yCursor, BAR_H, LUNCH1_S, LUNCH1_E, '#888780',
     `1차 ${_lunch1}명`,
     '점심 1차',
-    `시각: 11:30~12:30|인원: ${_lunch1}명 (오후 파쇄조 일부 + 관리1)|점심2조(전처리·내포장·이송)는 작업 중`,
+    `시각: 11:30~12:30|인원: ${_lunch1}명 점심 (파쇄 전담 ${_crushOnly}명 + 관리 1명)|작업: 전처리 ${inp.wkPre}명 + 내포장조 ${inp.wkPack}명 + 이송 ${inp.wkTrans}명 → 파쇄 라인 투입 (${_workLunch1}명)`,
     {fillOpacity: 0.7});
   bars += segBar(yCursor, BAR_H, LUNCH1_E, LUNCH2_E, '#888780',
     `2차 ${_lunch2}명`,
     '점심 2차',
-    `시각: 12:30~13:30|인원: ${_lunch2}명 (전처리 ${inp.wkPre} + 내포장 ${inp.wkPack} + 이송 ${inp.wkTrans} + 관리1)|점심1조가 파쇄 가동 — 13:30 풀가동 즉시 시작`,
+    `시각: 12:30~13:30|인원: ${_lunch2}명 점심 (전처리 ${inp.wkPre} + 내포장 ${inp.wkPack} + 이송 ${inp.wkTrans} + 관리 1)|작업: 파쇄 전담 ${_crushOnly}명 복귀 → 13:30 풀가동 즉시 시작`,
     {fillOpacity: 0.85});
   yCursor += ROW_H;
 
