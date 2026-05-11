@@ -1995,10 +1995,23 @@ function ttmSimulate(scen, workers) {
   const fpCookFullMin = TTM_FIXED.fpCookMin + TTM_FIXED.cookWagonMin;
   // FP 파쇄 (FP 자숙 끝나면)
   const fpCrush = { s: fpCook.e, e: fpCook.e + fpCrushMin };
-  // FC 파쇄 (FC 자숙 모두 끝나면 + FP 파쇄 끝나면)
-  const fcCookEnd = Math.max(...fcCook.map(c => c.e));
-  const fcCrushStart = Math.max(fcCookEnd, fpCrush.e);
-  const fcCrush = { s: fcCrushStart, e: fcCrushStart + fcCrushMin };
+
+  // FC 파쇄: 탱크별로 순차 처리 (앞 탱크 자숙 끝나면 바로 그 탱크분 파쇄 시작)
+  // 단, FP 파쇄가 끝나야 라인 사용 가능 (파쇄 라인 1개 공유)
+  const fcCrushes = [];
+  let fcCrushLineEnd = fpCrush.e; // 파쇄 라인 가용 시각
+  for (let i = 0; i < fcCook.length; i++) {
+    const tankEnd = fcCook[i].e;
+    const tankKg = fcTankKgs[i] * (fcYcrush / 100); // 이 탱크분 파쇄 산출량
+    const tankCrushMin = Math.ceil(tankKg / (fcPcrush * workers.crushFc) * 60);
+    const crushStart = Math.max(tankEnd, fcCrushLineEnd);
+    const crushEnd = crushStart + tankCrushMin;
+    fcCrushes.push({ s: crushStart, e: crushEnd, tank: i + 1, kg: r2(tankKg) });
+    fcCrushLineEnd = crushEnd;
+  }
+  // FC 파쇄 전체 (호환용)
+  const fcCrushStart = fcCrushes[0].s;
+  const fcCrush = { s: fcCrushStart, e: fcCrushes[fcCrushes.length - 1].e };
   // FP 내포장 시작:
   // - 원육 400kg 이하: 파쇄 완전히 끝난 후
   // - 원육 400kg 초과: 파쇄 산출 200kg 누적 시점
@@ -2080,7 +2093,7 @@ function ttmSimulate(scen, workers) {
 
   return {
     fp: { pre: fpPre, cook: fpCook, crush: fpCrush, pack: fpPack, retort: fpRetort, kg: fpPreIn, ea: fpEa, packIn: fpPackIn },
-    fc: { pre: fcPre, cook: fcCook, crush: fcCrush, pack: fcPack, retort: fcRetort, kg: fcPreIn, ea: fcEa, packIn: fcPackIn, tanks: fcTankKgs },
+    fc: { pre: fcPre, cook: fcCook, crush: fcCrush, crushes: fcCrushes, pack: fcPack, retort: fcRetort, kg: fcPreIn, ea: fcEa, packIn: fcPackIn, tanks: fcTankKgs },
     endMin,
   };
 }
@@ -2101,7 +2114,9 @@ function ttmRenderTimeline(scen, workers, sim) {
     rows.push({ label: `자숙 ${i+1}`, color: '#0F6E56', s: c.s, e: c.e, text: `FC · ${c.tank}호 · ${c.kg}kg · 270분` });
   });
   rows.push({ label: '파쇄',      color: '#7F77DD', s: sim.fp.crush.s, e: sim.fp.crush.e, text: `${fpName} · ${workers.crushFp}명` });
-  rows.push({ label: '파쇄 1',    color: '#BA7517', s: sim.fc.crush.s, e: sim.fc.crush.e, text: `FC · ${workers.crushFc}명` });
+  (sim.fc.crushes || [sim.fc.crush]).forEach((c, i) => {
+    rows.push({ label: i===0 ? '파쇄 1' : `파쇄 ${i+2}`, color: '#BA7517', s: c.s, e: c.e, text: `FC ${c.tank}호 · ${c.kg}kg · ${workers.crushFc}명` });
+  });
   rows.push({ label: '내포장',    color: '#7F77DD', s: sim.fp.pack.s,  e: sim.fp.pack.e,  text: `${fpName} ${sim.fp.ea}EA · ${workers.packFp}명+이송2` });
   rows.push({ label: '내포장 1',  color: '#534AB7', s: sim.fc.pack.s,  e: sim.fc.pack.e,  text: `FC ${sim.fc.ea}EA · ${workers.packFc}명+이송2` });
   sim.fp.retort.forEach((r, i) => {
