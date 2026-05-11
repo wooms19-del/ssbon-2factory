@@ -635,7 +635,12 @@ function ttPlanNarrative(inp, sim, slots) {
   const lines = [];
   lines.push(`<strong>${ttFmt(sim.startMin)} (조출)</strong> · 외국인 ${inp.earlyWorkers}명 전처리 시작`);
   lines.push(`<strong>${inp.mgrTime}</strong> · 관리자 ${inp.mgrWorkers}명 출근 (전처리는 그대로 ${inp.earlyWorkers}명)`);
-  lines.push(`<strong>${inp.joinTime}</strong> · 한국인 합류 → 전처리 ${inp.wkPre}명 가동 + 외포장·세팅 병행 (${total}명 풀가동)`);
+  if (inp.wkPre > inp.earlyWorkers) {
+    const hanCnt = inp.wkPre - inp.earlyWorkers;
+    lines.push(`<strong>${inp.joinTime}</strong> · 한국인 ${hanCnt}명 합류 → 전처리 ${inp.wkPre}명 가동 + 외포장·세팅 병행 (${total}명 풀가동)`);
+  } else {
+    lines.push(`<strong>${inp.joinTime}</strong> · 한국인 합류 없음 (전처리 ${inp.earlyWorkers}명 유지) + 외포장·세팅 병행`);
+  }
   lines.push(`<strong>${ttFmt(sim.crushStartMin)}</strong> · 자숙 1호 출하 → <strong style="color:#BA7517">파쇄 ${inp.wkCrush}명 투입 시작</strong>`);
   lines.push(`<strong>11:30~12:30</strong> · 점심 1차 (후공정조)`);
   lines.push(`<strong>12:30~13:30</strong> · 점심 2차 (전처리조) — 파쇄 ${inp.wkCrush + inp.wkTrans}명 가동 (이송 인원도 파쇄 합류)`);
@@ -703,9 +708,12 @@ function ttRender() {
   // 공정 타임라인 SVG
   const tlMin = sim.startMin;
   const tlMax = Math.max(sim.retortEndMin, sim.packEndMin) + 30;
-  const span = tlMax - tlMin;
+  const span = Math.max(1, tlMax - tlMin);  // span=0 방지 (xPos -Infinity 방지)
   const SVG_W = 800, LEFT = 100, RIGHT = 780;
-  const xPos = m => LEFT + (m - tlMin) / span * (RIGHT - LEFT);
+  const xPos = m => {
+    if (typeof m !== 'number' || !isFinite(m)) return LEFT;  // 방어: undefined/NaN/Infinity → LEFT
+    return LEFT + (m - tlMin) / span * (RIGHT - LEFT);
+  };
   let ticks = '', grid = '';
   for (let h = Math.floor(tlMin/60); h <= Math.ceil(tlMax/60); h++) {
     const x = xPos(h*60);
@@ -763,6 +771,8 @@ function ttRender() {
       `전처리 Phase 2`,
       `시각: ${ttFmt(sim.joinMin)}~${ttFmt(sim.preEndMin)}|인원: ${inp.wkPre}명 (한국인 합류 후)|처리량: ${p2Kg.toLocaleString()} kg|계산: 잔량 ${p2Kg.toLocaleString()}kg ÷ (${inp.pPre}×${inp.wkPre}) × 60 = ${(sim.preEndMin-sim.joinMin)}분`);
   }
+  // 막대 끝 라벨: 수율·생산성
+  bars += `<text x="${xPos(sim.preEndMin) + 6}" y="${yCursor + BAR_H/2 + 4}" text-anchor="start" font-size="10" fill="#185FA5" font-weight="600">${inp.yPre}% · ${inp.pPre}kg/인시</text>`;
   yCursor += ROW_H;
 
   // ── 자숙 (각 호별 + 와건) ──
@@ -828,6 +838,8 @@ function ttRender() {
       `자숙 ${tc.idx}호 산출: ${Math.round(tc.kg)}kg|시각: ${ttFmt(tc.start)}~${ttFmt(tc.end)} (${durMin}분)|와건 종료: ${ttFmt(sim.wagonEndTimes[i])}|${segmentInfo.join('|')}`,
       {fillOpacity: 0.9, stroke: '#fff', strokeWidth: 1});
   });
+  // 막대 끝 라벨: 수율·생산성
+  bars += `<text x="${xPos(sim.crushEndMin) + 6}" y="${yCursor + BAR_H/2 + 4}" text-anchor="start" font-size="10" fill="#BA7517" font-weight="600">${inp.yCrush}% · ${inp.pCrush}kg/인시</text>`;
   yCursor += ROW_H;
 
   // ── 내포장 (단일 막대, 연속 흐름) ──
