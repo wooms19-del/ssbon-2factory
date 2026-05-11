@@ -919,15 +919,34 @@ function ttPlanSlots(inp, sim) {
       sum: early + mgr,
     });
   }
-  // 슬롯 3: 한국인 합류~점심 1차
+  // 슬롯 3: 한국인 합류~점심 1차 (전처리 끝 시각 기준으로 분리)
   const remainPeak1 = total - inp.wkPre - mgr;
   const settingDefault = 3;
   const outerPack1 = Math.max(0, remainPeak1 - settingDefault);
-  slots.push({
-    range: `${inp.joinTime}~11:30`,
-    cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
-    sum: total,
-  });
+  const joinMin = ttToMin(inp.joinTime);
+
+  if (sim.preEndMin > joinMin && sim.preEndMin < LUNCH1_S) {
+    // 전처리가 합류 후 ~ 점심1 사이에 끝남 → 2개 슬롯으로 분리
+    slots.push({
+      range: `${inp.joinTime}~${ttFmt(sim.preEndMin)}`,
+      cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
+      sum: total,
+    });
+    // 전처리 끝 ~ 점심1: 파쇄 시작
+    const crushStart = total - mgr; // 전원 파쇄 (외포장조도 파쇄 합류)
+    slots.push({
+      range: `${ttFmt(sim.preEndMin)}~11:30`,
+      cells: { 파쇄: crushStart - mgr, 관리: mgr },
+      sum: total,
+    });
+  } else {
+    // 전처리가 11:30 이후까지 진행 중 or 합류 전 끝남
+    slots.push({
+      range: `${inp.joinTime}~11:30`,
+      cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
+      sum: total,
+    });
+  }
 
   // 슬롯 4·5: 점심 (wms 룰)
   // 파쇄 전담 인원 = 총원 - 전처리 - 내포장 - 이송 - 관리
@@ -984,8 +1003,9 @@ function ttPlanNarrative(inp, sim, slots) {
     lines.push(`<strong>${inp.joinTime}</strong> · 한국인 합류 없음 (전처리 ${inp.earlyWorkers}명 유지) + 외포장·세팅 병행`);
   }
   lines.push(`<strong>${ttFmt(sim.crushStartMin)}</strong> · 자숙 1호 출하 → <strong style="color:#BA7517">파쇄 ${inp.wkCrush}명 투입 시작</strong>`);
-  lines.push(`<strong>11:30~12:30</strong> · 점심 1차 (후공정조)`);
-  lines.push(`<strong>12:30~13:30</strong> · 점심 2차 (전처리조) — 파쇄 ${inp.wkCrush + inp.wkTrans}명 가동 (이송 인원도 파쇄 합류)`);
+  const crushOnly = Math.max(0, total - inp.wkPre - inp.wkPack - inp.wkTrans - inp.mgrWorkers);
+  lines.push(`<strong>11:30~12:30</strong> · 점심 1차 (파쇄 전담 ${crushOnly}명 + 관리 1명) — 전처리조 ${inp.wkPre}명은 파쇄 라인 투입`);
+  lines.push(`<strong>12:30~13:30</strong> · 점심 2차 (전처리 ${inp.wkPre} + 내포장 ${inp.wkPack} + 이송 ${inp.wkTrans} + 관리 1 = ${inp.wkPre+inp.wkPack+inp.wkTrans+1}명) — 파쇄 전담 ${crushOnly}명 복귀`);
   lines.push(`<strong>13:30~${ttFmt(sim.packEndMin)}</strong> · <strong style="color:#7F77DD">파쇄 ${inp.wkPackPeak}명 + 내포장 ${inp.wkPack}명 + 이송 ${inp.wkTrans}명 풀가동</strong>`);
   lines.push(`<strong>${ttFmt(sim.packEndMin)}</strong> · 내포장 종료 (그날 작업 끝)`);
   lines.push(`<strong>레토르트</strong> · ${ttFmt(sim.retortStartMin)} 시작 · ${sim.retortCycles}회차 · 최종 ${ttFmt(sim.retortEndMin)}`);
