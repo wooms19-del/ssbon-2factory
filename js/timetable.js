@@ -790,6 +790,11 @@ function ttRender() {
       ``,
       `자숙 ${i+1}호 와건`,
       `시각: ${ttFmt(sim.tankOutTimes[i])}~${ttFmt(sim.wagonEndTimes[i])} (30분)|자숙 후 냉각|이후 파쇄 라인 투입`);
+    // 마지막 호: 원육 기준 누적 수율 라벨 (전체 자숙 끝)
+    if (isLast) {
+      const cookBaseYield = (inp.yPre * sim.cookYield) / 100;
+      bars += `<text x="${xPos(sim.wagonEndTimes[i]) + 6}" y="${yCursor + BAR_H/2 + 4}" text-anchor="start" font-size="10" fill="#0F6E56" font-weight="600">${cookBaseYield.toFixed(1)}%</text>`;
+    }
     yCursor += ROW_H;
   });
 
@@ -852,6 +857,10 @@ function ttRender() {
     `${inp.wkPack}명 · ${inp.pPackEa}EA/분`,
     '내포장',
     `시각: ${ttFmt(sim.packStartMin)}~${ttFmt(sim.packEndMin)}|인원: ${inp.wkPack}명|속도: ${inp.pPackEa} EA/분 (기계 1대 한도)|총: ${sim.pouches.toLocaleString()} EA|시작 조건: 13:30 + 파쇄 산출 ≥ 200kg|자체 처리 종료: ${ttFmt(sim.packSelfEndMin)}|마지막 산출분 통과: ${ttFmt(sim.lastBatchPackEndMin)} (둘 중 늦은쪽)`);
+  // 막대 끝 라벨: 원육 기준 누적 수율 (내포장)
+  // 원육 → 전처리 → 자숙 → 파쇄 → 내포장(TT_PACK_YIELD)
+  const packBaseYield = (inp.yPre * sim.cookYield * inp.yCrush * TT_PACK_YIELD) / 1000000;
+  bars += `<text x="${xPos(sim.packEndMin) + 6}" y="${yCursor + BAR_H/2 + 4}" text-anchor="start" font-size="10" fill="#7F77DD" font-weight="600">${packBaseYield.toFixed(1)}%</text>`;
   yCursor += ROW_H;
 
   // ── 레토르트 (각 회차별 - EA 균등 분배) ──
