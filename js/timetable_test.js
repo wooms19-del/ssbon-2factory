@@ -50,6 +50,31 @@ let TTT_AUTO_OTHER = {
 // ── 진입 시 자동 초기화 ──────────────────────────────────
 function tttInit() {
   tttAutoAnalyze().then(tttRender);
+  // ttm 호버 툴팁 리스너 (innerHTML script 실행 안 되므로 여기서 한 번만 등록)
+  if (!window.__ttmTipInited) {
+    window.__ttmTipInited = true;
+    document.addEventListener('mouseover', function(e) {
+      const bar = e.target.closest('.ttm-bar');
+      if (!bar) return;
+      let tip = document.getElementById('ttm-tip');
+      if (!tip) return;
+      tip.textContent = bar.dataset.tip || '';
+      tip.style.display = 'block';
+    });
+    document.addEventListener('mousemove', function(e) {
+      const tip = document.getElementById('ttm-tip');
+      if (tip && tip.style.display === 'block') {
+        tip.style.left = (e.clientX + 14) + 'px';
+        tip.style.top = (e.clientY + 14) + 'px';
+      }
+    });
+    document.addEventListener('mouseout', function(e) {
+      if (e.target.closest('.ttm-bar')) {
+        const tip = document.getElementById('ttm-tip');
+        if (tip) tip.style.display = 'none';
+      }
+    });
+  }
 }
 
 // 사용자가 자숙 분배 방식 클릭 → 화면 전체 재렌더
@@ -919,42 +944,44 @@ function tttPlanSlots(inp, sim) {
       sum: early + mgr,
     });
   }
-  // 슬롯 3: 한국인 합류~점심 1차
+  // 슬롯 3: 한국인 합류~점심 1차 (전처리 끝 시각 기준으로 분리)
   const remainPeak1 = total - inp.wkPre - mgr;
   const settingDefault = 3;
   const outerPack1 = Math.max(0, remainPeak1 - settingDefault);
-  slots.push({
-    range: `${inp.joinTime}~11:30`,
-    cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
-    sum: total,
-  });
+  const joinMin = tttToMin(inp.joinTime);
 
-  // 슬롯 4: 점심 1차 (11:30~12:30)
-  // 전처리 끝났으면 → 전처리조가 파쇄로 합류
-  // 안 끝났으면 → 전처리 계속, 파쇄 0
-  if (preEndedBeforeLunch) {
-    // 후공정조 통째 점심 + 전처리조가 파쇄로 합류
-    const lunch1 = total - inp.wkPre - 1;  // 점심 = 후공정조 + 외포장조 등
+  if (sim.preEndMin > joinMin && sim.preEndMin < LUNCH1_S) {
     slots.push({
-      range: `11:30~12:30`,
-      cells: { 파쇄: inp.wkPre, 점심: Math.max(0, lunch1), 관리: 1 },
+      range: `${inp.joinTime}~${tttFmt(sim.preEndMin)}`,
+      cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
+      sum: total,
+    });
+    const crushOnlyNow = Math.max(0, total - inp.wkPre - inp.wkPack - inp.wkTrans - mgr);
+    const restNow = total - crushOnlyNow - mgr;
+    slots.push({
+      range: `${tttFmt(sim.preEndMin)}~11:30`,
+      cells: { 파쇄: crushOnlyNow, 외포장: restNow, 관리: mgr },
       sum: total,
     });
   } else {
-    // 전처리 진행 중 → 모드 A처럼
     slots.push({
-      range: `11:30~12:30`,
-      cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
+      range: `${inp.joinTime}~11:30`,
+      cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
       sum: total,
     });
   }
 
-  // 슬롯 5: 점심 2차 (12:30~13:30)
-  // 후공정조 복귀 + 이송 합류 → 파쇄 = wkCrush + wkTrans
-  // 전처리조 점심
+  // 슬롯 4·5: 점심 반반 (total/2씩)
+  const half1 = Math.ceil(total / 2);
+  const half2 = total - half1;
+  slots.push({
+    range: `11:30~12:30`,
+    cells: { 파쇄: total - half1 - 1, 점심: half1, 관리: 1 },
+    sum: total,
+  });
   slots.push({
     range: `12:30~13:30`,
-    cells: { 파쇄: inp.wkCrush + inp.wkTrans, 점심: total - inp.wkCrush - inp.wkTrans - 1, 관리: 1 },
+    cells: { 파쇄: total - half2 - 1, 점심: half2, 관리: 1 },
     sum: total,
   });
 
@@ -988,8 +1015,10 @@ function tttPlanNarrative(inp, sim, slots) {
     lines.push(`<strong>${inp.joinTime}</strong> · 한국인 합류 없음 (전처리 ${inp.earlyWorkers}명 유지) + 외포장·세팅 병행`);
   }
   lines.push(`<strong>${tttFmt(sim.crushStartMin)}</strong> · 자숙 1호 출하 → <strong style="color:#BA7517">파쇄 ${inp.wkCrush}명 투입 시작</strong>`);
-  lines.push(`<strong>11:30~12:30</strong> · 점심 1차 (후공정조)`);
-  lines.push(`<strong>12:30~13:30</strong> · 점심 2차 (전처리조) — 파쇄 ${inp.wkCrush + inp.wkTrans}명 가동 (이송 인원도 파쇄 합류)`);
+  const half1n = Math.ceil(total / 2);
+  const half2n = total - half1n;
+  lines.push(`<strong>11:30~12:30</strong> · 점심 1차 ${half1n}명 · 작업 ${total - half1n - 1}명 파쇄 + 관리 1명`);
+  lines.push(`<strong>12:30~13:30</strong> · 점심 2차 ${half2n}명 · 작업 ${total - half2n - 1}명 파쇄 + 관리 1명`);
   lines.push(`<strong>13:30~${tttFmt(sim.packEndMin)}</strong> · <strong style="color:#7F77DD">파쇄 ${inp.wkPackPeak}명 + 내포장 ${inp.wkPack}명 + 이송 ${inp.wkTrans}명 풀가동</strong>`);
   lines.push(`<strong>${tttFmt(sim.packEndMin)}</strong> · 내포장 종료 (그날 작업 끝)`);
   lines.push(`<strong>레토르트</strong> · ${tttFmt(sim.retortStartMin)} 시작 · ${sim.retortCycles}회차 · 최종 ${tttFmt(sim.retortEndMin)}`);
@@ -1176,22 +1205,23 @@ function tttRender() {
     // 막대 사이 1px gap (다음 호 시작 1분 비움 = 시각적 구분)
     const isLast = i === sim.tankCrushTimes.length - 1;
     const adjustedEnd = isLast ? tc.end : tc.end - 1;
-    // 막대에 시간대별 인원 변화 정보를 툴팁에 포함
     const crossLunch1 = tc.start < LUNCH1_S && tc.end > LUNCH1_S;
     const crossLunch2 = tc.start < LUNCH1_E && tc.end > LUNCH1_E;
     const crossPeak = tc.start < LUNCH2_E && tc.end > LUNCH2_E;
+    const tCrushOnly = Math.max(0, inp.wkPackPeak - inp.wkPre);
+    const tHalf1 = Math.ceil(inp.totalWorkers / 2);
+    const tHalf2 = inp.totalWorkers - tHalf1;
     const segmentInfo = [];
-    if (tc.start < LUNCH1_S) segmentInfo.push(`${tttFmt(tc.start)}~${tttFmt(Math.min(LUNCH1_S, tc.end))}: ${inp.wkCrush}명`);
+    if (tc.start < LUNCH1_S) segmentInfo.push(`${tttFmt(tc.start)}~${tttFmt(Math.min(LUNCH1_S, tc.end))}: ${tCrushOnly}명`);
     if (crossLunch1 || (tc.start >= LUNCH1_S && tc.start < LUNCH1_E)) {
       const segS = Math.max(tc.start, LUNCH1_S);
       const segE = Math.min(tc.end, LUNCH1_E);
-      const w = sim.preEndMin <= LUNCH1_S ? inp.wkPre : 0;
-      if (segE > segS) segmentInfo.push(`${tttFmt(segS)}~${tttFmt(segE)}: ${w}명${w>0?' (전처리조)':' (정지)'}`);
+      if (segE > segS) segmentInfo.push(`${tttFmt(segS)}~${tttFmt(segE)}: ${inp.totalWorkers - tHalf1 - 1}명 파쇄 (점심1차 ${tHalf1}명)`);
     }
     if (crossLunch2 || (tc.start >= LUNCH1_E && tc.start < LUNCH2_E)) {
       const segS = Math.max(tc.start, LUNCH1_E);
       const segE = Math.min(tc.end, LUNCH2_E);
-      if (segE > segS) segmentInfo.push(`${tttFmt(segS)}~${tttFmt(segE)}: ${inp.wkCrush + inp.wkTrans}명 (이송 합류)`);
+      if (segE > segS) segmentInfo.push(`${tttFmt(segS)}~${tttFmt(segE)}: ${inp.totalWorkers - tHalf2 - 1}명 파쇄 (점심2차 ${tHalf2}명)`);
     }
     if (tc.end > LUNCH2_E) {
       const segS = Math.max(tc.start, LUNCH2_E);
@@ -1249,21 +1279,17 @@ function tttRender() {
 
   // ── 점심 (1차 + 2차) ──
   bars += rowLabel(yCursor, BAR_H, '점심');
-  // 점심 1차: 11:30~12:30 — 인원 동적 계산
-  const lunch1Cnt = sim.preEndMin <= LUNCH1_S
-    ? inp.totalWorkers - inp.wkPre - 1  // 전처리조가 파쇄로 합류했으므로 후공정조+외포장조가 점심
-    : inp.totalWorkers - inp.wkPre - 1; // 전처리 진행 중이라도 후공정조 점심
+  const _th1 = Math.ceil(inp.totalWorkers / 2);
+  const _th2 = inp.totalWorkers - _th1;
   bars += segBar(yCursor, BAR_H, LUNCH1_S, LUNCH1_E, '#888780',
-    `1차 ${lunch1Cnt}명`,
+    `1차 ${_th1}명`,
     '점심 1차',
-    `시각: 11:30~12:30|인원: ${lunch1Cnt}명 (후공정조 + 외포장조)|${sim.preEndMin <= LUNCH1_S ? '전처리조 '+inp.wkPre+'명은 파쇄 합류' : '전처리조는 작업 계속'}`,
+    `시각: 11:30~12:30|인원: ${_th1}명 점심|작업: ${inp.totalWorkers - _th1 - 1}명 파쇄 + 관리 1명`,
     {fillOpacity: 0.7});
-  // 점심 2차: 12:30~13:30
-  const lunch2Cnt = inp.totalWorkers - inp.wkCrush - inp.wkTrans - 1;
   bars += segBar(yCursor, BAR_H, LUNCH1_E, LUNCH2_E, '#888780',
-    `2차 ${lunch2Cnt}명`,
+    `2차 ${_th2}명`,
     '점심 2차',
-    `시각: 12:30~13:30|인원: ${lunch2Cnt}명 (전처리조 + 외포장조)|후공정조 ${inp.wkCrush + inp.wkTrans}명은 파쇄 가동 (이송 합류)`,
+    `시각: 12:30~13:30|인원: ${_th2}명 점심|작업: ${inp.totalWorkers - _th2 - 1}명 파쇄 + 관리 1명|13:30 전원 복귀 → 풀가동`,
     {fillOpacity: 0.85});
   yCursor += ROW_H;
 
@@ -1992,7 +2018,6 @@ function ttmRenderTimeline(scen, workers, sim) {
     <text x="${xPos(sim.endMin)}" y="${24 + rows.length*ROW_H + 12}" text-anchor="middle" font-size="10" fill="#A32D2D" font-weight="600">${fmt(sim.endMin)} 종료</text>`;
 
   const svgH = 24 + rows.length * ROW_H + 24;
-  // 호버 툴팁 (스크립트 inline — DOM 추가될 때마다 활성화)
   return `
     <style>
       .ttm-bar { cursor: pointer; transition: filter 0.15s; }
@@ -2002,28 +2027,7 @@ function ttmRenderTimeline(scen, workers, sim) {
     <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img" style="max-width:100%">
       ${lunchBg}${ticks}${grid}${bars}
     </svg>
-    <div id="ttm-tip"></div>
-    <script>
-      (function(){
-        if (window.__ttmTipInit) return; window.__ttmTipInit = true;
-        const tip = document.getElementById('ttm-tip');
-        document.addEventListener('mouseover', function(e){
-          const bar = e.target.closest('.ttm-bar');
-          if (!bar) return;
-          tip.textContent = bar.dataset.tip || '';
-          tip.style.display = 'block';
-        });
-        document.addEventListener('mousemove', function(e){
-          if (tip.style.display === 'block') {
-            tip.style.left = (e.clientX + 12) + 'px';
-            tip.style.top = (e.clientY + 12) + 'px';
-          }
-        });
-        document.addEventListener('mouseout', function(e){
-          if (e.target.closest('.ttm-bar')) tip.style.display = 'none';
-        });
-      })();
-    </script>`;
+    <div id="ttm-tip"></div>`;
 }
 
 // ============================================================
