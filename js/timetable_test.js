@@ -1941,53 +1941,180 @@ function ttmRenderTimeline(scen, workers, sim) {
     rows.push({ label: `레토르트 ${retIdx}`, color: '#A32D2D', s: r.s, e: r.e, text: `FC ${r.host}호 · ${r.carts}대차 · ${r.ea}EA` });
   });
 
-  // 타임축
+  // 타임축 (압축)
   const tMin = Math.min(...rows.map(r => r.s));
   const tMax = sim.endMin + 30;
   const span = Math.max(1, tMax - tMin);
-  const SVG_W = 1100, LEFT = 110, RIGHT = 1080;
+  const SVG_W = 760, LEFT = 80, RIGHT = 740;
   const xPos = m => LEFT + (m - tMin) / span * (RIGHT - LEFT);
-  const ROW_H = 28, BAR_H = 22;
+  const ROW_H = 19, BAR_H = 15;
 
   let ticks = '', grid = '';
   for (let h = Math.floor(tMin/60); h <= Math.ceil(tMax/60); h += 1) {
     const x = xPos(h*60);
     if (x >= LEFT && x <= RIGHT + 10) {
-      ticks += `<text x="${x}" y="20" text-anchor="middle" font-size="11" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
-      grid += `<line x1="${x}" y1="28" x2="${x}" y2="${36 + rows.length*ROW_H + 40}" stroke="#e5e3da" stroke-width="0.5" stroke-dasharray="2 3"/>`;
+      ticks += `<text x="${x}" y="14" text-anchor="middle" font-size="9.5" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
+      grid += `<line x1="${x}" y1="20" x2="${x}" y2="${24 + rows.length*ROW_H + 22}" stroke="#e5e3da" stroke-width="0.5" stroke-dasharray="2 3"/>`;
     }
   }
   // 점심 영역
   const lunchBg = `
-    <rect x="${xPos(11*60+30)}" y="28" width="${xPos(12*60+30)-xPos(11*60+30)}" height="${rows.length*ROW_H + 20}" fill="#FFF7ED" opacity="0.5"/>
-    <rect x="${xPos(12*60+30)}" y="28" width="${xPos(13*60+30)-xPos(12*60+30)}" height="${rows.length*ROW_H + 20}" fill="#FFF7ED" opacity="0.3"/>`;
+    <rect x="${xPos(11*60+30)}" y="20" width="${xPos(12*60+30)-xPos(11*60+30)}" height="${rows.length*ROW_H + 10}" fill="#FFF7ED" opacity="0.5"/>
+    <rect x="${xPos(12*60+30)}" y="20" width="${xPos(13*60+30)-xPos(12*60+30)}" height="${rows.length*ROW_H + 10}" fill="#FFF7ED" opacity="0.3"/>`;
 
-  // 막대
+  // 막대 (정리: 막대 안 텍스트 제거, 우측에 시각·정보 한 줄로)
   let bars = '';
   rows.forEach((r, i) => {
-    const y = 36 + i * ROW_H;
+    const y = 24 + i * ROW_H;
     const x1 = xPos(r.s), x2 = xPos(r.e);
-    const w = Math.max(x2 - x1, 4);
-    bars += `<text x="${LEFT-8}" y="${y+BAR_H/2+4}" text-anchor="end" font-size="12" fill="var(--color-text-secondary)" font-weight="500">${r.label}</text>`;
-    bars += `<rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="3" fill="${r.color}"/>`;
-    bars += `<text x="${x1 + w/2}" y="${y+BAR_H/2+4}" text-anchor="middle" font-size="10.5" fill="#fff" font-weight="500" pointer-events="none">${fmt(r.s)}-${fmt(r.e)}</text>`;
-    bars += `<text x="${x2 + 6}" y="${y+BAR_H/2+4}" text-anchor="start" font-size="10" fill="${r.color}">${r.text}</text>`;
+    const w = Math.max(x2 - x1, 3);
+    bars += `<text x="${LEFT-6}" y="${y+BAR_H/2+3.5}" text-anchor="end" font-size="10.5" fill="var(--color-text-secondary)" font-weight="500">${r.label}</text>`;
+    bars += `<rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="2.5" fill="${r.color}"/>`;
+    bars += `<text x="${x2 + 4}" y="${y+BAR_H/2+3.5}" text-anchor="start" font-size="9.5" fill="${r.color}">${fmt(r.s)}-${fmt(r.e)} · ${r.text}</text>`;
   });
 
   // 종료 선
   bars += `
-    <line x1="${xPos(sim.endMin)}" y1="28" x2="${xPos(sim.endMin)}" y2="${36 + rows.length*ROW_H}" stroke="#A32D2D" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.7"/>
-    <text x="${xPos(sim.endMin)}" y="${36 + rows.length*ROW_H + 16}" text-anchor="middle" font-size="11" fill="#A32D2D" font-weight="600">${fmt(sim.endMin)} 종료</text>`;
+    <line x1="${xPos(sim.endMin)}" y1="20" x2="${xPos(sim.endMin)}" y2="${24 + rows.length*ROW_H}" stroke="#A32D2D" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.7"/>
+    <text x="${xPos(sim.endMin)}" y="${24 + rows.length*ROW_H + 12}" text-anchor="middle" font-size="10" fill="#A32D2D" font-weight="600">${fmt(sim.endMin)} 종료</text>`;
 
-  const svgH = 36 + rows.length * ROW_H + 30;
+  const svgH = 24 + rows.length * ROW_H + 24;
   return `
-    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img">
+    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img" style="max-width:100%">
       ${lunchBg}${ticks}${grid}${bars}
     </svg>`;
 }
 
 // ============================================================
-// 인원표 (시간 슬롯 × 공정, 수정 가능)
+// 시간대별 인원 현황표 (사진 4 오른쪽 패턴)
+// 사용자가 입력한 인원 + 시뮬 시간 기준으로 시간 슬롯 × 공정 분포 자동 계산
+// ============================================================
+function ttmRenderWorkerSlots(scen, workers, sim) {
+  const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const totalWorkers = 28;
+  const mgrAfter7 = 2; // 07:00 이후 관리자 출근
+
+  // 시간 슬롯 정의 (분 단위)
+  // 05~07, 07~09, 09~11:30, 11:30~12:30 (점심1), 12:30~13:30 (점심2), 13:30~17:00, 17:00~끝
+  const slots = [
+    { s: 5*60,    e: 7*60,    label: '05:00~07:00' },
+    { s: 7*60,    e: 9*60,    label: '07:00~09:00' },
+    { s: 9*60,    e: 11*60+30, label: '09:00~11:30' },
+    { s: 11*60+30, e: 12*60+30, label: '11:30~12:30 (점심1)' },
+    { s: 12*60+30, e: 13*60+30, label: '12:30~13:30 (점심2)' },
+    { s: 13*60+30, e: 17*60,    label: '13:30~17:00' },
+    { s: 17*60,    e: sim.endMin, label: `17:00~${fmt(sim.endMin)}` },
+  ];
+
+  // 각 슬롯에서 진행 중인 공정 + 인원 계산
+  const overlap = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
+
+  const slotData = slots.map(slot => {
+    // 슬롯 중간 시각 (대표값)
+    const isActive = (start, end) => overlap(slot.s, slot.e, start, end) > 0;
+    const isLunch1 = slot.label.includes('점심1');
+    const isLunch2 = slot.label.includes('점심2');
+
+    // 공정별 인원
+    let preCount = 0, crushCount = 0, packCount = 0, transCount = 0;
+    if (isActive(sim.fp.pre.s, sim.fp.pre.e)) preCount = workers.preFp;
+    else if (isActive(sim.fc.pre.s, sim.fc.pre.e)) preCount = workers.preFc;
+    if (isActive(sim.fp.crush.s, sim.fp.crush.e)) crushCount = workers.crushFp;
+    else if (isActive(sim.fc.crush.s, sim.fc.crush.e)) crushCount = workers.crushFc;
+    if (isActive(sim.fp.pack.s, sim.fp.pack.e)) { packCount = workers.packFp; transCount = 2; }
+    else if (isActive(sim.fc.pack.s, sim.fc.pack.e)) { packCount = workers.packFc; transCount = 2; }
+
+    // 관리자: 07:00 이후
+    const mgr = slot.s >= 7*60 ? mgrAfter7 : 0;
+
+    // 외포장/세팅/점심/유휴 자동 계산
+    // 점심 시간: 1차 = 전처리조+외포장조 20명, 2차 = 후공정조 등 11명
+    let lunch = 0, outer = 0, setting = 0, idle = 0;
+    if (isLunch1) {
+      // 1차 점심: 전처리·외포장 작업 일시중단, 후공정 가동
+      lunch = 20;  // 전처리 7 + 외포장 13 등
+      // 후공정 = 28 - 20 - 관리(1로 줄어듦) - 진행 공정
+      const mgrLunch = 1; // 점심 시간 관리 1명
+      const occupied = preCount + crushCount + packCount + transCount + lunch + mgrLunch;
+      idle = Math.max(0, totalWorkers - occupied);
+    } else if (isLunch2) {
+      lunch = 11;
+      const mgrLunch = 1;
+      const occupied = preCount + crushCount + packCount + transCount + lunch + mgrLunch;
+      idle = Math.max(0, totalWorkers - occupied);
+    } else if (slot.s >= 9*60 && slot.e <= 11*60+30) {
+      // 09:00~11:30: 한국인 합류 → 외포장 풀가동
+      // 28명 = 진행 공정 인원 + 관리 + 외포장 + 세팅
+      const occupied = preCount + crushCount + packCount + transCount + mgr;
+      const restWorkers = totalWorkers - occupied;
+      // 세팅 3명 우선, 나머지 외포장
+      setting = Math.min(3, restWorkers);
+      outer = Math.max(0, restWorkers - setting);
+    } else if (slot.s >= 13*60+30) {
+      // 13:30 이후: 점심 후 풀가동
+      const occupied = preCount + crushCount + packCount + transCount + mgr;
+      idle = Math.max(0, totalWorkers - occupied);
+    } else if (slot.s >= 7*60 && slot.s < 9*60) {
+      // 07~09: 관리 출근, 한국인 미합류 → 외국인만
+      const occupied = preCount + crushCount + packCount + transCount + mgr;
+      idle = Math.max(0, totalWorkers - occupied);
+    } else {
+      // 05~07: 외국인만
+      const occupied = preCount + crushCount + packCount + transCount;
+      idle = Math.max(0, totalWorkers - occupied);
+    }
+
+    const total = preCount + crushCount + packCount + transCount + outer + setting + lunch + mgr + idle;
+    return { slot, preCount, crushCount, packCount, transCount, outer, setting, lunch, mgr, idle, total };
+  });
+
+  const cell = (v, color) => `<td style="padding:5px 6px;border:0.5px solid var(--color-border-tertiary);text-align:center;${color?`color:${color};font-weight:500`:''}">${v||'·'}</td>`;
+  const rows = slotData.map(d => {
+    const okMark = d.total === totalWorkers ? '<span style="color:#0F6E56">✓</span>' : `<span style="color:#A32D2D">${d.total>totalWorkers?'+':'−'}${Math.abs(d.total-totalWorkers)}</span>`;
+    return `<tr>
+      <td style="padding:5px 6px;border:0.5px solid var(--color-border-tertiary);font-weight:500;font-size:11px">${d.slot.label}</td>
+      ${cell(d.preCount, '#185FA5')}
+      ${cell(d.crushCount, '#BA7517')}
+      ${cell(d.packCount, '#7F77DD')}
+      ${cell(d.transCount, '#534AB7')}
+      ${cell(d.outer, '#1D9E75')}
+      ${cell(d.setting, '#EF9F27')}
+      ${cell(d.lunch, '#888780')}
+      ${cell(d.mgr, '#5F5E5A')}
+      ${cell(d.idle, '#B4B2A9')}
+      <td style="padding:5px 6px;border:0.5px solid var(--color-border-tertiary);text-align:center;font-weight:600;background:#f8f7f3">${d.total} ${okMark}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">📊 시간대별 인원 활용 (정원 28명)</div>
+        <div style="font-size:11px;color:var(--color-text-tertiary)">합계 ✓ = 28명 일치 · 빨강 = 초과/부족</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr style="background:var(--color-background-secondary)">
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center">시간대</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#185FA5">전처리</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#BA7517">파쇄</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#7F77DD">내포장</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#534AB7">이송</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#1D9E75">외포장</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#EF9F27">세팅</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#888780">점심</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#5F5E5A">관리</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#B4B2A9">유휴</th>
+            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;font-weight:600">합계</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ============================================================
+// 인원 입력 (수정 가능)
 // ============================================================
 function ttmRenderWorkers(workers) {
   const totalWorkers = parseInt(document.getElementById('ttt-total-workers')?.value) || 28;
@@ -2116,6 +2243,7 @@ function ttmRender() {
         ${ttmRenderTimeline(scen, workers, sim)}
       </div>
       ${ttmRenderWorkers(workers)}
+      ${ttmRenderWorkerSlots(scen, workers, sim)}
       ${ttmRenderReport(scen, workers, sim)}`;
     const out = document.getElementById('ttm-output');
     if (out) out.innerHTML = html;
