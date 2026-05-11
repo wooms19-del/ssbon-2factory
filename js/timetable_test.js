@@ -2069,7 +2069,7 @@ function ttmSimulate(scen, workers) {
 
   return {
     fp: { pre: fpPre, cook: fpCook, crush: fpCrush, pack: fpPack, retort: fpRetort, kg: fpPreIn, ea: fpEa, packIn: fpPackIn },
-    fc: { pre: fcPre, cook: fcCook, crush: fcCrush, pack: fcPack, retort: fcRetort, kg: fcPreIn, ea: fcEa, packIn: fcPackIn, tanks: fcTanks },
+    fc: { pre: fcPre, cook: fcCook, crush: fcCrush, pack: fcPack, retort: fcRetort, kg: fcPreIn, ea: fcEa, packIn: fcPackIn, tanks: fcTankKgs },
     endMin,
   };
 }
