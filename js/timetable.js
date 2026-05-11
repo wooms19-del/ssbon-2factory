@@ -949,28 +949,21 @@ function ttPlanSlots(inp, sim) {
     });
   }
 
-  // 슬롯 4·5: 점심 (wms 룰)
-  // 파쇄 전담 인원 = 총원 - 전처리 - 내포장 - 이송 - 관리
-  // = 점심1에 점심 가는 순수 파쇄조
-  const crushOnly = Math.max(0, total - inp.wkPre - inp.wkPack - inp.wkTrans - mgr);
+  // 슬롯 4·5: 점심 반반 (total/2씩)
+  const half1 = Math.ceil(total / 2);  // 1차 (올림)
+  const half2 = total - half1;         // 2차 (나머지)
 
   // 슬롯 4: 점심 1차 (11:30~12:30)
-  // 파쇄 전담(crushOnly)이 점심 + 관리 1명 점심
-  // 작업: 전처리7 + 내포장6 + 이송2 = 15명 파쇄 라인 투입
-  const lunch1Total = crushOnly + 1; // 파쇄 전담 + 관리1 점심
-  const workAtLunch1 = inp.wkPre + inp.wkPack + inp.wkTrans; // 파쇄 합류
   slots.push({
     range: `11:30~12:30`,
-    cells: { 파쇄: workAtLunch1, 점심: lunch1Total, 관리: 1 },
+    cells: { 파쇄: total - half1 - 1, 점심: half1, 관리: 1 },
     sum: total,
   });
 
   // 슬롯 5: 점심 2차 (12:30~13:30)
-  // 전처리+내포장+이송 + 관리1명 점심, 파쇄 전담 복귀해서 파쇄 가동
-  const lunch2Total = inp.wkPre + inp.wkPack + inp.wkTrans + 1;
   slots.push({
     range: `12:30~13:30`,
-    cells: { 파쇄: crushOnly, 점심: lunch2Total, 관리: 1 },
+    cells: { 파쇄: total - half2 - 1, 점심: half2, 관리: 1 },
     sum: total,
   });
 
@@ -1004,9 +997,10 @@ function ttPlanNarrative(inp, sim, slots) {
     lines.push(`<strong>${inp.joinTime}</strong> · 한국인 합류 없음 (전처리 ${inp.earlyWorkers}명 유지) + 외포장·세팅 병행`);
   }
   lines.push(`<strong>${ttFmt(sim.crushStartMin)}</strong> · 자숙 1호 출하 → <strong style="color:#BA7517">파쇄 ${inp.wkCrush}명 투입 시작</strong>`);
-  const crushOnly = Math.max(0, total - inp.wkPre - inp.wkPack - inp.wkTrans - inp.mgrWorkers);
-  lines.push(`<strong>11:30~12:30</strong> · 점심 1차 (파쇄 전담 ${crushOnly}명 + 관리 1명) — 전처리조 ${inp.wkPre}명은 파쇄 라인 투입`);
-  lines.push(`<strong>12:30~13:30</strong> · 점심 2차 (전처리 ${inp.wkPre} + 내포장 ${inp.wkPack} + 이송 ${inp.wkTrans} + 관리 1 = ${inp.wkPre+inp.wkPack+inp.wkTrans+1}명) — 파쇄 전담 ${crushOnly}명 복귀`);
+  const half1n = Math.ceil(total / 2);
+  const half2n = total - half1n;
+  lines.push(`<strong>11:30~12:30</strong> · 점심 1차 ${half1n}명 · 작업 ${total - half1n - 1}명 파쇄 + 관리 1명`);
+  lines.push(`<strong>12:30~13:30</strong> · 점심 2차 ${half2n}명 · 작업 ${total - half2n - 1}명 파쇄 + 관리 1명`);
   lines.push(`<strong>13:30~${ttFmt(sim.packEndMin)}</strong> · <strong style="color:#7F77DD">파쇄 ${inp.wkPackPeak}명 + 내포장 ${inp.wkPack}명 + 이송 ${inp.wkTrans}명 풀가동</strong>`);
   lines.push(`<strong>${ttFmt(sim.packEndMin)}</strong> · 내포장 종료 (그날 작업 끝)`);
   lines.push(`<strong>레토르트</strong> · ${ttFmt(sim.retortStartMin)} 시작 · ${sim.retortCycles}회차 · 최종 ${ttFmt(sim.retortEndMin)}`);
@@ -1197,20 +1191,20 @@ function ttRender() {
     const crossLunch1 = tc.start < LUNCH1_S && tc.end > LUNCH1_S;
     const crossLunch2 = tc.start < LUNCH1_E && tc.end > LUNCH1_E;
     const crossPeak = tc.start < LUNCH2_E && tc.end > LUNCH2_E;
-    const crushOnly = Math.max(0, inp.wkPackPeak - inp.wkPre); // 파쇄 전담 = 풀가동 - 전처리조
-    const crushLunch1 = inp.wkPre + inp.wkPack + inp.wkTrans; // 점심1: 전처리+내포장+이송 파쇄 투입
+    const crushOnly = Math.max(0, inp.wkPackPeak - inp.wkPre);
+    const half1 = Math.ceil(inp.totalWorkers / 2);
+    const half2 = inp.totalWorkers - half1;
     const segmentInfo = [];
-    // 파쇄 시작 ~ 점심1: 파쇄 전담 인원만 (전처리조는 아직 전처리 중)
     if (tc.start < LUNCH1_S) segmentInfo.push(`${ttFmt(tc.start)}~${ttFmt(Math.min(LUNCH1_S, tc.end))}: ${crushOnly}명 (파쇄 전담)`);
     if (crossLunch1 || (tc.start >= LUNCH1_S && tc.start < LUNCH1_E)) {
       const segS = Math.max(tc.start, LUNCH1_S);
       const segE = Math.min(tc.end, LUNCH1_E);
-      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${crushLunch1}명 (파쇄전담 점심 → 전처리·내포장·이송 파쇄 투입)`);
+      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${inp.totalWorkers - half1 - 1}명 파쇄 (점심1차 ${half1}명)`);
     }
     if (crossLunch2 || (tc.start >= LUNCH1_E && tc.start < LUNCH2_E)) {
       const segS = Math.max(tc.start, LUNCH1_E);
       const segE = Math.min(tc.end, LUNCH2_E);
-      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${crushOnly}명 (파쇄전담 복귀, 전처리·내포장·이송 점심2)`);
+      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${inp.totalWorkers - half2 - 1}명 파쇄 (점심2차 ${half2}명)`);
     }
     if (tc.end > LUNCH2_E) {
       const segS = Math.max(tc.start, LUNCH2_E);
@@ -1266,22 +1260,18 @@ function ttRender() {
     yCursor += ROW_H;
   }
 
-  // ── 점심 (1차 + 2차) — wms 룰 ──
-  // 파쇄 전담 = 총원 - 전처리 - 내포장 - 이송 - 관리
   bars += rowLabel(yCursor, BAR_H, '점심');
-  const _crushOnly = Math.max(0, inp.totalWorkers - inp.wkPre - inp.wkPack - inp.wkTrans - inp.mgrWorkers);
-  const _lunch1 = _crushOnly + 1; // 파쇄전담 + 관리1
-  const _lunch2 = inp.wkPre + inp.wkPack + inp.wkTrans + 1; // 전처리+내포장+이송 + 관리1
-  const _workLunch1 = inp.wkPre + inp.wkPack + inp.wkTrans; // 점심1 작업: 파쇄 라인 투입
+  const _half1 = Math.ceil(inp.totalWorkers / 2);
+  const _half2 = inp.totalWorkers - _half1;
   bars += segBar(yCursor, BAR_H, LUNCH1_S, LUNCH1_E, '#888780',
-    `1차 ${_lunch1}명`,
+    `1차 ${_half1}명`,
     '점심 1차',
-    `시각: 11:30~12:30|인원: ${_lunch1}명 점심 (파쇄 전담 ${_crushOnly}명 + 관리 1명)|작업: 전처리 ${inp.wkPre}명 + 내포장조 ${inp.wkPack}명 + 이송 ${inp.wkTrans}명 → 파쇄 라인 투입 (${_workLunch1}명)`,
+    `시각: 11:30~12:30|인원: ${_half1}명 점심|작업: ${inp.totalWorkers - _half1 - 1}명 파쇄 + 관리 1명`,
     {fillOpacity: 0.7});
   bars += segBar(yCursor, BAR_H, LUNCH1_E, LUNCH2_E, '#888780',
-    `2차 ${_lunch2}명`,
+    `2차 ${_half2}명`,
     '점심 2차',
-    `시각: 12:30~13:30|인원: ${_lunch2}명 점심 (전처리 ${inp.wkPre} + 내포장 ${inp.wkPack} + 이송 ${inp.wkTrans} + 관리 1)|작업: 파쇄 전담 ${_crushOnly}명 복귀 → 13:30 풀가동 즉시 시작`,
+    `시각: 12:30~13:30|인원: ${_half2}명 점심|작업: ${inp.totalWorkers - _half2 - 1}명 파쇄 + 관리 1명|13:30 전원 복귀 → 풀가동`,
     {fillOpacity: 0.85});
   yCursor += ROW_H;
 
