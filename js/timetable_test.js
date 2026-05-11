@@ -2324,13 +2324,16 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
     let lunch=0, outer=0, setting=0;
 
     if (isLunch1 || isLunch2) {
-      // 점심: 총원 반반 교대. 1차 half1명, 2차 half2명
-      const lunchCount = isLunch1 ? half1 : half2;
-      const working = crush + pack + trans + mgr;
-      // 일하는 인원이 비점심 인원보다 많으면 점심 조정
-      lunch = Math.max(0, Math.min(lunchCount, onsite - working));
-      // 남는 인원 외포장
-      outer = Math.max(0, onsite - lunch - working);
+      // 점심: 전원 반반 교대 (파쇄 포함)
+      // 1차: half1명 점심 → 나머지 half2명 일함
+      // 2차: half2명 점심 → 나머지 half1명 일함
+      lunch = isLunch1 ? half1 : half2;
+      // 파쇄도 반반: 일하는 쪽만 crush에 표시
+      const workingHalf = isLunch1 ? half2 : half1;
+      // 내포장+이송+관리 먼저 배치, 나머지 파쇄
+      const fixedWork = pack + trans + mgr;
+      crush = Math.max(0, workingHalf - fixedWork);
+      outer = Math.max(0, onsite - lunch - fixedWork - crush);
     } else {
       // 비점심: 남는 인원 → 외포장/세팅 (유휴 없음)
       const occupied = pre + crush + pack + trans + mgr;
