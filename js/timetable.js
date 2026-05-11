@@ -932,11 +932,12 @@ function ttPlanSlots(inp, sim) {
       cells: { 전처리: inp.wkPre, 외포장: outerPack1, 세팅: Math.min(settingDefault, remainPeak1), 관리: mgr },
       sum: total,
     });
-    // 전처리 끝 ~ 점심1: 파쇄 시작
-    const crushStart = total - mgr; // 전원 파쇄 (외포장조도 파쇄 합류)
+    // 전처리 끝 ~ 점심1: 파쇄 전담만 파쇄, 나머지는 외포장/세팅/대기
+    const crushOnlyNow = Math.max(0, total - inp.wkPre - inp.wkPack - inp.wkTrans - mgr);
+    const restNow = total - crushOnlyNow - mgr; // 전처리조+내포장조+이송 = 외포장 등
     slots.push({
       range: `${ttFmt(sim.preEndMin)}~11:30`,
-      cells: { 파쇄: crushStart - mgr, 관리: mgr },
+      cells: { 파쇄: crushOnlyNow, 외포장: restNow, 관리: mgr },
       sum: total,
     });
   } else {
