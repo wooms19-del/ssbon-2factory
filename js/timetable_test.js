@@ -50,27 +50,28 @@ let TTT_AUTO_OTHER = {
 // ── 진입 시 자동 초기화 ──────────────────────────────────
 function tttInit() {
   tttAutoAnalyze().then(() => tttAutoAnalyzeOther().then(tttRender));
-  // ttm 호버 툴팁 리스너 (innerHTML script 실행 안 되므로 여기서 한 번만 등록)
-  if (!window.__ttmTipInited) {
-    window.__ttmTipInited = true;
+  if (!window.__tttTipInited) {
+    window.__tttTipInited = true;
     document.addEventListener('mouseover', function(e) {
-      const bar = e.target.closest('.ttm-bar');
+      const bar = e.target.closest('.ttt-bar');
       if (!bar) return;
-      let tip = document.getElementById('ttm-tip');
+      const tip = document.getElementById('tttTip');
       if (!tip) return;
-      tip.textContent = bar.dataset.tip || '';
+      const title = bar.dataset.tipTitle || '';
+      const info = (bar.dataset.tipInfo || '').split('|').filter(Boolean);
+      tip.innerHTML = `<div class="ttt-tip-title">${title}</div>` + info.map(l => `<div>${l}</div>`).join('');
       tip.style.display = 'block';
     });
     document.addEventListener('mousemove', function(e) {
-      const tip = document.getElementById('ttm-tip');
+      const tip = document.getElementById('tttTip');
       if (tip && tip.style.display === 'block') {
-        tip.style.left = (e.clientX + 14) + 'px';
-        tip.style.top = (e.clientY + 14) + 'px';
+        tip.style.left = Math.min(e.clientX + 16, window.innerWidth - 300) + 'px';
+        tip.style.top  = Math.min(e.clientY + 16, window.innerHeight - 160) + 'px';
       }
     });
     document.addEventListener('mouseout', function(e) {
-      if (e.target.closest('.ttm-bar')) {
-        const tip = document.getElementById('ttm-tip');
+      if (e.target.closest('.ttt-bar')) {
+        const tip = document.getElementById('tttTip');
         if (tip) tip.style.display = 'none';
       }
     });
@@ -2025,7 +2026,8 @@ function ttmSimulate(scen, workers) {
   }
   const fpPack = { s: fpPackStart, e: fpPackStart + fpPackMin };
 
-  // FC 내포장: FP 내포장 끝난 후 + FC도 같은 룰 (400kg 이하 파쇄 완료, 초과 200kg 누적)
+  // FC 내포장: FP 내포장 끝난 후 + FC 파쇄 200kg 누적 시점 시작
+  // 단, 내포장 종료는 반드시 fcCrush.e(마지막 파쇄 완료) 이후여야 함
   let fcPackReadyMin;
   if (scen.fc.kg <= 400) {
     fcPackReadyMin = fcCrush.e;
@@ -2035,7 +2037,10 @@ function ttmSimulate(scen, workers) {
     fcPackReadyMin = fcCrush.s + fc200kgMin;
   }
   const fcPackStart = Math.max(fcPackReadyMin, fpPack.e);
-  const fcPack = { s: fcPackStart, e: fcPackStart + fcPackMin };
+  const fcPackEndRaw = fcPackStart + fcPackMin;
+  // 파쇄가 내포장보다 늦게 끝나면 내포장 종료를 파쇄 완료 시점으로 늦춤
+  const fcPackEnd = Math.max(fcPackEndRaw, fcCrush.e);
+  const fcPack = { s: fcPackStart, e: fcPackEnd };
 
   // === 레토르트 회차 분배 ===
   // FP: eaPerCart, 4대차/회차 → 회차 수
@@ -2263,73 +2268,74 @@ function ttmRenderTimeline(scen, workers, sim) {
 function ttmRenderWorkerSlots(scen, workers, sim) {
   const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 
-  // 입력값에서 인원 구성 읽기
   const totalWorkers = parseInt(document.getElementById('ttt-total')?.value) || 28;
   const earlyWorkers = parseInt(document.getElementById('ttt-early')?.value) || 7;
   const mgrMin       = parseInt(document.getElementById('ttt-mgr')?.value)   || 2;
-  const mgrTime      = document.getElementById('ttt-mgr-time')?.value || '07:00';
-  const joinTime     = document.getElementById('ttt-join')?.value || '09:00';
-  const mgrTimeMin   = tttToMin(mgrTime);
-  const joinTimeMin  = tttToMin(joinTime);
+  const mgrTimeMin   = tttToMin(document.getElementById('ttt-mgr-time')?.value || '07:00');
+  const joinTimeMin  = tttToMin(document.getElementById('ttt-join')?.value || '09:00');
 
-  // 실제 공정 시각
-  const fpPreS = sim.fp.pre.s, fpPreE = sim.fp.pre.e;
-  const fcPreS = sim.fc.pre.s, fcPreE = sim.fc.pre.e;
-  const fpCrushS = sim.fp.crush.s, fpCrushE = sim.fp.crush.e;
-  const fcCrushS = sim.fc.crush.s, fcCrushE = sim.fc.crush.e;
-  const fpPackS = sim.fp.pack.s, fpPackE = sim.fp.pack.e;
-  const fcPackS = sim.fc.pack.s, fcPackE = sim.fc.pack.e;
+  const earlyFpCrush = sim.fp.crush.s < 8*60+30;
+  const earlyFcCrush = (sim.fc.crushes?.[0]?.s ?? sim.fc.crush.s) < 8*60+30;
 
-  // 슬롯 경계: 공정 전환 시각 + 고정 점심 + 조출/합류/관리자 출근
+  const crushEvents = (sim.fc.crushes || [sim.fc.crush]).flatMap(c => [c.s, c.e]);
   const boundaries = new Set([
-    sim.fp.pre.s, fpPreE, fcPreS, fcPreE,
-    fpCrushS, fpCrushE, fcCrushS, fcCrushE,
-    fpPackS, fpPackE, fcPackS, fcPackE,
+    sim.fp.pre.s, sim.fp.pre.e,
+    sim.fc.pre.s, sim.fc.pre.e,
+    sim.fp.crush.s, sim.fp.crush.e,
+    ...crushEvents,
+    sim.fp.pack.s, sim.fp.pack.e,
+    sim.fc.pack.s, sim.fc.pack.e,
     mgrTimeMin, joinTimeMin,
     11*60+30, 12*60+30, 13*60+30,
     sim.endMin,
   ]);
-  const sorted = Array.from(boundaries).filter(m => m >= sim.fp.pre.s && m <= sim.endMin).sort((a,b)=>a-b);
+  const sorted = Array.from(boundaries)
+    .filter(m => m >= sim.fp.pre.s && m <= sim.endMin)
+    .sort((a,b) => a-b);
 
-  const overlap = (s1,e1,s2,e2) => Math.max(0, Math.min(e1,e2)-Math.max(s1,s2)) > 0;
+  const ov = (s1,e1,s2,e2) => s1 < e2 && e1 > s2;
+  const half1 = Math.ceil(totalWorkers / 2);
+  const half2 = totalWorkers - half1;
 
   const slots = [];
   for (let i = 0; i < sorted.length - 1; i++) {
     const s = sorted[i], e = sorted[i+1];
     if (e <= s) continue;
-    const mid = (s + e) / 2;
+    const mid = (s+e)/2;
 
-    // 출근 인원
     let onsite;
-    if (mid < mgrTimeMin)  onsite = earlyWorkers;
+    if (mid < mgrTimeMin) onsite = earlyWorkers;
     else if (mid < joinTimeMin) onsite = earlyWorkers + mgrMin;
     else onsite = totalWorkers;
 
-    // 각 공정 인원
-    const pre  = (overlap(s,e,fpPreS,fpPreE)   ? workers.preFp  : 0)
-               + (overlap(s,e,fcPreS,fcPreE)   ? workers.preFc  : 0);
-    const crush= (overlap(s,e,fpCrushS,fpCrushE) ? workers.crushFp : 0)
-               + (overlap(s,e,fcCrushS,fcCrushE) ? workers.crushFc : 0);
-    let pack=0, trans=0;
-    if (overlap(s,e,fpPackS,fpPackE)) { pack+=workers.packFp; trans+=2; }
-    if (overlap(s,e,fcPackS,fcPackE)) { pack+=workers.packFc; trans+=2; }
-
-    // 관리자
     const mgr = mid >= mgrTimeMin ? mgrMin : 0;
+    const pre = (ov(s,e,sim.fp.pre.s,sim.fp.pre.e) ? workers.preFp : 0)
+              + (ov(s,e,sim.fc.pre.s,sim.fc.pre.e) ? workers.preFc : 0);
+    let crush = ov(s,e,sim.fp.crush.s,sim.fp.crush.e) ? workers.crushFp : 0;
+    (sim.fc.crushes||[sim.fc.crush]).forEach(c => { if(ov(s,e,c.s,c.e)) crush += workers.crushFc; });
+    let pack=0, trans=0;
+    if (ov(s,e,sim.fp.pack.s,sim.fp.pack.e)) { pack+=workers.packFp; trans+=2; }
+    if (ov(s,e,sim.fc.pack.s,sim.fc.pack.e)) { pack+=workers.packFc; trans+=2; }
 
     const isLunch1 = s >= 11*60+30 && e <= 12*60+30;
     const isLunch2 = s >= 12*60+30 && e <= 13*60+30;
-
-    const occupied = pre + crush + pack + trans + mgr;
-    const slack = Math.max(0, onsite - occupied);
     let lunch=0, outer=0, setting=0, idle=0;
-    if (isLunch1 || isLunch2) {
-      lunch = slack;
-    } else if (mid >= joinTimeMin && mid < 11*60+30 && crush === 0) {
-      setting = Math.min(3, slack);
-      outer   = Math.max(0, slack - setting);
-    } else {
-      idle = slack;
+
+    if (isLunch1) {
+      lunch = Math.min(half1, Math.max(0, onsite - crush - pack - trans - mgr));
+    } else if (isLunch2) {
+      lunch = Math.min(half2, Math.max(0, onsite - crush - pack - trans - mgr));
+    }
+
+    const occupied = pre + crush + pack + trans + mgr + lunch;
+    const slack = Math.max(0, onsite - occupied);
+    if (!isLunch1 && !isLunch2) {
+      if (mid >= joinTimeMin && mid < 11*60+30 && crush === 0 && pack === 0) {
+        setting = Math.min(3, slack);
+        outer   = Math.max(0, slack - setting);
+      } else {
+        idle = slack;
+      }
     }
 
     const total = pre+crush+pack+trans+outer+setting+lunch+mgr+idle;
@@ -2343,8 +2349,9 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
   const rows = slots.map((r, idx) => {
     const stripe = idx%2===1 ? 'background:#f7f9fc' : '';
     const isFull = r.total === r.onsite;
-    const sumMark = isFull ? `<span style="color:#0F6E56">${r.total} ✓</span>`
-                           : `<span style="color:#A32D2D">${r.total}/${r.onsite}</span>`;
+    const sumMark = isFull
+      ? `<span style="color:#0F6E56">${r.total} ✓</span>`
+      : `<span style="color:#A32D2D">${r.total}/${r.onsite}</span>`;
     return `<tr style="${stripe}">
       <td style="padding:6px 4px;border:1px solid #ddd;font-weight:600;font-size:11px;text-align:center;white-space:nowrap">${r.label}</td>
       ${keys.map((k,ci) => {
@@ -2358,16 +2365,17 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
   }).join('');
 
   const headerStyle = 'padding:0 4px;font-weight:700;border:1px solid #0d4a8a;font-size:12px;text-align:center';
+  const earlyNote = (earlyFpCrush || earlyFcCrush) ? ' · ⚠️ 파쇄 조기출근 필요' : '';
   return `
     <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px">
-      합계/출근 · 외국인 ${earlyWorkers}명(${fmt(sim.fp.pre.s)}~), 관리 +${mgrMin}명(${mgrTime}~), 한국인 합류(${joinTime}~) = ${totalWorkers}명
+      정원 ${totalWorkers}명 · 외국인 ${earlyWorkers}명(${fmt(sim.fp.pre.s)}~), 관리 +${mgrMin}명(${fmt(mgrTimeMin)}~), 한국인(${fmt(joinTimeMin)}~)${earlyNote}
     </div>
     <div style="border:2px solid #185FA5;border-radius:6px;overflow:hidden">
     <table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff">
       <thead>
         <tr style="background:linear-gradient(135deg,#185FA5,#1a6db5);color:#fff;height:36px">
           <th style="${headerStyle}">시간대</th>
-          ${heads.map((h,i) => `<th style="${headerStyle};color:#fff">${h}</th>`).join('')}
+          ${heads.map(h => `<th style="${headerStyle}">${h}</th>`).join('')}
           <th style="${headerStyle};background:#0d4a8a">합계</th>
         </tr>
       </thead>
