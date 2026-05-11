@@ -838,8 +838,10 @@ function ttRender() {
       `자숙 ${tc.idx}호 산출: ${Math.round(tc.kg)}kg|시각: ${ttFmt(tc.start)}~${ttFmt(tc.end)} (${durMin}분)|와건 종료: ${ttFmt(sim.wagonEndTimes[i])}|${segmentInfo.join('|')}`,
       {fillOpacity: 0.9, stroke: '#fff', strokeWidth: 1});
   });
-  // 막대 끝 라벨: 수율·생산성
-  bars += `<text x="${xPos(sim.crushEndMin) + 6}" y="${yCursor + BAR_H/2 + 4}" text-anchor="start" font-size="10" fill="#BA7517" font-weight="600">${inp.yCrush}% · ${inp.pCrush}kg/인시</text>`;
+  // 막대 끝 라벨: 원육 기준 누적 수율 · 생산성
+  // 원육 → 전처리(yPre) → 자숙(cookYield) → 파쇄(yCrush)
+  const crushBaseYield = (inp.yPre * sim.cookYield * inp.yCrush) / 10000;
+  bars += `<text x="${xPos(sim.crushEndMin) + 6}" y="${yCursor + BAR_H/2 + 4}" text-anchor="start" font-size="10" fill="#BA7517" font-weight="600">${crushBaseYield.toFixed(1)}% · ${inp.pCrush}kg/인시</text>`;
   yCursor += ROW_H;
 
   // ── 내포장 (단일 막대, 연속 흐름) ──
