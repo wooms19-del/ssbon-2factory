@@ -506,7 +506,7 @@ async function tttAutoAnalyzeOther() {
     // FP 카드 자동값 채우기 (user가 직접 수정하지 않은 경우에만)
     const fpSetAuto = (id, val, autoId) => {
       const inp = document.getElementById(id);
-      if (inp && !inp.dataset.userEdited) { inp.value = val; }
+      if (inp) { inp.value = val; delete inp.dataset.userEdited; }
       const autoEl = document.getElementById(autoId);
       if (autoEl) autoEl.textContent = `자동: ${val} (n=${preN})`;
     };
