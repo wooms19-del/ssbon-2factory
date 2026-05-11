@@ -499,6 +499,8 @@ async function tttAutoAnalyzeOther() {
   }
 }
 if (typeof window !== 'undefined') window.tttAutoAnalyzeOther = tttAutoAnalyzeOther;
+
+function tttFillAutoValues() {
   const setVal = (id, v) => {
     const el = document.getElementById(id);
     if (!el) return;
