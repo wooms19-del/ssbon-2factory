@@ -493,6 +493,19 @@ async function tttAutoAnalyzeOther() {
     // summary 표시
     const el = document.getElementById('ttt-fp-auto-summary');
     if (el) el.textContent = `전처리 ${yPre}% · ${pPre}kg/인시 | 파쇄 ${yCrush}% · ${pCrush}kg/인시 | 자숙 ${yCook}% (n=${preN}/${crN})`;
+    // FP 카드 자동값 채우기 (user가 직접 수정하지 않은 경우에만)
+    const fpSetAuto = (id, val, autoId) => {
+      const inp = document.getElementById(id);
+      if (inp && !inp.dataset.userEdited) { inp.value = val; }
+      const autoEl = document.getElementById(autoId);
+      if (autoEl) autoEl.textContent = `자동: ${val} (n=${preN})`;
+    };
+    fpSetAuto('ttt-fp-y-pre',   yPre,   'ttt-fp-y-pre-auto');
+    fpSetAuto('ttt-fp-p-pre',   pPre,   'ttt-fp-p-pre-auto');
+    fpSetAuto('ttt-fp-y-crush', yCrush, 'ttt-fp-y-crush-auto');
+    fpSetAuto('ttt-fp-p-crush', pCrush, 'ttt-fp-p-crush-auto');
+    const fpPackAutoEl = document.getElementById('ttt-fp-p-pack-auto');
+    if (fpPackAutoEl) fpPackAutoEl.textContent = `자동: ${TTT_AUTO_OTHER.pPackEa?.val ?? '—'}`;
     tttRender();
   } catch(e) {
     console.error('[TTM] FP 분석 실패:', e);
@@ -895,32 +908,46 @@ const TTT_PRODUCT_INFO = {
   'mini':   { name: '미니 70g 5개입',  eaPerCart: 1280, retortCycleMin: 120, kgPerEa: 0.046 }, // 5개입 350g 기준
 };
 
-// 두 번째 제품용 inp 구성 (단일 tttSimulate가 그대로 받을 수 있게)
+// FP 카드 자동값 복원
+function tttFpResetField(inputId, key) {
+  const val = TTT_AUTO_OTHER[key]?.val;
+  if (val == null) return;
+  const el = document.getElementById(inputId);
+  if (el) { el.value = val; tttRender(); }
+}
+
+// 두 번째 제품용 inp 구성 — 화면 FP 카드 값 직접 읽음
 function tttBuildSecondInp(inp, firstSim) {
   const meat2 = document.getElementById('ttt-meat2')?.value || 'trader';
   const kg2 = parseFloat(document.getElementById('ttt-kg2')?.value) || 500;
   const info = TTT_PRODUCT_INFO[meat2] || TTT_PRODUCT_INFO['trader'];
 
-  // 둘째 원육 시작 시각 = 첫째 전처리 종료 시점 (작업자 풀 옮겨감)
   const secondStartMin = firstSim.preEndMin;
   const fmtTime = (m) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 
-  // 둘째 시뮬의 startTime/joinTime: 같이 secondStartMin 으로 (이미 한국인 합류 후)
-  // earlyWorkers는 전 인원 사용 가능
+  // 화면 FP 카드에서 읽기 (없으면 FC 값 fallback)
+  const fpYPre    = parseFloat(document.getElementById('ttt-fp-y-pre')?.value)    || inp.yPre;
+  const fpYCrush  = parseFloat(document.getElementById('ttt-fp-y-crush')?.value)  || inp.yCrush;
+  const fpPPre    = parseFloat(document.getElementById('ttt-fp-p-pre')?.value)    || inp.pPre;
+  const fpPCrush  = parseFloat(document.getElementById('ttt-fp-p-crush')?.value)  || inp.pCrush;
+  const fpPPackEa = parseFloat(document.getElementById('ttt-fp-p-pack')?.value)   || inp.pPackEa;
+  const fpWkPre   = parseInt(document.getElementById('ttt-fp-wk-pre')?.value)     || inp.wkPre;
+  const fpWkPack  = parseInt(document.getElementById('ttt-fp-wk-pack')?.value)    || inp.wkPack;
+
   return {
     ...inp,
-    meatType: '우둔',  // 비-FC 기본
+    meatType: '우둔',
     meatKg: kg2,
     startTime: fmtTime(secondStartMin),
     joinTime: fmtTime(secondStartMin),
-    earlyWorkers: inp.wkPre,  // 한국인 합류 후이므로 전 전처리 인원 사용
-    // 비-FC 자동값으로 yield/productivity 갈아끼우기
-    yPre: TTT_AUTO_OTHER.yPre.val,
-    yCrush: TTT_AUTO_OTHER.yCrush.val,
-    pPre: TTT_AUTO_OTHER.pPre.val,
-    pCrush: TTT_AUTO_OTHER.pCrush.val,
-    pPackEa: TTT_AUTO_OTHER.pPackEa.val,
-    // 비-FC 제품 정보 (시뮬에서 사용 — 추후 tttSimulate에서 inp.productInfo 참조 시)
+    earlyWorkers: fpWkPre,
+    wkPre: fpWkPre,
+    wkPack: fpWkPack,
+    yPre: fpYPre,
+    yCrush: fpYCrush,
+    pPre: fpPPre,
+    pCrush: fpPCrush,
+    pPackEa: fpPPackEa,
     productInfo: info,
   };
 }
@@ -952,15 +979,27 @@ function tttBuildOtherFirstInp(inp) {
   const meat2 = document.getElementById('ttt-meat2')?.value || 'trader';
   const kg2 = parseFloat(document.getElementById('ttt-kg2')?.value) || 500;
   const info = TTT_PRODUCT_INFO[meat2] || TTT_PRODUCT_INFO['trader'];
+
+  const fpYPre    = parseFloat(document.getElementById('ttt-fp-y-pre')?.value)    || TTT_AUTO_OTHER.yPre.val;
+  const fpYCrush  = parseFloat(document.getElementById('ttt-fp-y-crush')?.value)  || TTT_AUTO_OTHER.yCrush.val;
+  const fpPPre    = parseFloat(document.getElementById('ttt-fp-p-pre')?.value)    || TTT_AUTO_OTHER.pPre.val;
+  const fpPCrush  = parseFloat(document.getElementById('ttt-fp-p-crush')?.value)  || TTT_AUTO_OTHER.pCrush.val;
+  const fpPPackEa = parseFloat(document.getElementById('ttt-fp-p-pack')?.value)   || TTT_AUTO_OTHER.pPackEa.val;
+  const fpWkPre   = parseInt(document.getElementById('ttt-fp-wk-pre')?.value)     || inp.wkPre;
+  const fpWkPack  = parseInt(document.getElementById('ttt-fp-wk-pack')?.value)    || inp.wkPack;
+
   return {
     ...inp,
     meatType: '우둔',
     meatKg: kg2,
-    yPre: TTT_AUTO_OTHER.yPre.val,
-    yCrush: TTT_AUTO_OTHER.yCrush.val,
-    pPre: TTT_AUTO_OTHER.pPre.val,
-    pCrush: TTT_AUTO_OTHER.pCrush.val,
-    pPackEa: TTT_AUTO_OTHER.pPackEa.val,
+    wkPre: fpWkPre,
+    wkPack: fpWkPack,
+    earlyWorkers: fpWkPre,
+    yPre: fpYPre,
+    yCrush: fpYCrush,
+    pPre: fpPPre,
+    pCrush: fpPCrush,
+    pPackEa: fpPPackEa,
     productInfo: info,
   };
 }
