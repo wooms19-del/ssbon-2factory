@@ -2370,6 +2370,7 @@ function ttmOnWorkerChange() {
 }
 
 // 현재 인원 입력 읽기
+// 현재 인원 입력 읽기 — FP 카드(ttt-fp-*)와 FC 카드(ttt-wk-* 등) 직접 읽음
 function ttmGetCurrentWorkers() {
   const getN = (id, def) => {
     const v = parseFloat(document.getElementById(id)?.value);
@@ -2377,22 +2378,24 @@ function ttmGetCurrentWorkers() {
   };
   const def = ttmDefaultWorkers();
   return {
-    preFp: getN('ttm-w-pre-fp', def.preFp),
-    preFc: getN('ttm-w-pre-fc', def.preFc),
-    crushFp: getN('ttm-w-crush-fp', def.crushFp),
-    crushFc: getN('ttm-w-crush-fc', def.crushFc),
-    packFp: getN('ttm-w-pack-fp', def.packFp),
-    packFc: getN('ttm-w-pack-fc', def.packFc),
-    yPreFp: getN('ttm-y-pre-fp', def.yPreFp),
-    yPreFc: getN('ttm-y-pre-fc', def.yPreFc),
-    yCrushFp: getN('ttm-y-crush-fp', def.yCrushFp),
-    yCrushFc: getN('ttm-y-crush-fc', def.yCrushFc),
-    pPreFp: getN('ttm-p-pre-fp', def.pPreFp),
-    pPreFc: getN('ttm-p-pre-fc', def.pPreFc),
-    pCrushFp: getN('ttm-p-crush-fp', def.pCrushFp),
-    pCrushFc: getN('ttm-p-crush-fc', def.pCrushFc),
-    pPackFp: getN('ttm-p-pack-fp', def.pPackFp),
-    pPackFc: getN('ttm-p-pack-fc', def.pPackFc),
+    // FP: 화면 FP 카드에서
+    preFp:    getN('ttt-fp-wk-pre',   def.preFp),
+    crushFp:  def.crushFp,  // 자동 계산
+    packFp:   getN('ttt-fp-wk-pack',  def.packFp),
+    yPreFp:   getN('ttt-fp-y-pre',    def.yPreFp),
+    yCrushFp: getN('ttt-fp-y-crush',  def.yCrushFp),
+    pPreFp:   getN('ttt-fp-p-pre',    def.pPreFp),
+    pCrushFp: getN('ttt-fp-p-crush',  def.pCrushFp),
+    pPackFp:  getN('ttt-fp-p-pack',   def.pPackFp),
+    // FC: 화면 FC 카드에서
+    preFc:    getN('ttt-wk-pre',      def.preFc),
+    crushFc:  def.crushFc,  // 자동 계산
+    packFc:   getN('ttt-wk-pack',     def.packFc),
+    yPreFc:   getN('ttt-y-pre',       def.yPreFc),
+    yCrushFc: getN('ttt-y-crush',     def.yCrushFc),
+    pPreFc:   getN('ttt-p-pre',       def.pPreFc),
+    pCrushFc: getN('ttt-p-crush',     def.pCrushFc),
+    pPackFc:  getN('ttt-p-pack',      def.pPackFc),
   };
 }
 
@@ -2417,7 +2420,6 @@ function ttmRender() {
           ${ttmRenderWorkerSlots(scen, workers, sim)}
         </div>
       </div>
-      ${ttmRenderWorkers(workers)}
       ${ttmRenderReport(scen, workers, sim)}`;
     const out = document.getElementById('ttt-result');
     if (out) out.innerHTML = html;
