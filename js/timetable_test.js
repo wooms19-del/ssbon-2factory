@@ -1973,15 +1973,17 @@ function ttmRenderTimeline(scen, workers, sim) {
     <rect x="${xPos(11*60+30)}" y="20" width="${xPos(12*60+30)-xPos(11*60+30)}" height="${rows.length*ROW_H + 10}" fill="#FFF7ED" opacity="0.5"/>
     <rect x="${xPos(12*60+30)}" y="20" width="${xPos(13*60+30)-xPos(12*60+30)}" height="${rows.length*ROW_H + 10}" fill="#FFF7ED" opacity="0.3"/>`;
 
-  // 막대 (정리: 막대 안 텍스트 제거, 우측에 시각·정보 한 줄로)
+  // 막대 (단순: 막대만, 라벨은 좌측 / 상세는 호버 툴팁)
   let bars = '';
   rows.forEach((r, i) => {
     const y = 24 + i * ROW_H;
     const x1 = xPos(r.s), x2 = xPos(r.e);
     const w = Math.max(x2 - x1, 3);
     bars += `<text x="${LEFT-6}" y="${y+BAR_H/2+3.5}" text-anchor="end" font-size="10.5" fill="var(--color-text-secondary)" font-weight="500">${r.label}</text>`;
-    bars += `<rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="2.5" fill="${r.color}"/>`;
-    bars += `<text x="${x2 + 4}" y="${y+BAR_H/2+3.5}" text-anchor="start" font-size="9.5" fill="${r.color}">${fmt(r.s)}-${fmt(r.e)} · ${r.text}</text>`;
+    bars += `<g class="ttm-bar" data-tip="${fmt(r.s)}-${fmt(r.e)} · ${r.text}">
+      <rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="2.5" fill="${r.color}"/>
+    </g>`;
+    bars += `<text x="${x2 + 4}" y="${y+BAR_H/2+3.5}" text-anchor="start" font-size="9.5" fill="${r.color}" pointer-events="none">${fmt(r.s)}~${fmt(r.e)}</text>`;
   });
 
   // 종료 선
@@ -1990,10 +1992,38 @@ function ttmRenderTimeline(scen, workers, sim) {
     <text x="${xPos(sim.endMin)}" y="${24 + rows.length*ROW_H + 12}" text-anchor="middle" font-size="10" fill="#A32D2D" font-weight="600">${fmt(sim.endMin)} 종료</text>`;
 
   const svgH = 24 + rows.length * ROW_H + 24;
+  // 호버 툴팁 (스크립트 inline — DOM 추가될 때마다 활성화)
   return `
+    <style>
+      .ttm-bar { cursor: pointer; transition: filter 0.15s; }
+      .ttm-bar:hover rect { filter: brightness(1.15); stroke: #000; stroke-width: 1; }
+      #ttm-tip { position: fixed; background: #222; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 9999; pointer-events: none; max-width: 320px; display: none; }
+    </style>
     <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img" style="max-width:100%">
       ${lunchBg}${ticks}${grid}${bars}
-    </svg>`;
+    </svg>
+    <div id="ttm-tip"></div>
+    <script>
+      (function(){
+        if (window.__ttmTipInit) return; window.__ttmTipInit = true;
+        const tip = document.getElementById('ttm-tip');
+        document.addEventListener('mouseover', function(e){
+          const bar = e.target.closest('.ttm-bar');
+          if (!bar) return;
+          tip.textContent = bar.dataset.tip || '';
+          tip.style.display = 'block';
+        });
+        document.addEventListener('mousemove', function(e){
+          if (tip.style.display === 'block') {
+            tip.style.left = (e.clientX + 12) + 'px';
+            tip.style.top = (e.clientY + 12) + 'px';
+          }
+        });
+        document.addEventListener('mouseout', function(e){
+          if (e.target.closest('.ttm-bar')) tip.style.display = 'none';
+        });
+      })();
+    </script>`;
 }
 
 // ============================================================
@@ -2005,9 +2035,8 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
   const totalWorkers = 28;
   const mgrAfter7 = 2; // 07:00 이후 관리자 출근
 
-  // 시간 슬롯 정의 (분 단위)
-  // 05~07, 07~09, 09~11:30, 11:30~12:30 (점심1), 12:30~13:30 (점심2), 13:30~17:00, 17:00~끝
-  const slots = [
+  // 시간 슬롯 정의 (분 단위) — sim.endMin까지만
+  const rawSlots = [
     { s: 5*60,    e: 7*60,    label: '05:00~07:00' },
     { s: 7*60,    e: 9*60,    label: '07:00~09:00' },
     { s: 9*60,    e: 11*60+30, label: '09:00~11:30' },
@@ -2016,69 +2045,61 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
     { s: 13*60+30, e: 17*60,    label: '13:30~17:00' },
     { s: 17*60,    e: sim.endMin, label: `17:00~${fmt(sim.endMin)}` },
   ];
+  // sim.endMin 이전 슬롯만 + 마지막 슬롯 시작이 endMin 이후면 제거
+  const slots = rawSlots.filter(s => s.s < sim.endMin && s.e > s.s);
 
   // 각 슬롯에서 진행 중인 공정 + 인원 계산
   const overlap = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
 
   const slotData = slots.map(slot => {
-    // 슬롯 중간 시각 (대표값)
     const isActive = (start, end) => overlap(slot.s, slot.e, start, end) > 0;
     const isLunch1 = slot.label.includes('점심1');
     const isLunch2 = slot.label.includes('점심2');
 
-    // 공정별 인원
+    // 동시 진행 가능 — 각 공정 다 합산 (둘 다 진행 중이면 둘 다 더함)
     let preCount = 0, crushCount = 0, packCount = 0, transCount = 0;
-    if (isActive(sim.fp.pre.s, sim.fp.pre.e)) preCount = workers.preFp;
-    else if (isActive(sim.fc.pre.s, sim.fc.pre.e)) preCount = workers.preFc;
-    if (isActive(sim.fp.crush.s, sim.fp.crush.e)) crushCount = workers.crushFp;
-    else if (isActive(sim.fc.crush.s, sim.fc.crush.e)) crushCount = workers.crushFc;
-    if (isActive(sim.fp.pack.s, sim.fp.pack.e)) { packCount = workers.packFp; transCount = 2; }
-    else if (isActive(sim.fc.pack.s, sim.fc.pack.e)) { packCount = workers.packFc; transCount = 2; }
+    if (isActive(sim.fp.pre.s, sim.fp.pre.e)) preCount += workers.preFp;
+    if (isActive(sim.fc.pre.s, sim.fc.pre.e)) preCount += workers.preFc;
+    if (isActive(sim.fp.crush.s, sim.fp.crush.e)) crushCount += workers.crushFp;
+    if (isActive(sim.fc.crush.s, sim.fc.crush.e)) crushCount += workers.crushFc;
+    if (isActive(sim.fp.pack.s, sim.fp.pack.e)) { packCount += workers.packFp; transCount += 2; }
+    if (isActive(sim.fc.pack.s, sim.fc.pack.e)) { packCount += workers.packFc; transCount += 2; }
 
-    // 관리자: 07:00 이후
-    const mgr = slot.s >= 7*60 ? mgrAfter7 : 0;
+    // 관리자: 07:00 이후 출근 (점심 시간엔 1명)
+    let mgr = 0;
+    if (slot.s >= 7*60) mgr = (isLunch1 || isLunch2) ? 1 : 2;
 
-    // 현재 출근 인원 (시간대별)
-    // - 05:00~07:00: 외국인 7명만
-    // - 07:00~09:00: 외국인 7 + 관리 2 = 9명
-    // - 09:00 이후: 전원 28명
+    // 출근 인원
     let onsite;
     if (slot.s < 7*60) onsite = 7;
     else if (slot.s < 9*60) onsite = 9;
+    else if (slot.s >= 17*60) {
+      // 17:00 이후: 작업 진행 중인 인원 + 관리만 남음
+      const stillWorking = preCount + crushCount + packCount + transCount;
+      onsite = stillWorking + mgr;
+    }
     else onsite = totalWorkers;
 
-    // 외포장/세팅/점심/유휴 자동 계산
-    // 점심 시간: 1차 = 전처리조+외포장조 20명, 2차 = 후공정조 등 11명
+    // 작업 진행 인원
+    const occupied = preCount + crushCount + packCount + transCount + mgr;
+
+    // 점심/외포장/세팅/유휴 배분
     let lunch = 0, outer = 0, setting = 0, idle = 0;
+    const slack = Math.max(0, onsite - occupied); // 남는 인원
+
     if (isLunch1) {
-      // 1차 점심: 전처리·외포장 작업 일시중단, 후공정 가동
-      lunch = 20;
-      const mgrLunch = 1;
-      const occupied = preCount + crushCount + packCount + transCount + lunch + mgrLunch;
-      idle = Math.max(0, onsite - occupied);
+      // 점심1: 가능한만큼 점심 (남는 인원 다 점심) — 후공정조는 진행 중이라 못 감
+      lunch = slack;
     } else if (isLunch2) {
-      lunch = 11;
-      const mgrLunch = 1;
-      const occupied = preCount + crushCount + packCount + transCount + lunch + mgrLunch;
-      idle = Math.max(0, onsite - occupied);
-    } else if (slot.s >= 9*60 && slot.e <= 11*60+30) {
-      // 09:00~11:30: 한국인 합류 → 외포장 풀가동
-      const occupied = preCount + crushCount + packCount + transCount + mgr;
-      const restWorkers = onsite - occupied;
-      setting = Math.min(3, restWorkers);
-      outer = Math.max(0, restWorkers - setting);
-    } else if (slot.s >= 13*60+30) {
-      // 13:30 이후: 점심 후 풀가동
-      const occupied = preCount + crushCount + packCount + transCount + mgr;
-      idle = Math.max(0, onsite - occupied);
-    } else if (slot.s >= 7*60 && slot.s < 9*60) {
-      // 07~09: 관리 출근, 한국인 미합류 → 외국인 7 + 관리 2 = 9명 출근
-      const occupied = preCount + crushCount + packCount + transCount + mgr;
-      idle = Math.max(0, onsite - occupied);
+      // 점심2: 후공정조 점심
+      lunch = slack;
+    } else if (slot.s >= 9*60 && slot.s < 11*60+30) {
+      // 09:00~11:30: 외포장 + 세팅
+      setting = Math.min(3, slack);
+      outer = Math.max(0, slack - setting);
     } else {
-      // 05~07: 외국인 7명만 출근
-      const occupied = preCount + crushCount + packCount + transCount;
-      idle = Math.max(0, onsite - occupied);
+      // 그 외 시간: 유휴 (작업 안 하는 인원)
+      idle = slack;
     }
 
     const total = preCount + crushCount + packCount + transCount + outer + setting + lunch + mgr + idle;
