@@ -2944,7 +2944,7 @@ function renderPackingChart(dayEntries, opMap, ym) {
     datasets.push({
       type: 'line', label: '전월 일평균',
       data: Array(labels.length).fill(Math.round(_avgPkKg)),
-      borderColor: '#94a3b8', borderDash: [5,4], pointRadius: 0, borderWidth: 1.5, fill: false, order: 0,
+      borderColor: '#475569', borderDash: [5,4], pointRadius: 0, borderWidth: 1.8, fill: false, order: 0,
       _endLabel: Math.round(_avgPkKg).toLocaleString()+'kg', xAxisID: 'x', yAxisID: 'y_avg'
     });
   }
