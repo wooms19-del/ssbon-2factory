@@ -2961,35 +2961,36 @@ function renderPackingChart(dayEntries, opMap, ym) {
           const meta = chart.getDatasetMeta(i).data;
           if(!meta.length) return;
           const lastPt = meta[meta.length-1];
-          endItems.push({ y: lastPt.y, x: chartArea.right, fromX: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
+          // origY = 점선 원래 y (그대로 사용), labelY = 라벨 표시 위치 (충돌 시 밀림)
+          endItems.push({ origY: lastPt.y, labelY: lastPt.y, x: chartArea.right, fromX: lastPt.x, text: ' '+d._endLabel, color: d.borderColor||'#475569', dash: d.borderDash||[], bw: d.borderWidth||1.5 });
         });
-        endItems.sort((a,b) => a.y - b.y);
+        endItems.sort((a,b) => a.labelY - b.labelY);
         const MIN_GAP = 18;
         for(let i=1; i<endItems.length; i++){
-          if(endItems[i].y - endItems[i-1].y < MIN_GAP){
-            endItems[i].y = endItems[i-1].y + MIN_GAP;
+          if(endItems[i].labelY - endItems[i-1].labelY < MIN_GAP){
+            endItems[i].labelY = endItems[i-1].labelY + MIN_GAP;
           }
         }
-        // 점선 연장: bar 마지막 위치(fromX) → chartArea.right (item.x)
+        // 점선 연장: 원래 y(origY) 그대로 사용 (계단 X)
         endItems.forEach(item => {
           if(item.fromX >= item.x - 1) return;
           ctx.strokeStyle = item.color;
           ctx.lineWidth = item.bw;
           ctx.setLineDash(item.dash);
-          // dashOffset = 점선 사이클(dash[0]+dash[1])에 fromX 맞춰 정렬 → 기존 점선과 자연스럽게 이어짐
           const _cyc = (item.dash[0]||0) + (item.dash[1]||0);
           ctx.lineDashOffset = _cyc>0 ? (item.fromX % _cyc) : 0;
           ctx.beginPath();
-          ctx.moveTo(item.fromX, item.y);
-          ctx.lineTo(item.x, item.y);
+          ctx.moveTo(item.fromX, item.origY);
+          ctx.lineTo(item.x, item.origY);
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.lineDashOffset = 0;
         });
+        // 라벨은 충돌 회피된 labelY 위치에
         endItems.forEach(item => {
           ctx.fillStyle = item.color;
           ctx.textAlign='left'; ctx.textBaseline='middle';
-          ctx.fillText(item.text, item.x, item.y);
+          ctx.fillText(item.text, item.x, item.labelY);
         });
         ctx.restore();
       }}
