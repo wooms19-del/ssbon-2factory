@@ -1994,10 +1994,18 @@ function ttmSimulate(scen, workers) {
   const fcCookEnd = Math.max(...fcCook.map(c => c.e));
   const fcCrushStart = Math.max(fcCookEnd, fpCrush.e);
   const fcCrush = { s: fcCrushStart, e: fcCrushStart + fcCrushMin };
-  // FP 내포장 (FP 파쇄 끝나면)
-  const fpPack = { s: fpCrush.e, e: fpCrush.e + fpPackMin };
-  // FC 내포장 (FC 파쇄 끝나면 + FP 내포장 끝나면)
-  const fcPackStart = Math.max(fcCrush.e, fpPack.e);
+  // FP 내포장: 파쇄에서 1대차분 누적되는 시점부터 시작
+  const fpCartFillMin = scen.fp.info.eaPerCart / (fpPpackEaMin * workers.packFp / 6); // 1대차 채우는 분
+  const fpCrushRateEaMin = (fpPpackEaMin * workers.packFp / 6); // 파쇄→내포장 산출 EA/분 (대략)
+  const fpFirstCartMin = Math.ceil(scen.fp.info.eaPerCart / (fpCrushOut / fpCrushMin)); // 파쇄 시작 후 1대차 누적 분
+  const fpPackStart = fpCrush.s + fpFirstCartMin;
+  const fpPack = { s: fpPackStart, e: fpPackStart + fpPackMin };
+
+  // FC 내포장: FP 내포장과 같은 라인 공유 → FP 내포장 끝나야 시작
+  // 단, FC 파쇄에서도 1대차분(96EA) 누적되어야 함
+  const fcFirstCartMin = Math.ceil(scen.fc.eaPerCart / (fcCrushOut / fcCrushMin)); // FC 파쇄 시작 후 1대차 누적 분
+  const fcPackReadyMin = fcCrush.s + fcFirstCartMin;
+  const fcPackStart = Math.max(fcPackReadyMin, fpPack.e); // FP 내포장 끝난 후 + 1대차 준비 중 늦은 것
   const fcPack = { s: fcPackStart, e: fcPackStart + fcPackMin };
 
   // === 레토르트 회차 분배 ===
