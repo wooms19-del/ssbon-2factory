@@ -162,11 +162,12 @@ async function ttAutoAnalyze() {
   }
 
   try {
-    const [preDocs, cookDocs, crushDocs, packDocs] = await Promise.all([
+    const [preDocs, cookDocs, crushDocs, packDocs, thawDocs] = await Promise.all([
       db.collection('preprocess').get(),
       db.collection('cooking').get(),
       db.collection('shredding').get(),
       db.collection('packing').get(),
+      db.collection('thawing').get(),
     ]);
     const inRange = d => d >= fromDate && d <= toDate;
     const minutesBetween = (s, e) => {
@@ -177,20 +178,34 @@ async function ttAutoAnalyze() {
       return diff < 0 ? diff + 1440 : diff;
     };
 
-    // ── 전처리: 단계수율 + 생산성 (선택된 원육 type 기준) ──
+    // ── 전처리: 공정수율 (일별요약과 동일 정의) + 생산성 ──
+    // 공정수율 = preprocess.kg / thawing.totalKg (해동 원물 = rmKg)
+    // thawing 매칭: end가 분석 기간 내이고 type 일치 (일별요약 _endsOnDay 단순화)
     // 생산성: preInP=산출 누계, preInPIn=투입 누계 (=산출+비가식부, 작업자 처리량)
-    let preInY=0, preOutY=0, preInP=0, preInPIn=0, prePH=0, preN=0;
+    let preInP=0, preInPIn=0, prePH=0, preN=0;
     preDocs.forEach(d => {
       const r = d.data();
       if (!inRange(r.date) || r.type !== meatType) return;
       const kg = +r.kg||0, w = +r.waste||0, wk = +r.workers||0;
       const m = minutesBetween(r.start, r.end);
       if (kg <= 0 || wk <= 0 || m <= 0) return;
-      if (w > 0) { preInY += kg; preOutY += (kg - w); }
       preInP += kg;            // 산출 기준 (다음 공정에 넘긴 양)
       preInPIn += (kg + w);    // 투입 기준 (작업자가 받은 양 = 산출 + 비가식부)
       prePH += wk * (m/60);
       preN++;
+    });
+
+    // 전처리 공정수율 분모: thawing 중 end가 분석 기간 내이고 type 일치하는 totalKg 합
+    // (preprocess.date와 thawing.end 일치, type 일치 → 해당 작업의 해동 원물)
+    let preRmKg = 0;
+    thawDocs.forEach(d => {
+      const r = d.data();
+      const endStr = String(r.end||'');
+      if (!endStr) return; // 진행중 제외
+      const endDate = endStr.slice(0,10);
+      if (!inRange(endDate)) return;
+      if ((r.type||'') !== meatType) return;
+      preRmKg += +r.totalKg||0;
     });
 
     // ── 자숙: cooking.kgIn(투입) → cooking.kg(산출), type 필터 ──
@@ -287,8 +302,12 @@ async function ttAutoAnalyze() {
     });
 
     // ── TT_AUTO 갱신 ──
-    if (preInY > 0) TT_AUTO.yPre = { val: +(preOutY/preInY*100).toFixed(1), n: preN };
-    else TT_AUTO.yPre = { ...TT_AUTO.yPre, n: preN };
+    // 전처리 공정수율 = preprocess.kg 합 / thawing.totalKg 합 (일별요약 정의와 동일)
+    if (preRmKg > 0 && preInP > 0) {
+      TT_AUTO.yPre = { val: +(preInP/preRmKg*100).toFixed(1), n: preN };
+    } else {
+      TT_AUTO.yPre = { ...TT_AUTO.yPre, n: preN };
+    }
 
     if (ckInY > 0) TT_AUTO.yCook = { val: +(ckOutY/ckInY*100).toFixed(1), n: ckN };
     else TT_AUTO.yCook = { val: TT_COOK_YIELD_DEFAULT[meatType] || 56.8, n: 0 };
@@ -316,19 +335,30 @@ async function ttAutoAnalyze() {
     // 단순화: 비-FC 통계만 계산하고 보관 (실제 사용은 ttGetInputs에서)
     {
       const otherMeatType = isFC ? '우둔' : meatType; // FC 분석 중이면 우둔을 비교용으로
-      // 전처리 (다른 type)
-      let oPreInY=0, oPreOutY=0, oPreInP=0, oPrePH=0, oPreN=0;
+      // 전처리 (다른 type) - 공정수율은 일별요약 정의 (preprocess.kg / thawing.totalKg)
+      let oPreInP=0, oPrePH=0, oPreN=0;
       preDocs.forEach(d => {
         const r = d.data();
         if (!inRange(r.date)) return;
         if (isFC ? r.type === meatType : r.type !== meatType) return; // 반대 type만
-        const kg = +r.kg||0, w = +r.waste||0, wk = +r.workers||0;
+        const kg = +r.kg||0, wk = +r.workers||0;
         const m = minutesBetween(r.start, r.end);
         if (kg <= 0 || wk <= 0 || m <= 0) return;
-        if (w > 0) { oPreInY += kg; oPreOutY += (kg - w); }
         oPreInP += kg;
         oPrePH += wk * (m/60);
         oPreN++;
+      });
+      // 다른 type의 thawing 합 (end가 분석 기간 내)
+      let oPreRmKg = 0;
+      thawDocs.forEach(d => {
+        const r = d.data();
+        const endStr = String(r.end||'');
+        if (!endStr) return;
+        const endDate = endStr.slice(0,10);
+        if (!inRange(endDate)) return;
+        const rType = r.type||'';
+        if (isFC ? rType === meatType : rType !== meatType) return;
+        oPreRmKg += +r.totalKg||0;
       });
       // 자숙 (다른 type)
       let oCkInY=0, oCkOutY=0, oCkN=0;
@@ -353,7 +383,7 @@ async function ttAutoAnalyze() {
       });
       // 파쇄: 비-FC 원육은 보통 한 종류(우둔)만 작업하므로 단순 합산 (chain-trace 생략)
       // 단일 모드 검증에는 영향 없음
-      if (oPreInY > 0) TT_AUTO_OTHER.yPre = { val: +(oPreOutY/oPreInY*100).toFixed(1), n: oPreN };
+      if (oPreRmKg > 0 && oPreInP > 0) TT_AUTO_OTHER.yPre = { val: +(oPreInP/oPreRmKg*100).toFixed(1), n: oPreN };
       if (oCkInY > 0) TT_AUTO_OTHER.yCook = { val: +(oCkOutY/oCkInY*100).toFixed(1), n: oCkN };
       else TT_AUTO_OTHER.yCook = { val: TT_COOK_YIELD_DEFAULT[otherMeatType] || 55.0, n: 0 };
       if (oPrePH > 0) TT_AUTO_OTHER.pPre = { val: +(oPreInP/oPrePH).toFixed(1), n: oPreN };
