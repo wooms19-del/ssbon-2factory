@@ -1995,17 +1995,19 @@ function ttmSimulate(scen, workers) {
   const fcCrushStart = Math.max(fcCookEnd, fpCrush.e);
   const fcCrush = { s: fcCrushStart, e: fcCrushStart + fcCrushMin };
   // FP 내포장: 파쇄에서 1대차분 누적되는 시점부터 시작
-  const fpCartFillMin = scen.fp.info.eaPerCart / (fpPpackEaMin * workers.packFp / 6); // 1대차 채우는 분
-  const fpCrushRateEaMin = (fpPpackEaMin * workers.packFp / 6); // 파쇄→내포장 산출 EA/분 (대략)
-  const fpFirstCartMin = Math.ceil(scen.fp.info.eaPerCart / (fpCrushOut / fpCrushMin)); // 파쇄 시작 후 1대차 누적 분
+  const fpCartKg = scen.fp.info.eaPerCart * scen.fp.info.kgPerEa; // 1대차 무게 (kg)
+  const fpCrushRateKgMin = fpCrushOut / fpCrushMin; // 파쇄 산출 속도 (kg/분)
+  const fpFirstCartMin = Math.ceil(fpCartKg / fpCrushRateKgMin); // 파쇄 시작 후 1대차 누적 분
   const fpPackStart = fpCrush.s + fpFirstCartMin;
   const fpPack = { s: fpPackStart, e: fpPackStart + fpPackMin };
 
   // FC 내포장: FP 내포장과 같은 라인 공유 → FP 내포장 끝나야 시작
   // 단, FC 파쇄에서도 1대차분(96EA) 누적되어야 함
-  const fcFirstCartMin = Math.ceil(scen.fc.eaPerCart / (fcCrushOut / fcCrushMin)); // FC 파쇄 시작 후 1대차 누적 분
+  const fcCartKg = scen.fc.eaPerCart * scen.fc.kgPerEa; // 96EA × 1.35kg = 129.6kg
+  const fcCrushRateKgMin = fcCrushOut / fcCrushMin;
+  const fcFirstCartMin = Math.ceil(fcCartKg / fcCrushRateKgMin);
   const fcPackReadyMin = fcCrush.s + fcFirstCartMin;
-  const fcPackStart = Math.max(fcPackReadyMin, fpPack.e); // FP 내포장 끝난 후 + 1대차 준비 중 늦은 것
+  const fcPackStart = Math.max(fcPackReadyMin, fpPack.e);
   const fcPack = { s: fcPackStart, e: fcPackStart + fcPackMin };
 
   // === 레토르트 회차 분배 ===
