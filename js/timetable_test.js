@@ -2279,31 +2279,25 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
   const earlyFpCrush = sim.fp.crush.s < 8*60+30;
   const earlyFcCrush = (sim.fc.crushes?.[0]?.s ?? sim.fc.crush.s) < 8*60+30;
 
-  // 슬롯: 1시간 단위 + 인원 변화 시각(조출/관리자/합류) + 점심 경계만
-  const startH = Math.floor(sim.fp.pre.s / 60) * 60;
-  const endH   = Math.ceil(sim.endMin / 60) * 60;
-  const hourBoundaries = [];
-  for (let h = startH; h <= endH; h += 60) hourBoundaries.push(h);
-
-  const boundaries = new Set([
-    ...hourBoundaries,
-    sim.fp.pre.s,         // 조출 시작
-    mgrTimeMin,           // 관리자 출근
-    joinTimeMin,          // 한국인 합류
-    11*60+30, 12*60+30, 13*60+30,  // 점심
-    sim.endMin,
-  ]);
-  const sorted = Array.from(boundaries)
-    .filter(m => m >= sim.fp.pre.s && m <= sim.endMin)
-    .sort((a,b) => a-b);
+  // 고정 슬롯 (원본 타임테이블 탭과 동일)
+  const fixedSlots = [
+    { s: sim.fp.pre.s, e: 7*60,      },
+    { s: 7*60,         e: 9*60,      },
+    { s: 9*60,         e: 11*60+30,  },
+    { s: 11*60+30,     e: 12*60+30,  },
+    { s: 12*60+30,     e: 13*60+30,  },
+    { s: 13*60+30,     e: 17*60,     },
+    { s: 17*60,        e: sim.endMin },
+  ].filter(sl => sl.s < sl.e && sl.s < sim.endMin);
 
   const ov = (s1,e1,s2,e2) => s1 < e2 && e1 > s2;
+
   const half1 = Math.ceil(totalWorkers / 2);
   const half2 = totalWorkers - half1;
 
   const slots = [];
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const s = sorted[i], e = sorted[i+1];
+  for (const sl of fixedSlots) {
+    const s = sl.s, e = Math.min(sl.e, sim.endMin);
     if (e <= s) continue;
     const mid = (s+e)/2;
 
