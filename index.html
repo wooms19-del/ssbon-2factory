@@ -79,8 +79,7 @@
     <div class="ti" onclick="showTab('d','monthly')">월별현황</div>
     <div class="ti" onclick="showTab('d','trace')">이력추적</div>
     <div class="ti" onclick="showTab('d','recipe')">레시피</div>
-    <div class="ti" onclick="showTab('d','timetable')">타임테이블 (고정)</div>
-    <div class="ti" onclick="showTab('d','timetable_dyn')">타임테이블 (동적)</div>
+    <div class="ti" onclick="showTab('d','timetable')">타임테이블</div>
     <div class="ti" onclick="showTab('d','settings')">설정</div>
   </div>
 </div>
@@ -952,58 +951,6 @@
   </div>
 </div>
 
-<!-- ===== 타임테이블 (동적) ===== -->
-<div class="pg" id="p-timetable_dyn">
-  <div id="ttd-main" style="padding:0 4px">
-    <!-- 입력 영역 (단순) -->
-    <div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px 16px;margin-bottom:14px">
-      <div style="font-size:11px;color:#185FA5;font-weight:600;margin-bottom:8px;letter-spacing:0.3px">🔬 동적 시뮬레이션 (DES) — 1분 단위 자원 풀 시뮬</div>
-      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;font-size:11.5px;color:var(--color-text-secondary)">
-        <label style="display:flex;flex-direction:column;gap:3px">
-          <span>🥩 원육</span>
-          <select id="ttd-meat" onchange="ttdRender()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
-            <option value="홍두깨">홍두깨</option>
-            <option value="우둔">우둔</option>
-            <option value="설도">설도</option>
-          </select>
-        </label>
-        <label style="display:flex;flex-direction:column;gap:3px">
-          <span>원육량 (kg)</span>
-          <input type="number" id="ttd-kg" value="2100" min="0" max="6000" step="50" oninput="ttdRender()" style="width:100px;height:30px;font-size:13px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:3px">
-          <span>총 인원</span>
-          <input type="number" id="ttd-total" value="28" min="5" max="50" oninput="ttdRender()" style="width:60px;height:30px;font-size:13px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:3px">
-          <span>제수 (전날 제품)</span>
-          <input type="number" id="ttd-leftover" value="0" min="0" max="20" oninput="ttdRender()" style="width:60px;height:30px;font-size:13px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:3px">
-          <span>🌅 조출</span>
-          <input type="time" id="ttd-start" value="05:00" oninput="ttdRender()" style="height:30px;font-size:13px;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:6px;width:96px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:3px">
-          <span>한국인 합류</span>
-          <input type="time" id="ttd-join" value="09:00" oninput="ttdRender()" style="height:30px;font-size:13px;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:6px;width:96px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:3px">
-          <span>외국인</span>
-          <input type="number" id="ttd-early" value="7" min="0" max="20" oninput="ttdRender()" style="width:60px;height:30px;font-size:13px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px">
-        </label>
-      </div>
-      <div style="font-size:10.5px;color:var(--color-text-tertiary);margin-top:10px;line-height:1.6">
-        ※ 모든 인원 배치 = 자동 (작업 큐 우선순위 기반).
-        · 전처리/파쇄 = 작업량에 따라 동적 배치
-        · 내포장 6명 / 이송 2명 / 관리 2명 = 고정 역할
-        · 남는 인원 → 외포장(제수)
-        · 점심 = 작업 영향 최소화 시점에 자동
-      </div>
-    </div>
-    <div id="ttd-result"></div>
-  </div>
-</div>
-
 <div class="pg" id="p-settings">
   <div class="card">
 
@@ -1322,7 +1269,7 @@
 <script src="js/outerpacking.js?v=1778129561"></script>
 <script src="js/settings.js?v=1778129561"></script>
 <script src="js/kakao.js?v=1778129561"></script>
-<script src="js/app.js?v=1778129561"></script>
+<script src="js/app.js?v=1778482540"></script>
 <script src="js/schedule.js?v=1778132322"></script>
 <script src="js/attendance.js?v=1778129561"></script>
 <script src="js/timepicker.js?v=1778129561"></script>
@@ -1330,6 +1277,5 @@
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
 <script src="js/timetable.js?v=1778481167"></script>
-<script src="js/timetable_dyn.js?v=1778430009"></script>
 </body>
 </html>

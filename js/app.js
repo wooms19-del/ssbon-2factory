@@ -145,8 +145,6 @@ function showTab(mode,tab){
     renderRcList();
   } else if(tab==='timetable'){
     if(typeof ttInit === 'function') ttInit();
-  } else if(tab==='timetable_dyn'){
-    if(typeof ttdInit === 'function') ttdInit();
   }
 }
 
