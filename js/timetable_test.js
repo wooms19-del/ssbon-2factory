@@ -2319,13 +2319,15 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
     const isLunch1 = mid >= 11*60+30 && mid < 12*60+30;
     const isLunch2 = mid >= 12*60+30 && mid < 13*60+30;
     let lunch=0, outer=0, setting=0;
+    let mgrActual = mgr;
 
     if (isLunch1 || isLunch2) {
+      mgrActual = 1; // 점심시간 관리자 1명만 (나머지 1명 식사)
       // 점심: 절반 식사, 나머지 절반 일함
       lunch = isLunch1 ? half1 : half2;
       const workingHalf = onsite - lunch;
-      // 내포장+이송+관리 고정, 남은 자리 파쇄
-      const fixedWork = pack + trans + mgr;
+      // 내포장+이송+관리(1명) 고정, 남은 자리 파쇄
+      const fixedWork = pack + trans + mgrActual;
       crush = Math.max(0, Math.min(crush, workingHalf - fixedWork));
       outer = Math.max(0, workingHalf - fixedWork - crush);
     } else {
@@ -2341,14 +2343,14 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
     }
 
     // 인원 초과 시 파쇄에서 삭감
-    let total = pre+crush+pack+trans+outer+setting+lunch+mgr;
+    let total = pre+crush+pack+trans+outer+setting+lunch+mgrActual;
     if (total > onsite) {
       const over = total - onsite;
       crush = Math.max(0, crush - over);
-      total = pre+crush+pack+trans+outer+setting+lunch+mgr;
+      total = pre+crush+pack+trans+outer+setting+lunch+mgrActual;
     }
 
-    slots.push({ label:`${fmt(s)}~${fmt(e)}`, pre, crush, pack, trans, outer, setting, lunch, mgr, idle:0, total, onsite });
+    slots.push({ label:`${fmt(s)}~${fmt(e)}`, pre, crush, pack, trans, outer, setting, lunch, mgr:mgrActual, idle:0, total, onsite });
   }
 
   const wkColors = ['#185FA5','#BA7517','#7F77DD','#534AB7','#1D9E75','#EF9F27','#888780','#5F5E5A','#B4B2A9'];
