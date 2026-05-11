@@ -998,23 +998,38 @@
           <span style="font-weight:500">⚡ 동시 작업 (2제품 파이프라인)</span>
         </label>
         <div id="ttt-dual-block" style="display:none;margin-top:10px;flex-wrap:wrap;gap:12px;align-items:flex-end;font-size:11.5px;color:var(--color-text-secondary)">
+          <!-- FP (시그 등) 입력 -->
+          <div style="flex-basis:100%;font-size:12px;font-weight:600;color:#7F77DD;margin-bottom:2px">📦 FP (두 번째 제품)</div>
           <label style="display:flex;flex-direction:column;gap:3px">
-            <span>📦 두 번째 제품</span>
+            <span>품목</span>
             <select id="ttt-meat2" onchange="tttRender()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
-              <option value="trader">트레이더스 460g (380EA/대차, 120분)</option>
-              <option value="sig">시그니처 130g (1,024EA/대차, 120분)</option>
-              <option value="mini">미니 70g 5개입 (1,280EA/대차, 120분)</option>
+              <option value="sig">시그니처 130g (800EA/대차)</option>
+              <option value="trader">트레이더스 460g (380EA/대차)</option>
+              <option value="mini">미니 70g (700EA/대차)</option>
             </select>
           </label>
           <label style="display:flex;flex-direction:column;gap:3px">
-            <span>두 번째 원육량 (kg)</span>
+            <span>원육량 (kg)</span>
             <input type="number" id="ttt-kg2" value="500" min="0" max="6000" step="50" oninput="tttRender()" style="width:90px;height:30px;font-size:13px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px">
           </label>
           <label style="display:flex;flex-direction:column;gap:3px">
+            <span>분석 기간</span>
+            <select id="ttt-period2" onchange="tttAutoAnalyzeOther()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
+              <option value="7">최근 7일</option>
+              <option value="30" selected>최근 30일</option>
+              <option value="90">최근 90일</option>
+            </select>
+          </label>
+          <div style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--color-text-tertiary)">
+            <span>FP 자동값 (DB 평균)</span>
+            <span id="ttt-fp-auto-summary">—</span>
+          </div>
+          <div style="flex-basis:100%;border-top:0.5px solid var(--color-border-tertiary);margin-top:4px;padding-top:8px;font-size:12px;font-weight:600;color:#185FA5">FC + FP 공통</div>
+          <label style="display:flex;flex-direction:column;gap:3px">
             <span>⏱ 순서</span>
             <select id="ttt-order" onchange="tttRender()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
-              <option value="fc-first">FC 먼저 → 두 번째</option>
-              <option value="other-first">두 번째 먼저 → FC</option>
+              <option value="fc-first">FC 먼저 → FP</option>
+              <option value="other-first">FP 먼저 → FC</option>
             </select>
           </label>
           <label style="display:flex;flex-direction:column;gap:3px">
@@ -1537,6 +1552,6 @@
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
 <script src="js/timetable.js?v=1778495630"></script>
-<script src="js/timetable_test.js?v=1778496322"></script>
+<script src="js/timetable_test.js?v=1778496689"></script>
 </body>
 </html>

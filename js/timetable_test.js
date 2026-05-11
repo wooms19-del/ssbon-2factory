@@ -435,7 +435,70 @@ async function tttAutoAnalyze() {
   }
 }
 
-function tttFillAutoValues() {
+async function tttAutoAnalyzeOther() {
+  // FP 분석 기간 선택 기반으로 TTT_AUTO_OTHER 갱신
+  const periodDays = parseInt(document.getElementById('ttt-period2')?.value) || 30;
+  const todayStr = (typeof tod === 'function') ? tod() : new Date().toISOString().slice(0,10);
+  const [ty,tm,td] = todayStr.split('-').map(Number);
+  const todayLocal = new Date(ty, tm-1, td);
+  const d = new Date(todayLocal); d.setDate(d.getDate() - periodDays);
+  const fmt = x => x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+  const fromDate = fmt(d);
+  const inRange = s => s >= fromDate && s <= todayStr;
+  const minutesBetween = (s, e) => {
+    if (!s || !e) return 0;
+    const [sh,sm] = String(s).split(':').map(Number);
+    const [eh,em] = String(e).split(':').map(Number);
+    let diff = (eh*60+em)-(sh*60+sm);
+    return diff < 0 ? diff+1440 : diff;
+  };
+  try {
+    const [preDocs, crushDocs, cookDocs, packDocs, thawDocs] = await Promise.all([
+      db.collection('preprocess').get(),
+      db.collection('shredding').get(),
+      db.collection('cooking').get(),
+      db.collection('packing').get(),
+      db.collection('thawing').get(),
+    ]);
+    // FC가 아닌 원육 기준
+    let preKg=0,prePH=0,preN=0,preRmKg=0;
+    thawDocs.forEach(d => { const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return; preRmKg += +r.totalKg||0; });
+    preDocs.forEach(d => {
+      const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return;
+      const kg=+r.kg||0,w=+r.waste||0,wk=+r.workers||0,m=minutesBetween(r.start,r.end);
+      if (kg>0&&wk>0&&m>0) { preKg+=kg; prePH+=wk*(m/60); preN++; }
+    });
+    let ckIn=0,ckOut=0,ckN=0;
+    cookDocs.forEach(d => {
+      const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return;
+      if (+r.kgIn>0&&+r.kg>0) { ckIn+=+r.kgIn; ckOut+=+r.kg; ckN++; }
+    });
+    let crIn=0,crOut=0,crPH=0,crN=0;
+    crushDocs.forEach(d => {
+      const r=d.data(); if (!inRange(r.date)) return;
+      const rType=r.type||''; if (rType==='홍두깨') return;
+      const kg=+r.kg||0,kgIn=+r.kgIn||+r.inputKg||0,wk=+r.workers||0,m=minutesBetween(r.start,r.end);
+      if (kg>0&&wk>0&&m>0) { crIn+=kgIn||kg; crOut+=kg; crPH+=wk*(m/60); crN++; }
+    });
+    const yPre = preRmKg>0 ? Math.round(preKg/preRmKg*1000)/10 : TTT_AUTO_OTHER.yPre.val;
+    const pPre = prePH>0 ? Math.round(preRmKg/prePH*10)/10 : TTT_AUTO_OTHER.pPre.val;
+    const yCrush = crIn>0 ? Math.round(crOut/crIn*1000)/10 : TTT_AUTO_OTHER.yCrush.val;
+    const pCrush = crPH>0 ? Math.round(crOut/crPH*10)/10 : TTT_AUTO_OTHER.pCrush.val;
+    const yCook = ckIn>0 ? Math.round(ckOut/ckIn*1000)/10 : TTT_AUTO_OTHER.yCook?.val || 55.0;
+    TTT_AUTO_OTHER.yPre = { val: yPre, n: preN };
+    TTT_AUTO_OTHER.pPre = { val: pPre, n: preN };
+    TTT_AUTO_OTHER.yCrush = { val: yCrush, n: crN };
+    TTT_AUTO_OTHER.pCrush = { val: pCrush, n: crN };
+    TTT_AUTO_OTHER.yCook = { val: yCook, n: ckN };
+    // summary 표시
+    const el = document.getElementById('ttt-fp-auto-summary');
+    if (el) el.textContent = `전처리 ${yPre}% · ${pPre}kg/인시 | 파쇄 ${yCrush}% · ${pCrush}kg/인시 | 자숙 ${yCook}% (n=${preN}/${crN})`;
+    tttRender();
+  } catch(e) {
+    console.error('[TTM] FP 분석 실패:', e);
+  }
+}
+if (typeof window !== 'undefined') window.tttAutoAnalyzeOther = tttAutoAnalyzeOther;
   const setVal = (id, v) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1789,6 +1852,8 @@ function ttmGetScenario() {
 
   return {
     startMin,
+    joinTime: document.getElementById('ttt-join')?.value || '09:00',
+    earlyWorkers: parseInt(document.getElementById('ttt-early')?.value) || 7,
     fp: { kg: fpKg, info: fpInfo, yPre: fpYpre, yCook: fpYcook, yCrush: fpYcrush, pPre: fpPpre, pCrush: fpPcrush },
     fc: { kg: fcKg, kgPerEa: TTT_PACK_KG_PER_POUCH, eaPerCart: 96, packEaMin: 3.9, yPre: fcYpre, yCook: fcYcook, yCrush: fcYcrush, pPre: fcPpre, pCrush: fcPcrush },
   };
@@ -1869,8 +1934,8 @@ function ttmSimulate(scen, workers) {
   // FC 전처리 시작~종료 = fcPre.s ~ fcPre.e
   // 전처리 인원: 초기 earlyWorkers(외국인) → joinMin 이후 wkPre
   const fcPreStart = fcPre.s;
-  const fcJoinMin = tttToMin(inp.joinTime);
-  const fcEarlyWorkers = inp.earlyWorkers;
+  const fcJoinMin = tttToMin(scen.joinTime);
+  const fcEarlyWorkers = scen.earlyWorkers;
   const fcPhase1Kg = fcPpre * fcEarlyWorkers * (Math.max(0, fcJoinMin - fcPreStart) / 60);
   const fcTankInTimes = [];
   let fcCumOut = 0;
