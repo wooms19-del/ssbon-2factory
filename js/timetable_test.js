@@ -2133,9 +2133,11 @@ function ttmRenderTimeline(scen, workers, sim) {
     <rect x="${xPos(12*60+30)}" y="28" width="${xPos(13*60+30)-xPos(12*60+30)}" height="999" fill="#FFF7ED" opacity="0.4"/>`;
 
   // 막대 함수 (원본 스타일: 내부 텍스트 + 우측 라벨 + 호버)
+  const dur = m => { const h=Math.floor(m/60),min=m%60; return min===0?`${h}h`:`${h}h ${min}분`; };
   const bar = (y, s, e, color, innerTxt, rightTxt, tipTitle, tipLines) => {
     const x1 = xPos(s), x2 = xPos(e), w = Math.max(x2-x1, 3);
-    const tipInfo = tipLines.join('|');
+    const lines = tipLines.map((l,i) => i===0 ? l+` (${dur(e-s)})` : l);
+    const tipInfo = lines.join('|');
     return `<g class="ttt-bar" data-tip-title="${tipTitle}" data-tip-info="${tipInfo}">
       <rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="3" fill="${color}"/>
       ${innerTxt && w > 40 ? `<text x="${(x1+x2)/2}" y="${y+BAR_H/2+4}" text-anchor="middle" font-size="10" fill="#fff" font-weight="600" pointer-events="none">${innerTxt}</text>` : ''}
