@@ -178,7 +178,8 @@ async function ttAutoAnalyze() {
     };
 
     // ── 전처리: 단계수율 + 생산성 (선택된 원육 type 기준) ──
-    let preInY=0, preOutY=0, preInP=0, prePH=0, preN=0;
+    // 생산성: preInP=산출 누계, preInPIn=투입 누계 (=산출+비가식부, 작업자 처리량)
+    let preInY=0, preOutY=0, preInP=0, preInPIn=0, prePH=0, preN=0;
     preDocs.forEach(d => {
       const r = d.data();
       if (!inRange(r.date) || r.type !== meatType) return;
@@ -186,7 +187,8 @@ async function ttAutoAnalyze() {
       const m = minutesBetween(r.start, r.end);
       if (kg <= 0 || wk <= 0 || m <= 0) return;
       if (w > 0) { preInY += kg; preOutY += (kg - w); }
-      preInP += kg;
+      preInP += kg;            // 산출 기준 (다음 공정에 넘긴 양)
+      preInPIn += (kg + w);    // 투입 기준 (작업자가 받은 양 = 산출 + 비가식부)
       prePH += wk * (m/60);
       preN++;
     });
@@ -218,7 +220,8 @@ async function ttAutoAnalyze() {
     //
     // 단순화: 같은 날 같은 type의 모든 shredding 산출 합 ÷ 같은 날 같은 type preprocess 입력 합
     // type 추론: shredding.wagonIn → cookByWagonOut에서 type 가져옴
-    let crInP=0, crPH=0, crN=0;       // 생산성용 (모든 데이터)
+    let crInP=0, crInPOut=0, crPH=0, crN=0;       // 생산성용 (모든 데이터)
+                                                    // crInP=투입 누계(kgIn), crInPOut=산출 누계(kg)
     const crByDay = {};  // { date: { sumOut: kg, hasMatchingType: bool } } — 원육기준 수율용
 
     crushDocs.forEach(d => {
@@ -240,7 +243,8 @@ async function ttAutoAnalyze() {
 
       // 생산성: kgIn 우선, 없으면 kg 사용
       const prodKg = kgIn > 0 ? kgIn : kg;
-      crInP += prodKg;
+      crInP += prodKg;        // 투입 기준
+      crInPOut += kg;          // 산출 기준
       crPH += wk * (m/60);
       crN++;
 
@@ -292,8 +296,8 @@ async function ttAutoAnalyze() {
     if (crYldDen > 0) TT_AUTO.yCrush = { val: +(crYldNum/crYldDen*100).toFixed(1), n: crN };
     else TT_AUTO.yCrush = { ...TT_AUTO.yCrush, n: crN };
 
-    if (prePH > 0) TT_AUTO.pPre = { val: +(preInP/prePH).toFixed(1), n: preN };
-    if (crPH > 0) TT_AUTO.pCrush = { val: +(crInP/crPH).toFixed(1), n: crN };
+    if (prePH > 0) TT_AUTO.pPre = { val: +(preInP/prePH).toFixed(1), valIn: +(preInPIn/prePH).toFixed(1), n: preN };
+    if (crPH > 0) TT_AUTO.pCrush = { val: +(crInP/crPH).toFixed(1), valOut: +(crInPOut/crPH).toFixed(1), n: crN };
     if (pkMin > 0) TT_AUTO.pPackEa = { val: +(pkEa/pkMin).toFixed(1), n: pkN };
 
     // ── 다중 모드: 두 번째 제품(비-FC) 자동값 별도 계산 ──
@@ -371,8 +375,26 @@ function ttFillAutoValues() {
   };
   lab('tt-y-pre-auto', TT_AUTO.yPre);
   lab('tt-y-crush-auto', TT_AUTO.yCrush);
-  lab('tt-p-pre-auto', TT_AUTO.pPre);
-  lab('tt-p-crush-auto', TT_AUTO.pCrush);
+  // 전처리 생산성: 투입/산출 둘 다
+  {
+    const el = document.getElementById('tt-p-pre-auto');
+    if (el) {
+      const i = TT_AUTO.pPre;
+      el.textContent = i.n > 0
+        ? `자동: 투입 ${i.valIn ?? i.val} / 산출 ${i.val} kg/인시 (n=${i.n})`
+        : `자동: ${i.val} · 데이터 없음`;
+    }
+  }
+  // 파쇄 생산성: 투입/산출 둘 다 (val=투입, valOut=산출)
+  {
+    const el = document.getElementById('tt-p-crush-auto');
+    if (el) {
+      const i = TT_AUTO.pCrush;
+      el.textContent = i.n > 0
+        ? `자동: 투입 ${i.val} / 산출 ${i.valOut ?? i.val} kg/인시 (n=${i.n})`
+        : `자동: ${i.val} · 데이터 없음`;
+    }
+  }
   lab('tt-p-pack-auto', TT_AUTO.pPackEa);
 }
 

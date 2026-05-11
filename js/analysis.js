@@ -2387,10 +2387,16 @@ function renderDailyFromLocal_(d){
     const oYld = p.origKg>0 ? p.out/p.origKg*100 : null;
     const pYld = p.in>0 ? p.out/p.in*100 : null;
     const borderTop = showName && procRows.indexOf(p)>0 ? 'border-top:2px solid var(--g2);' : '';
-    // 생산성: 전처리/자숙/파쇄는 kg/인시, 포장은 EA/인시
+    // 생산성: 전처리/자숙/파쇄는 투입·산출 둘 다 표시 (kg/인시), 포장은 EA/인시
+    // - 투입: 작업 속도 (작업자가 받은 양 ÷ mh) — 비가식부 포함
+    // - 산출: 결과물 (다음 공정에 넘긴 양 ÷ mh) — 비가식부 제외
     let productivity = '-';
     if(p.name==='포장' && p.mh>0 && p.ea>0) productivity = r2(p.ea/p.mh).toLocaleString()+' EA/인시';
-    else if(p.mh>0 && p.out>0) productivity = r2(p.out/p.mh).toFixed(1)+' kg/인시';
+    else if(p.mh>0 && p.in>0 && p.out>0) {
+      const prodIn = r2(p.in/p.mh).toFixed(1);
+      const prodOut = r2(p.out/p.mh).toFixed(1);
+      productivity = `<span style="color:#185FA5">투입 ${prodIn}</span> / <span style="color:#0F6E56">산출 ${prodOut}</span> kg/인시`;
+    } else if(p.mh>0 && p.out>0) productivity = r2(p.out/p.mh).toFixed(1)+' kg/인시';
     return `<tr style="${borderTop}">
       <td style="text-align:left;font-weight:600">${showName?p.name:''}</td>
       <td style="text-align:center;color:var(--g6);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.type||'-'}">${p.type||'-'}</td>
