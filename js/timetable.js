@@ -323,9 +323,13 @@ async function ttAutoAnalyze() {
       TT_AUTO.yCrush = { ...TT_AUTO.yCrush, n: crN };
     }
 
-    // pPre.val=투입 기준 (전처리 표준), pCrush.val=산출 기준 (파쇄 표준)
-    // (참고 필드 — 라벨에 같이 표시: pPre.valOut=산출, pCrush.valIn=투입)
-    if (prePH > 0) TT_AUTO.pPre = { val: +(preInPIn/prePH).toFixed(1), valOut: +(preInP/prePH).toFixed(1), n: preN };
+    // pPre.val=투입 기준 (전처리 표준 — thawing.totalKg / mh = 일별요약과 동일)
+    // pPre.valOut=산출 기준 (참고 — preprocess.kg / mh)
+    // pCrush.val=산출 기준 (파쇄 표준)
+    if (prePH > 0) {
+      const valIn = preRmKg > 0 ? +(preRmKg/prePH).toFixed(1) : +(preInPIn/prePH).toFixed(1);  // 폴백: preInPIn
+      TT_AUTO.pPre = { val: valIn, valOut: +(preInP/prePH).toFixed(1), n: preN };
+    }
     if (crPH > 0) TT_AUTO.pCrush = { val: +(crInPOut/crPH).toFixed(1), valIn: +(crInP/crPH).toFixed(1), n: crN };
     if (pkMin > 0) TT_AUTO.pPackEa = { val: +(pkEa/pkMin).toFixed(1), n: pkN };
 
@@ -386,7 +390,10 @@ async function ttAutoAnalyze() {
       if (oPreRmKg > 0 && oPreInP > 0) TT_AUTO_OTHER.yPre = { val: +(oPreInP/oPreRmKg*100).toFixed(1), n: oPreN };
       if (oCkInY > 0) TT_AUTO_OTHER.yCook = { val: +(oCkOutY/oCkInY*100).toFixed(1), n: oCkN };
       else TT_AUTO_OTHER.yCook = { val: TT_COOK_YIELD_DEFAULT[otherMeatType] || 55.0, n: 0 };
-      if (oPrePH > 0) TT_AUTO_OTHER.pPre = { val: +(oPreInP/oPrePH).toFixed(1), n: oPreN };
+      if (oPrePH > 0) {
+        const valIn = oPreRmKg > 0 ? +(oPreRmKg/oPrePH).toFixed(1) : +(oPreInP/oPrePH).toFixed(1);
+        TT_AUTO_OTHER.pPre = { val: valIn, n: oPreN };
+      }
       if (oPkMin > 0) TT_AUTO_OTHER.pPackEa = { val: +(oPkEa/oPkMin).toFixed(1), n: oPkN };
     }
 
