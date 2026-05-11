@@ -49,13 +49,13 @@ let TTT_AUTO_OTHER = {
 
 // ── 진입 시 자동 초기화 ──────────────────────────────────
 function tttInit() {
-  tttAutoAnalyze().then(ttttRender);
+  tttAutoAnalyze().then(tttRender);
 }
 
 // 사용자가 자숙 분배 방식 클릭 → 화면 전체 재렌더
 function tttSelectTankMode(mode) {
   window.tttSelectedTankMode = mode;
-  ttttRender();
+  tttRender();
 }
 
 // 동시 작업 토글 (체크박스 onchange)
@@ -63,7 +63,7 @@ function tttToggleDual() {
   const enabled = document.getElementById('ttt-dual-enabled')?.checked;
   const block = document.getElementById('ttt-dual-block');
   if (block) block.style.display = enabled ? 'flex' : 'none';
-  ttttRender();
+  tttRender();
 }
 
 // 페이지 진입 시 (탭 활성화 등에서 호출)
@@ -89,7 +89,7 @@ function tttToMin(t) {
 }
 
 // ── 입력값 수집 ──────────────────────────────────────────
-function ttttGetInputs() {
+function tttGetInputs() {
   const get = (id, def) => {
     const el = document.getElementById(id);
     if (!el) return def;
@@ -461,20 +461,38 @@ function tttFillAutoValues() {
     }
   }
   lab('ttt-p-pack-auto', TTT_AUTO.pPackEa);
+
+  // ── 두 번째 제품 자동값 ──
+  setVal('ttt-y-pre2', TTT_AUTO_OTHER.yPre.val);
+  setVal('ttt-y-crush2', TTT_AUTO_OTHER.yCrush.val);
+  setVal('ttt-p-pre2', TTT_AUTO_OTHER.pPre.val);
+  setVal('ttt-p-crush2', TTT_AUTO_OTHER.pCrush.val);
+  setVal('ttt-p-pack2', TTT_AUTO_OTHER.pPackEa.val);
+  lab('ttt-y-pre2-auto', TTT_AUTO_OTHER.yPre);
+  lab('ttt-p-pre2-auto', TTT_AUTO_OTHER.pPre);
+  lab('ttt-p-pack2-auto', TTT_AUTO_OTHER.pPackEa);
+}
+
+// resetField가 TTT_AUTO_OTHER도 처리하도록 (autoKey 끝이 '2'이면 OTHER 사용)
+function tttResetField(id, autoKey) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isOther = autoKey.endsWith('2');
+  const key = isOther ? autoKey.slice(0, -1) : autoKey;
+  const src = isOther ? TTT_AUTO_OTHER : TTT_AUTO;
+  if (src[key]) {
+    el.value = src[key].val;
+    el.dataset.userEdited = 'false';
+    tttRender();
+  }
 }
 
 function tttMarkEdited(el) {
   el.dataset.userEdited = 'true';
-  ttttRender();
+  tttRender();
 }
 
-function tttResetField(id, autoKey) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.value = TTT_AUTO[autoKey].val;
-  el.dataset.userEdited = 'false';
-  ttttRender();
-}
+function tttResetField_OLD_REMOVED() { /* 위 새 tttResetField가 이걸 대체 */ }
 
 // 분석 기간 / 원육 종류 변경 시 → 자동 분석 재실행
 async function tttPeriodChange() {
@@ -484,11 +502,11 @@ async function tttPeriodChange() {
     if (el) el.dataset.userEdited = 'false';
   });
   await tttAutoAnalyze();
-  ttttRender();
+  tttRender();
 }
 
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
-function ttttSimulate(inp, tankMode) {
+function tttSimulate(inp, tankMode) {
   // tankMode: 'A' (잔량 먼저 + 800kg씩 - 자숙·파쇄 빨리 시작), 'B' (N등분 균등), 'E' (1호 작게 빨리시작 + 나머지 균등)
   tankMode = tankMode || 'A';
   const startMin = tttToMin(inp.startTime);
@@ -806,53 +824,59 @@ const TTT_PRODUCT_INFO = {
 };
 
 // 두 번째 제품용 inp 구성 (단일 tttSimulate가 그대로 받을 수 있게)
+// 사용자 입력(공정별 풀세트·시작시각)이 있으면 그것 사용, 없으면 자동값 폴백
 function tttBuildSecondInp(inp, firstSim) {
   const meat2 = document.getElementById('ttt-meat2')?.value || 'trader';
   const kg2 = parseFloat(document.getElementById('ttt-kg2')?.value) || 500;
   const info = TTT_PRODUCT_INFO[meat2] || TTT_PRODUCT_INFO['trader'];
 
-  // 둘째 원육 시작 시각 = 첫째 전처리 종료 시점 (작업자 풀 옮겨감)
-  const secondStartMin = firstSim.preEndMin;
+  // 시작 시각: 사용자 입력 우선, 없으면 첫째 전처리 종료 시점
+  const startTimeInput = document.getElementById('ttt-start2')?.value;
   const fmtTime = (m) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const startTime = startTimeInput || fmtTime(firstSim.preEndMin);
 
-  // 둘째 시뮬의 startTime/joinTime: 같이 secondStartMin 으로 (이미 한국인 합류 후)
-  // earlyWorkers는 전 인원 사용 가능
+  // 사용자 입력 헬퍼
+  const getNum = (id, def) => {
+    const v = parseFloat(document.getElementById(id)?.value);
+    return isFinite(v) ? v : def;
+  };
+
   return {
     ...inp,
-    meatType: '우둔',  // 비-FC 기본
+    meatType: '우둔',
     meatKg: kg2,
-    startTime: fmtTime(secondStartMin),
-    joinTime: fmtTime(secondStartMin),
-    earlyWorkers: inp.wkPre,  // 한국인 합류 후이므로 전 전처리 인원 사용
-    // 비-FC 자동값으로 yield/productivity 갈아끼우기
-    yPre: TTT_AUTO_OTHER.yPre.val,
-    yCrush: TTT_AUTO_OTHER.yCrush.val,
-    pPre: TTT_AUTO_OTHER.pPre.val,
-    pCrush: TTT_AUTO_OTHER.pCrush.val,
-    pPackEa: TTT_AUTO_OTHER.pPackEa.val,
-    // 비-FC 제품 정보 (시뮬에서 사용 — 추후 tttSimulate에서 inp.productInfo 참조 시)
+    startTime: startTime,
+    joinTime: startTime,
+    earlyWorkers: getNum('ttt-wk-pre2', inp.wkPre),
+    wkPre: getNum('ttt-wk-pre2', inp.wkPre),
+    yPre: getNum('ttt-y-pre2', TTT_AUTO_OTHER.yPre.val),
+    yCrush: getNum('ttt-y-crush2', TTT_AUTO_OTHER.yCrush.val),
+    pPre: getNum('ttt-p-pre2', TTT_AUTO_OTHER.pPre.val),
+    pCrush: getNum('ttt-p-crush2', TTT_AUTO_OTHER.pCrush.val),
+    pPackEa: getNum('ttt-p-pack2', TTT_AUTO_OTHER.pPackEa.val),
+    wkPack: getNum('ttt-wk-pack2', inp.wkPack),
     productInfo: info,
   };
 }
 
 // 다중 작업 종합 시뮬: 순서대로 두 시뮬 실행
-function ttttSimulateDual(inp, tankMode) {
+function tttSimulateDual(inp, tankMode) {
   const order = document.getElementById('ttt-order')?.value || 'fc-first';
   const pkLines = parseInt(document.getElementById('ttt-pk-lines')?.value) || 2;
 
   if (order === 'fc-first') {
-    const sim1 = ttttSimulate(inp, tankMode);  // FC 먼저
+    const sim1 = tttSimulate(inp, tankMode);  // FC 먼저
     const inp2 = tttBuildSecondInp(inp, sim1);
-    const sim2 = ttttSimulate(inp2, tankMode);
+    const sim2 = tttSimulate(inp2, tankMode);
     return { sim1, sim2, inp1: inp, inp2, order, pkLines };
   } else {
     // 두 번째 먼저: 두 번째를 첫째 위치로 보내고, FC를 두 번째 위치로
     // 임시로 첫째 인풋을 비-FC 기본 inp로 만들고, FC inp를 둘째에 둠
     // 단순화: order='other-first'면 tttBuildSecondInp 로직을 반대로
     const otherFirstInp = tttBuildOtherFirstInp(inp);
-    const sim1 = ttttSimulate(otherFirstInp, tankMode);
+    const sim1 = tttSimulate(otherFirstInp, tankMode);
     const fcSecondInp = tttBuildFCSecondInp(inp, sim1);
-    const sim2 = ttttSimulate(fcSecondInp, tankMode);
+    const sim2 = tttSimulate(fcSecondInp, tankMode);
     return { sim1, sim2, inp1: otherFirstInp, inp2: fcSecondInp, order, pkLines };
   }
 }
@@ -862,15 +886,25 @@ function tttBuildOtherFirstInp(inp) {
   const meat2 = document.getElementById('ttt-meat2')?.value || 'trader';
   const kg2 = parseFloat(document.getElementById('ttt-kg2')?.value) || 500;
   const info = TTT_PRODUCT_INFO[meat2] || TTT_PRODUCT_INFO['trader'];
+  // 사용자 입력: 시작 시각, 인원, 수율, 생산성
+  const startTimeInput = document.getElementById('ttt-start2')?.value;
+  const getNum = (id, def) => {
+    const v = parseFloat(document.getElementById(id)?.value);
+    return isFinite(v) ? v : def;
+  };
   return {
     ...inp,
     meatType: '우둔',
     meatKg: kg2,
-    yPre: TTT_AUTO_OTHER.yPre.val,
-    yCrush: TTT_AUTO_OTHER.yCrush.val,
-    pPre: TTT_AUTO_OTHER.pPre.val,
-    pCrush: TTT_AUTO_OTHER.pCrush.val,
-    pPackEa: TTT_AUTO_OTHER.pPackEa.val,
+    // 두 번째가 먼저면 자기가 메인 inp의 시작 시각을 가져감 (또는 ttt-start2 우선)
+    startTime: startTimeInput || inp.startTime,
+    yPre: getNum('ttt-y-pre2', TTT_AUTO_OTHER.yPre.val),
+    yCrush: getNum('ttt-y-crush2', TTT_AUTO_OTHER.yCrush.val),
+    pPre: getNum('ttt-p-pre2', TTT_AUTO_OTHER.pPre.val),
+    pCrush: getNum('ttt-p-crush2', TTT_AUTO_OTHER.pCrush.val),
+    pPackEa: getNum('ttt-p-pack2', TTT_AUTO_OTHER.pPackEa.val),
+    wkPre: getNum('ttt-wk-pre2', inp.wkPre),
+    wkPack: getNum('ttt-wk-pack2', inp.wkPack),
     productInfo: info,
   };
 }
@@ -997,8 +1031,8 @@ function tttPlanNarrative(inp, sim, slots) {
 }
 
 // ── 메인 렌더링 ──────────────────────────────────────────
-function ttttRender() {
-  let inp = ttttGetInputs();
+function tttRender() {
+  let inp = tttGetInputs();
   const dualMode = tttIsDualMode();
   let dualResult = null;  // {sim1, sim2, inp1, inp2, order, pkLines}
   if (dualMode) {
@@ -1008,12 +1042,12 @@ function ttttRender() {
     // (best 선정 자체는 첫째 기준)
     const userMode = window.tttSelectedTankMode || null;
     if (userMode) {
-      dualResult = ttttSimulateDual(inp, userMode);
+      dualResult = tttSimulateDual(inp, userMode);
     } else {
       // 3 mode 다 시뮬해서 best
-      const dA = ttttSimulateDual(inp, 'A');
-      const dB = ttttSimulateDual(inp, 'B');
-      const dE = ttttSimulateDual(inp, 'E');
+      const dA = tttSimulateDual(inp, 'A');
+      const dB = tttSimulateDual(inp, 'B');
+      const dE = tttSimulateDual(inp, 'E');
       // dual best: 두 번째 sim retortEndMin 빠른 것 (전체 종료)
       const candidates = [['A',dA],['B',dB],['E',dE]];
       candidates.sort((a,b) => a[1].sim2.retortEndMin - b[1].sim2.retortEndMin);
@@ -1036,9 +1070,9 @@ function ttttRender() {
     return;
   }
   // ★ 3가지 자숙 탱크 분배 방식 자동 시뮬 → 사용자가 선택하거나 베스트 자동
-  const tankSimA = ttttSimulate(inp, 'A');
-  const tankSimB = ttttSimulate(inp, 'B');
-  const tankSimE = ttttSimulate(inp, 'E');
+  const tankSimA = tttSimulate(inp, 'A');
+  const tankSimB = tttSimulate(inp, 'B');
+  const tankSimE = tttSimulate(inp, 'E');
   const tankResults = [
     { mode: 'A', name: '잔량 먼저 시작', desc: '작은 수량 1호 → 800kg씩 나머지 (자숙·파쇄 빨리)', sim: tankSimA },
     { mode: 'B', name: 'N등분 균등', desc: '총량 ÷ 탱크수 = 모든 탱크 동일량', sim: tankSimB },
@@ -1075,7 +1109,12 @@ function ttttRender() {
 
   // 공정 타임라인 SVG
   const tlMin = sim.startMin;
-  const tlMax = Math.max(sim.retortEndMin, sim.packEndMin) + 30;
+  // dual 모드면 sim2도 고려해서 타임축 끝 결정
+  let tlMaxRaw = Math.max(sim.retortEndMin, sim.packEndMin);
+  if (typeof dualResult !== 'undefined' && dualResult && dualResult.sim2) {
+    tlMaxRaw = Math.max(tlMaxRaw, dualResult.sim2.retortEndMin, dualResult.sim2.packEndMin);
+  }
+  const tlMax = tlMaxRaw + 30;
   const span = Math.max(1, tlMax - tlMin);  // span=0 방지 (xPos -Infinity 방지)
   const SVG_W = 800, LEFT = 100, RIGHT = 780;
   const xPos = m => {
@@ -1267,14 +1306,91 @@ function ttttRender() {
     {fillOpacity: 0.85});
   yCursor += ROW_H;
 
+  // ── 두 번째 제품 (dual 모드) 막대 ──
+  // FC 색과 구분되는 색 톤(주황/녹청/보라 계열 변형) 사용
+  if (typeof dualResult !== 'undefined' && dualResult && dualResult.sim2) {
+    const sim2 = dualResult.sim2;
+    const inp2 = dualResult.inp2;
+    const productName = (inp2.productInfo && inp2.productInfo.name) || '제품2';
+    // 구분선
+    bars += `<line x1="${LEFT-8}" y1="${yCursor+2}" x2="${RIGHT}" y2="${yCursor+2}" stroke="#D88A30" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>`;
+    yCursor += 8;
+    bars += `<text x="${LEFT-8}" y="${yCursor+14}" text-anchor="end" font-size="11" fill="#D88A30" font-weight="700">▼ ${productName}</text>`;
+    yCursor += 6;
+
+    // 두 번째 전처리
+    bars += rowLabel(yCursor, BAR_H, '전처리(2)');
+    bars += segBar(yCursor, BAR_H, sim2.startMin, sim2.preEndMin, '#D88A30',
+      `${inp2.wkPre}명 · ${Math.round(sim2.preIn)}kg`,
+      `${productName} 전처리`,
+      `시각: ${tttFmt(sim2.startMin)}~${tttFmt(sim2.preEndMin)}|인원: ${inp2.wkPre}명|원육: ${Math.round(sim2.preIn)}kg|산출: ${Math.round(sim2.preOut)}kg`,
+      {});
+    yCursor += ROW_H;
+
+    // 두 번째 자숙 (단일 막대 — 모든 탱크 통합)
+    if (sim2.tankInTimes && sim2.tankInTimes.length > 0) {
+      const cookS = sim2.tankInTimes[0];
+      const cookE = sim2.tankOutTimes[sim2.tankOutTimes.length-1];
+      bars += rowLabel(yCursor, BAR_H, '자숙(2)');
+      bars += segBar(yCursor, BAR_H, cookS, cookE, '#1D9E75',
+        `${sim2.tankKgs.length}호 · ${Math.round(sim2.cookIn)}kg`,
+        `${productName} 자숙`,
+        `시각: ${tttFmt(cookS)}~${tttFmt(cookE)}|탱크: ${sim2.tankKgs.length}회|투입: ${Math.round(sim2.cookIn)}kg|산출: ${Math.round(sim2.cookOut)}kg`,
+        {});
+      yCursor += ROW_H;
+    }
+
+    // 두 번째 파쇄
+    if (sim2.crushStartMin && sim2.crushEndMin) {
+      bars += rowLabel(yCursor, BAR_H, '파쇄(2)');
+      bars += segBar(yCursor, BAR_H, sim2.crushStartMin, sim2.crushEndMin, '#C47A2C',
+        `${Math.round(sim2.crushOut)}kg`,
+        `${productName} 파쇄`,
+        `시각: ${tttFmt(sim2.crushStartMin)}~${tttFmt(sim2.crushEndMin)}|투입: ${Math.round(sim2.crushIn)}kg|산출: ${Math.round(sim2.crushOut)}kg`,
+        {});
+      yCursor += ROW_H;
+    }
+
+    // 두 번째 내포장
+    if (sim2.packStartMin && sim2.packEndMin) {
+      bars += rowLabel(yCursor, BAR_H, '내포장(2)');
+      bars += segBar(yCursor, BAR_H, sim2.packStartMin, sim2.packEndMin, '#A35BB3',
+        `${inp2.wkPack || 6}명 · ${sim2.pouches}EA`,
+        `${productName} 내포장`,
+        `시각: ${tttFmt(sim2.packStartMin)}~${tttFmt(sim2.packEndMin)}|인원: ${inp2.wkPack || 6}명|EA: ${sim2.pouches}`,
+        {});
+      yCursor += ROW_H;
+    }
+
+    // 두 번째 레토르트 (회차들)
+    if (sim2.retortStartTimes && sim2.retortStartTimes.length > 0) {
+      for (let i = 0; i < sim2.retortStartTimes.length; i++) {
+        bars += rowLabel(yCursor, BAR_H, `레토(2)-${i+1}`);
+        bars += segBar(yCursor, BAR_H, sim2.retortStartTimes[i], sim2.retortEndTimes[i], '#8C3030',
+          `${sim2.batchEa[i]}EA·${sim2.batchCarts[i]}대차`,
+          `${productName} 레토르트 ${i+1}회차`,
+          `시각: ${tttFmt(sim2.retortStartTimes[i])}~${tttFmt(sim2.retortEndTimes[i])}|EA: ${sim2.batchEa[i]}|대차: ${sim2.batchCarts[i]}`,
+          {});
+        yCursor += ROW_H;
+      }
+    }
+  }
+
   // 점선 (내포장 종료 + 전체 종료)
   const lineBottom = yCursor + 4;
   bars += `
     <line x1="${xPos(sim.packEndMin)}" y1="36" x2="${xPos(sim.packEndMin)}" y2="${lineBottom}" stroke="#7F77DD" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="${xPos(sim.packEndMin)}" y="${lineBottom + 14}" text-anchor="middle" font-size="11" fill="#7F77DD" font-weight="700">${tttFmt(sim.packEndMin)} 내포장</text>
+    <text x="${xPos(sim.packEndMin)}" y="${lineBottom + 14}" text-anchor="middle" font-size="11" fill="#7F77DD" font-weight="700">${tttFmt(sim.packEndMin)} FC내포장</text>
     <line x1="${xPos(sim.retortEndMin)}" y1="36" x2="${xPos(sim.retortEndMin)}" y2="${lineBottom}" stroke="#A32D2D" stroke-width="1.5" stroke-dasharray="5 3"/>
-    <text x="${xPos(sim.retortEndMin)}" y="${lineBottom + 28}" text-anchor="middle" font-size="11" fill="#A32D2D" font-weight="700">${tttFmt(sim.retortEndMin)} 종료</text>`;
-  const svgH = lineBottom + 38;
+    <text x="${xPos(sim.retortEndMin)}" y="${lineBottom + 28}" text-anchor="middle" font-size="11" fill="#A32D2D" font-weight="700">${tttFmt(sim.retortEndMin)} FC종료</text>`;
+  // dual 모드: 두 번째 제품 종료선도 추가
+  if (typeof dualResult !== 'undefined' && dualResult && dualResult.sim2) {
+    const sim2 = dualResult.sim2;
+    bars += `
+    <line x1="${xPos(sim2.retortEndMin)}" y1="36" x2="${xPos(sim2.retortEndMin)}" y2="${lineBottom}" stroke="#D88A30" stroke-width="1.5" stroke-dasharray="5 3"/>
+    <text x="${xPos(sim2.retortEndMin)}" y="${lineBottom + 44}" text-anchor="middle" font-size="11" fill="#D88A30" font-weight="700">${tttFmt(sim2.retortEndMin)} 2번째종료</text>`;
+  }
+  const svgH = lineBottom + (typeof dualResult !== 'undefined' && dualResult && dualResult.sim2 ? 56 : 38);
 
   const timelineSvg = `
     <style>
@@ -1356,7 +1472,7 @@ function ttttRender() {
   const editYield = (id, val, autoVal, n) => `
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
       <input type="number" step="0.1" value="${val}" 
-        oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttttRender()"
+        oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';tttRender()"
         style="width:70px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
       <div style="font-size:9px;color:var(--color-text-tertiary)">자동: ${autoVal}${n!==undefined?` (n=${n})`:''}</div>
     </div>`;
@@ -1364,7 +1480,7 @@ function ttttRender() {
     <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
       <div style="display:flex;align-items:center;gap:4px">
         <input type="number" step="0.1" value="${val}"
-          oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttttRender()"
+          oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';tttRender()"
           style="width:60px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
         <span style="font-size:10px;color:var(--color-text-secondary)">${unit}</span>
       </div>
