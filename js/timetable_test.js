@@ -2027,50 +2027,56 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
     // 관리자: 07:00 이후
     const mgr = slot.s >= 7*60 ? mgrAfter7 : 0;
 
+    // 현재 출근 인원 (시간대별)
+    // - 05:00~07:00: 외국인 7명만
+    // - 07:00~09:00: 외국인 7 + 관리 2 = 9명
+    // - 09:00 이후: 전원 28명
+    let onsite;
+    if (slot.s < 7*60) onsite = 7;
+    else if (slot.s < 9*60) onsite = 9;
+    else onsite = totalWorkers;
+
     // 외포장/세팅/점심/유휴 자동 계산
     // 점심 시간: 1차 = 전처리조+외포장조 20명, 2차 = 후공정조 등 11명
     let lunch = 0, outer = 0, setting = 0, idle = 0;
     if (isLunch1) {
       // 1차 점심: 전처리·외포장 작업 일시중단, 후공정 가동
-      lunch = 20;  // 전처리 7 + 외포장 13 등
-      // 후공정 = 28 - 20 - 관리(1로 줄어듦) - 진행 공정
-      const mgrLunch = 1; // 점심 시간 관리 1명
+      lunch = 20;
+      const mgrLunch = 1;
       const occupied = preCount + crushCount + packCount + transCount + lunch + mgrLunch;
-      idle = Math.max(0, totalWorkers - occupied);
+      idle = Math.max(0, onsite - occupied);
     } else if (isLunch2) {
       lunch = 11;
       const mgrLunch = 1;
       const occupied = preCount + crushCount + packCount + transCount + lunch + mgrLunch;
-      idle = Math.max(0, totalWorkers - occupied);
+      idle = Math.max(0, onsite - occupied);
     } else if (slot.s >= 9*60 && slot.e <= 11*60+30) {
       // 09:00~11:30: 한국인 합류 → 외포장 풀가동
-      // 28명 = 진행 공정 인원 + 관리 + 외포장 + 세팅
       const occupied = preCount + crushCount + packCount + transCount + mgr;
-      const restWorkers = totalWorkers - occupied;
-      // 세팅 3명 우선, 나머지 외포장
+      const restWorkers = onsite - occupied;
       setting = Math.min(3, restWorkers);
       outer = Math.max(0, restWorkers - setting);
     } else if (slot.s >= 13*60+30) {
       // 13:30 이후: 점심 후 풀가동
       const occupied = preCount + crushCount + packCount + transCount + mgr;
-      idle = Math.max(0, totalWorkers - occupied);
+      idle = Math.max(0, onsite - occupied);
     } else if (slot.s >= 7*60 && slot.s < 9*60) {
-      // 07~09: 관리 출근, 한국인 미합류 → 외국인만
+      // 07~09: 관리 출근, 한국인 미합류 → 외국인 7 + 관리 2 = 9명 출근
       const occupied = preCount + crushCount + packCount + transCount + mgr;
-      idle = Math.max(0, totalWorkers - occupied);
+      idle = Math.max(0, onsite - occupied);
     } else {
-      // 05~07: 외국인만
+      // 05~07: 외국인 7명만 출근
       const occupied = preCount + crushCount + packCount + transCount;
-      idle = Math.max(0, totalWorkers - occupied);
+      idle = Math.max(0, onsite - occupied);
     }
 
     const total = preCount + crushCount + packCount + transCount + outer + setting + lunch + mgr + idle;
-    return { slot, preCount, crushCount, packCount, transCount, outer, setting, lunch, mgr, idle, total };
+    return { slot, preCount, crushCount, packCount, transCount, outer, setting, lunch, mgr, idle, total, onsite };
   });
 
   const cell = (v, color) => `<td style="padding:5px 6px;border:0.5px solid var(--color-border-tertiary);text-align:center;${color?`color:${color};font-weight:500`:''}">${v||'·'}</td>`;
   const rows = slotData.map(d => {
-    const okMark = d.total === totalWorkers ? '<span style="color:#0F6E56">✓</span>' : `<span style="color:#A32D2D">${d.total>totalWorkers?'+':'−'}${Math.abs(d.total-totalWorkers)}</span>`;
+    const okMark = d.total === d.onsite ? '<span style="color:#0F6E56">✓</span>' : `<span style="color:#A32D2D">${d.total>d.onsite?'+':'−'}${Math.abs(d.total-d.onsite)}</span>`;
     return `<tr>
       <td style="padding:5px 6px;border:0.5px solid var(--color-border-tertiary);font-weight:500;font-size:11px">${d.slot.label}</td>
       ${cell(d.preCount, '#185FA5')}
@@ -2082,15 +2088,15 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
       ${cell(d.lunch, '#888780')}
       ${cell(d.mgr, '#5F5E5A')}
       ${cell(d.idle, '#B4B2A9')}
-      <td style="padding:5px 6px;border:0.5px solid var(--color-border-tertiary);text-align:center;font-weight:600;background:#f8f7f3">${d.total} ${okMark}</td>
+      <td style="padding:5px 6px;border:0.5px solid var(--color-border-tertiary);text-align:center;font-weight:600;background:#f8f7f3">${d.total}/${d.onsite} ${okMark}</td>
     </tr>`;
   }).join('');
 
   return `
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:600">📊 시간대별 인원 활용 (정원 28명)</div>
-        <div style="font-size:11px;color:var(--color-text-tertiary)">합계 ✓ = 28명 일치 · 빨강 = 초과/부족</div>
+        <div style="font-size:13px;font-weight:600">📊 시간대별 인원 활용</div>
+        <div style="font-size:11px;color:var(--color-text-tertiary)">합계/출근 · 외국인 7명(05~), 관리 +2명(07~), 한국인 합류(09~) = 28명</div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead>
