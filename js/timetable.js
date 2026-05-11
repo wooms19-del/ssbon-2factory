@@ -1195,7 +1195,7 @@ function ttRender() {
     const half1 = Math.ceil(inp.totalWorkers / 2);
     const half2 = inp.totalWorkers - half1;
     const segmentInfo = [];
-    if (tc.start < LUNCH1_S) segmentInfo.push(`${ttFmt(tc.start)}~${ttFmt(Math.min(LUNCH1_S, tc.end))}: ${crushOnly}명 (파쇄 전담)`);
+    if (tc.start < LUNCH1_S) segmentInfo.push(`${ttFmt(tc.start)}~${ttFmt(Math.min(LUNCH1_S, tc.end))}: ${crushOnly}명`);
     if (crossLunch1 || (tc.start >= LUNCH1_S && tc.start < LUNCH1_E)) {
       const segS = Math.max(tc.start, LUNCH1_S);
       const segE = Math.min(tc.end, LUNCH1_E);
