@@ -1196,11 +1196,11 @@ function ttRender() {
     const crossLunch1 = tc.start < LUNCH1_S && tc.end > LUNCH1_S;
     const crossLunch2 = tc.start < LUNCH1_E && tc.end > LUNCH1_E;
     const crossPeak = tc.start < LUNCH2_E && tc.end > LUNCH2_E;
-    // 새 점심 룰: 파쇄 전담 = wkPackPeak - wkPre (전처리조 제외 순수 파쇄 인원)
-    const crushOnly = Math.max(0, inp.wkPackPeak - inp.wkPre);
+    const crushOnly = Math.max(0, inp.wkPackPeak - inp.wkPre); // 파쇄 전담 = 풀가동 - 전처리조
     const crushLunch1 = inp.wkPre + inp.wkPack + inp.wkTrans; // 점심1: 전처리+내포장+이송 파쇄 투입
     const segmentInfo = [];
-    if (tc.start < LUNCH1_S) segmentInfo.push(`${ttFmt(tc.start)}~${ttFmt(Math.min(LUNCH1_S, tc.end))}: ${inp.wkCrush}명`);
+    // 파쇄 시작 ~ 점심1: 파쇄 전담 인원만 (전처리조는 아직 전처리 중)
+    if (tc.start < LUNCH1_S) segmentInfo.push(`${ttFmt(tc.start)}~${ttFmt(Math.min(LUNCH1_S, tc.end))}: ${crushOnly}명 (파쇄 전담)`);
     if (crossLunch1 || (tc.start >= LUNCH1_S && tc.start < LUNCH1_E)) {
       const segS = Math.max(tc.start, LUNCH1_S);
       const segE = Math.min(tc.end, LUNCH1_E);
