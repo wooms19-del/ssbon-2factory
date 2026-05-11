@@ -375,7 +375,7 @@ function ttSimulate(inp, tankMode) {
     if (w > 0) crushProcessed += inp.pCrush * w / 60;
     crushSelfEndMin = t + 1;
   }
-  // 마지막 탱크 산출분 처리
+  // 마지막 탱크 산출분 처리 (참고용, crushEndMin은 아래에서 tankCrushTimes 마지막 호로 정의)
   let lastTankCrushEndMin = lastWagonEnd;
   let lastTankProcessed = 0;
   for (let t = lastWagonEnd; t < 26*60 && lastTankProcessed < lastTankOutKg; t++) {
@@ -383,8 +383,6 @@ function ttSimulate(inp, tankMode) {
     if (w > 0) lastTankProcessed += inp.pCrush * w / 60;
     lastTankCrushEndMin = t + 1;
   }
-  const crushEndMin = Math.max(crushSelfEndMin, lastTankCrushEndMin);
-  const crushHours = (crushEndMin - crushStartMin) / 60;
 
   // ── 각 자숙 호별 파쇄 처리 종료 시점 시뮬 ──
   // i호 와건 종료 → 그 산출(tankOutKg)이 파쇄 처리되는 종료 시점
@@ -406,6 +404,9 @@ function ttSimulate(inp, tankMode) {
     tankCrushTimes.push({ idx: i+1, start: startMin, end: endMin, kg: tankOutKg, tankInKg: tankKg });
     prevTankEnd = endMin;
   }
+  // 파쇄 종료 = 마지막 자숙 호 파쇄 종료 (호별 FIFO 흐름이 정답)
+  const crushEndMin = tankCrushTimes[tankCrushTimes.length - 1].end;
+  const crushHours = (crushEndMin - crushStartMin) / 60;
   // ── 내포장 시뮬: 동적 ──
   //
   // 점심 1차에 전처리조가 파쇄 합류 → 파쇄 산출도 그만큼 누적
@@ -1105,9 +1106,9 @@ function ttRender() {
           </div>
           <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.6;font-family:monospace">
             🕐 ${ttFmt(sim.crushStartMin)} = 자숙 1호 와건 종료<br>
-            <strong>종료 ${ttFmt(sim.crushEndMin)} = max(둘 중 늦은):</strong><br>
-            ① 자체: ${Math.round(sim.crushIn)}kg ÷ (${inp.pCrush}×${inp.wkPackPeak}) = ${(sim.crushIn / (inp.pCrush*inp.wkPackPeak)).toFixed(2)}h → ${ttFmt(sim.crushSelfEndMin)}<br>
-            ② 마지막 탱크: 와건 ${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])} + ${Math.round(sim.lastTankOutKg)}kg(${lastTankCrushMin}분) = ${ttFmt(sim.lastTankCrushEndMin)}<br>
+            <strong>종료 ${ttFmt(sim.crushEndMin)} = 마지막 자숙 호 파쇄 처리 종료 (FIFO)</strong><br>
+            참고 자체속도: ${Math.round(sim.crushIn)}kg ÷ (${inp.pCrush}×${inp.wkPackPeak}) = ${(sim.crushIn / (inp.pCrush*inp.wkPackPeak)).toFixed(2)}h → ${ttFmt(sim.crushSelfEndMin)}<br>
+            참고 마지막 탱크 단독 처리: 와건 ${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])} + ${Math.round(sim.lastTankOutKg)}kg(${lastTankCrushMin}분) = ${ttFmt(sim.lastTankCrushEndMin)}<br>
             📊 ${inp.pCrush} kg/인시 (자동 ${TT_AUTO.pCrush.val} · n=${TT_AUTO.pCrush.n})
           </div>
         </div>
