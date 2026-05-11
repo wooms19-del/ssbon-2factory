@@ -2093,30 +2093,25 @@ function ttmRenderWorkerSlots(scen, workers, sim) {
   }).join('');
 
   return `
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-top:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:600">📊 시간대별 인원 활용</div>
-        <div style="font-size:11px;color:var(--color-text-tertiary)">합계/출근 · 외국인 7명(05~), 관리 +2명(07~), 한국인 합류(09~) = 28명</div>
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead>
-          <tr style="background:var(--color-background-secondary)">
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center">시간대</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#185FA5">전처리</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#BA7517">파쇄</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#7F77DD">내포장</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#534AB7">이송</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#1D9E75">외포장</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#EF9F27">세팅</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#888780">점심</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#5F5E5A">관리</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#B4B2A9">유휴</th>
-            <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;font-weight:600">합계</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+    <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px">합계/출근 · 외국인 7명(05~), 관리 +2명(07~), 한국인 합류(09~) = 28명</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead>
+        <tr style="background:var(--color-background-secondary)">
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center">시간대</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#185FA5">전처리</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#BA7517">파쇄</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#7F77DD">내포장</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#534AB7">이송</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#1D9E75">외포장</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#EF9F27">세팅</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#888780">점심</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#5F5E5A">관리</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;color:#B4B2A9">유휴</th>
+          <th style="padding:7px 4px;border:0.5px solid var(--color-border-tertiary);text-align:center;font-weight:600">합계</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 // ============================================================
@@ -2234,22 +2229,28 @@ function ttmGetCurrentWorkers() {
   };
 }
 
-// 시나리오 모드 메인 렌더 (탭 자체는 기존 result 영역에 그림)
+// 시나리오 모드 메인 렌더 (사진 패턴: 좌 타임라인 + 우 인원표)
 function ttmRender() {
   try {
     const scen = ttmGetScenario();
     const workers = ttmGetCurrentWorkers();
     const sim = ttmSimulate(scen, workers);
     const html = `
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-top:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div style="font-size:14px;font-weight:600">📅 시나리오 타임라인</div>
-          <button onclick="ttmDownloadExcel()" style="background:#185FA5;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">📥 엑셀 다운로드</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:14px">
+        <div style="font-size:14px;font-weight:600">📅 시나리오 타임라인 + 시간대별 인원 활용</div>
+        <button onclick="ttmDownloadExcel()" style="background:#185FA5;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">📥 엑셀 다운로드</button>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:1;min-width:480px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">📋 공정 타임라인</div>
+          ${ttmRenderTimeline(scen, workers, sim)}
         </div>
-        ${ttmRenderTimeline(scen, workers, sim)}
+        <div style="flex:1;min-width:480px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">👥 시간대별 인원 활용</div>
+          ${ttmRenderWorkerSlots(scen, workers, sim)}
+        </div>
       </div>
       ${ttmRenderWorkers(workers)}
-      ${ttmRenderWorkerSlots(scen, workers, sim)}
       ${ttmRenderReport(scen, workers, sim)}`;
     const out = document.getElementById('ttm-output');
     if (out) out.innerHTML = html;
