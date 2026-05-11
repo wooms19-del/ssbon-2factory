@@ -1001,7 +1001,16 @@
           <!-- FP (시그 등) 입력 -->
           <div style="flex-basis:100%;font-size:12px;font-weight:600;color:#7F77DD;margin-bottom:2px">📦 FP (두 번째 제품)</div>
           <label style="display:flex;flex-direction:column;gap:3px">
-            <span>품목</span>
+            <span>원육 종류</span>
+            <select id="ttt-meattype2" onchange="tttAutoAnalyzeOther()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
+              <option value="우둔">우둔</option>
+              <option value="설도">설도</option>
+              <option value="코코">코코</option>
+              <option value="기타">기타</option>
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:3px">
+            <span>제품</span>
             <select id="ttt-meat2" onchange="tttRender()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
               <option value="sig">시그니처 130g (800EA/대차)</option>
               <option value="trader">트레이더스 460g (380EA/대차)</option>
@@ -1616,6 +1625,6 @@
 <script src="js/performance.js?v=1778147983"></script>
 <script src="js/monthly_production.js?v=1778148449"></script>
 <script src="js/timetable.js?v=1778495630"></script>
-<script src="js/timetable_test.js?v=1778501800"></script>
+<script src="js/timetable_test.js?v=1778502100"></script>
 </body>
 </html>

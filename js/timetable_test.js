@@ -436,8 +436,9 @@ async function tttAutoAnalyze() {
 }
 
 async function tttAutoAnalyzeOther() {
-  // FP 분석 기간 선택 기반으로 TTT_AUTO_OTHER 갱신
+  // FP 분석 기간 + 원육 종류 선택 기반으로 TTT_AUTO_OTHER 갱신
   const periodDays = parseInt(document.getElementById('ttt-period2')?.value) || 30;
+  const fpMeatType = document.getElementById('ttt-meattype2')?.value || '우둔';
   const todayStr = (typeof tod === 'function') ? tod() : new Date().toISOString().slice(0,10);
   const [ty,tm,td] = todayStr.split('-').map(Number);
   const todayLocal = new Date(ty, tm-1, td);
@@ -452,6 +453,11 @@ async function tttAutoAnalyzeOther() {
     let diff = (eh*60+em)-(sh*60+sm);
     return diff < 0 ? diff+1440 : diff;
   };
+  // 원육 종류 필터 함수
+  const isFpType = (type) => {
+    if (fpMeatType === '기타') return type !== '홍두깨' && type !== '우둔' && type !== '설도' && type !== '코코';
+    return type === fpMeatType;
+  };
   try {
     const [preDocs, crushDocs, cookDocs, packDocs, thawDocs] = await Promise.all([
       db.collection('preprocess').get(),
@@ -463,13 +469,13 @@ async function tttAutoAnalyzeOther() {
     // ── FP 전처리 수율: FC와 동일 방식 (thawing end 기준 날짜 매칭) ──
     let preKg=0,preKgIn=0,prePH=0,preN=0,preRmKg=0;
     preDocs.forEach(d => {
-      const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return;
+      const r=d.data(); if (!inRange(r.date)||!isFpType(r.type||'')) return;
       const kg=+r.kg||0,w=+r.waste||0,wk=+r.workers||0,m=minutesBetween(r.start,r.end);
       if (kg>0&&wk>0&&m>0) { preKg+=kg; preKgIn+=(kg+w); prePH+=wk*(m/60); preN++; }
     });
     thawDocs.forEach(d => {
       const r=d.data();
-      if ((r.type||'')==='홍두깨') return;
+      if (!isFpType(r.type||'')) return;
       const endStr=String(r.end||'');
       if (!endStr) return;
       let endDate;
@@ -480,18 +486,17 @@ async function tttAutoAnalyzeOther() {
     });
     let ckIn=0,ckOut=0,ckN=0;
     cookDocs.forEach(d => {
-      const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return;
+      const r=d.data(); if (!inRange(r.date)||!isFpType(r.type||'')) return;
       if (+r.kgIn>0&&+r.kg>0) { ckIn+=+r.kgIn; ckOut+=+r.kg; ckN++; }
     });
     let crIn=0,crOut=0,crPH=0,crN=0;
     crushDocs.forEach(d => {
-      const r=d.data(); if (!inRange(r.date)) return;
-      const rType=r.type||''; if (rType==='홍두깨') return;
+      const r=d.data(); if (!inRange(r.date)||!isFpType(r.type||'')) return;
       const kg=+r.kg||0,kgIn=+r.kgIn||+r.inputKg||0,wk=+r.workers||0,m=minutesBetween(r.start,r.end);
       if (kg>0&&wk>0&&m>0) { crIn+=kgIn||kg; crOut+=kg; crPH+=wk*(m/60); crN++; }
     });
     const yPre = preRmKg>0 ? Math.round(preKg/preRmKg*1000)/10 : TTT_AUTO_OTHER.yPre.val;
-    const pPre = prePH>0 ? Math.round(preKgIn/prePH*10)/10 : TTT_AUTO_OTHER.pPre.val;
+    const pPre = prePH>0 ? Math.round(preRmKg/prePH*10)/10 : TTT_AUTO_OTHER.pPre.val;
     const yCrush = crIn>0 ? Math.round(crOut/crIn*1000)/10 : TTT_AUTO_OTHER.yCrush.val;
     const pCrush = crPH>0 ? Math.round(crOut/crPH*10)/10 : TTT_AUTO_OTHER.pCrush.val;
     const yCook = ckIn>0 ? Math.round(ckOut/ckIn*1000)/10 : TTT_AUTO_OTHER.yCook?.val || 55.0;
