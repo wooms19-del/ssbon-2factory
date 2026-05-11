@@ -2387,16 +2387,22 @@ function renderDailyFromLocal_(d){
     const oYld = p.origKg>0 ? p.out/p.origKg*100 : null;
     const pYld = p.in>0 ? p.out/p.in*100 : null;
     const borderTop = showName && procRows.indexOf(p)>0 ? 'border-top:2px solid var(--g2);' : '';
-    // 생산성: 전처리/자숙/파쇄는 투입·산출 둘 다 표시 (kg/인시), 포장은 EA/인시
-    // - 투입: 작업 속도 (작업자가 받은 양 ÷ mh) — 비가식부 포함
-    // - 산출: 결과물 (다음 공정에 넘긴 양 ÷ mh) — 비가식부 제외
+    // 생산성: 공정별 측정 기준 (작업자가 통제하는 것 기준)
+    //  - 전처리: 투입(p.in = rmKg, 작업자가 받은 양)
+    //  - 자숙:   투입(p.in = 케이지 채운 양)
+    //  - 파쇄:   산출(p.out = 파쇄해서 다음 공정 보낸 양)
+    //  - 포장:   산출 EA (p.ea)
     let productivity = '-';
-    if(p.name==='포장' && p.mh>0 && p.ea>0) productivity = r2(p.ea/p.mh).toLocaleString()+' EA/인시';
-    else if(p.mh>0 && p.in>0 && p.out>0) {
-      const prodIn = r2(p.in/p.mh).toFixed(1);
-      const prodOut = r2(p.out/p.mh).toFixed(1);
-      productivity = `<span style="color:#185FA5">투입 ${prodIn}</span> / <span style="color:#0F6E56">산출 ${prodOut}</span> kg/인시`;
-    } else if(p.mh>0 && p.out>0) productivity = r2(p.out/p.mh).toFixed(1)+' kg/인시';
+    if(p.name==='포장' && p.mh>0 && p.ea>0) {
+      productivity = r2(p.ea/p.mh).toLocaleString()+' EA/인시';
+    } else if((p.name==='전처리' || p.name==='자숙') && p.mh>0 && p.in>0) {
+      productivity = r2(p.in/p.mh).toFixed(1)+' kg/인시';
+    } else if(p.name==='파쇄' && p.mh>0 && p.out>0) {
+      productivity = r2(p.out/p.mh).toFixed(1)+' kg/인시';
+    } else if(p.mh>0 && p.out>0) {
+      // fallback: 모르는 공정명 → 산출 기준
+      productivity = r2(p.out/p.mh).toFixed(1)+' kg/인시';
+    }
     return `<tr style="${borderTop}">
       <td style="text-align:left;font-weight:600">${showName?p.name:''}</td>
       <td style="text-align:center;color:var(--g6);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.type||'-'}">${p.type||'-'}</td>

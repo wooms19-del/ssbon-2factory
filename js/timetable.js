@@ -296,8 +296,10 @@ async function ttAutoAnalyze() {
     if (crYldDen > 0) TT_AUTO.yCrush = { val: +(crYldNum/crYldDen*100).toFixed(1), n: crN };
     else TT_AUTO.yCrush = { ...TT_AUTO.yCrush, n: crN };
 
-    if (prePH > 0) TT_AUTO.pPre = { val: +(preInP/prePH).toFixed(1), valIn: +(preInPIn/prePH).toFixed(1), n: preN };
-    if (crPH > 0) TT_AUTO.pCrush = { val: +(crInP/crPH).toFixed(1), valOut: +(crInPOut/crPH).toFixed(1), n: crN };
+    // pPre.val=투입 기준 (전처리 표준), pCrush.val=산출 기준 (파쇄 표준)
+    // (참고 필드 — 라벨에 같이 표시: pPre.valOut=산출, pCrush.valIn=투입)
+    if (prePH > 0) TT_AUTO.pPre = { val: +(preInPIn/prePH).toFixed(1), valOut: +(preInP/prePH).toFixed(1), n: preN };
+    if (crPH > 0) TT_AUTO.pCrush = { val: +(crInPOut/crPH).toFixed(1), valIn: +(crInP/crPH).toFixed(1), n: crN };
     if (pkMin > 0) TT_AUTO.pPackEa = { val: +(pkEa/pkMin).toFixed(1), n: pkN };
 
     // ── 다중 모드: 두 번째 제품(비-FC) 자동값 별도 계산 ──
@@ -375,23 +377,23 @@ function ttFillAutoValues() {
   };
   lab('tt-y-pre-auto', TT_AUTO.yPre);
   lab('tt-y-crush-auto', TT_AUTO.yCrush);
-  // 전처리 생산성: 투입/산출 둘 다
+  // 전처리 생산성: 투입 기준이 표준 (val), 산출도 참고용으로 같이 표시
   {
     const el = document.getElementById('tt-p-pre-auto');
     if (el) {
       const i = TT_AUTO.pPre;
       el.textContent = i.n > 0
-        ? `자동: 투입 ${i.valIn ?? i.val} / 산출 ${i.val} kg/인시 (n=${i.n})`
+        ? `자동: 투입 ${i.val} / 산출 ${i.valOut ?? i.val} kg/인시 (n=${i.n})`
         : `자동: ${i.val} · 데이터 없음`;
     }
   }
-  // 파쇄 생산성: 투입/산출 둘 다 (val=투입, valOut=산출)
+  // 파쇄 생산성: 산출 기준이 표준 (val), 투입도 참고용으로 같이 표시
   {
     const el = document.getElementById('tt-p-crush-auto');
     if (el) {
       const i = TT_AUTO.pCrush;
       el.textContent = i.n > 0
-        ? `자동: 투입 ${i.val} / 산출 ${i.valOut ?? i.val} kg/인시 (n=${i.n})`
+        ? `자동: 투입 ${i.valIn ?? i.val} / 산출 ${i.val} kg/인시 (n=${i.n})`
         : `자동: ${i.val} · 데이터 없음`;
     }
   }
