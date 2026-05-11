@@ -461,11 +461,11 @@ async function tttAutoAnalyzeOther() {
       db.collection('thawing').get(),
     ]);
     // ── FP 전처리 수율: FC와 동일 방식 (thawing end 기준 날짜 매칭) ──
-    let preKg=0,prePH=0,preN=0,preRmKg=0;
+    let preKg=0,preKgIn=0,prePH=0,preN=0,preRmKg=0;
     preDocs.forEach(d => {
       const r=d.data(); if (!inRange(r.date)||r.type==='홍두깨') return;
       const kg=+r.kg||0,w=+r.waste||0,wk=+r.workers||0,m=minutesBetween(r.start,r.end);
-      if (kg>0&&wk>0&&m>0) { preKg+=kg; prePH+=wk*(m/60); preN++; }
+      if (kg>0&&wk>0&&m>0) { preKg+=kg; preKgIn+=(kg+w); prePH+=wk*(m/60); preN++; }
     });
     thawDocs.forEach(d => {
       const r=d.data();
@@ -491,7 +491,7 @@ async function tttAutoAnalyzeOther() {
       if (kg>0&&wk>0&&m>0) { crIn+=kgIn||kg; crOut+=kg; crPH+=wk*(m/60); crN++; }
     });
     const yPre = preRmKg>0 ? Math.round(preKg/preRmKg*1000)/10 : TTT_AUTO_OTHER.yPre.val;
-    const pPre = prePH>0 ? Math.round(preRmKg/prePH*10)/10 : TTT_AUTO_OTHER.pPre.val;
+    const pPre = prePH>0 ? Math.round(preKgIn/prePH*10)/10 : TTT_AUTO_OTHER.pPre.val;
     const yCrush = crIn>0 ? Math.round(crOut/crIn*1000)/10 : TTT_AUTO_OTHER.yCrush.val;
     const pCrush = crPH>0 ? Math.round(crOut/crPH*10)/10 : TTT_AUTO_OTHER.pCrush.val;
     const yCook = ckIn>0 ? Math.round(ckOut/ckIn*1000)/10 : TTT_AUTO_OTHER.yCook?.val || 55.0;
