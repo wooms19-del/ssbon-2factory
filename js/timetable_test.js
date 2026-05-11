@@ -49,13 +49,13 @@ let TTT_AUTO_OTHER = {
 
 // ── 진입 시 자동 초기화 ──────────────────────────────────
 function tttInit() {
-  tttAutoAnalyze().then(ttttRender);
+  tttAutoAnalyze().then(tttRender);
 }
 
 // 사용자가 자숙 분배 방식 클릭 → 화면 전체 재렌더
 function tttSelectTankMode(mode) {
   window.tttSelectedTankMode = mode;
-  ttttRender();
+  tttRender();
 }
 
 // 동시 작업 토글 (체크박스 onchange)
@@ -63,7 +63,7 @@ function tttToggleDual() {
   const enabled = document.getElementById('ttt-dual-enabled')?.checked;
   const block = document.getElementById('ttt-dual-block');
   if (block) block.style.display = enabled ? 'flex' : 'none';
-  ttttRender();
+  tttRender();
 }
 
 // 페이지 진입 시 (탭 활성화 등에서 호출)
@@ -89,7 +89,7 @@ function tttToMin(t) {
 }
 
 // ── 입력값 수집 ──────────────────────────────────────────
-function ttttGetInputs() {
+function tttGetInputs() {
   const get = (id, def) => {
     const el = document.getElementById(id);
     if (!el) return def;
@@ -465,7 +465,7 @@ function tttFillAutoValues() {
 
 function tttMarkEdited(el) {
   el.dataset.userEdited = 'true';
-  ttttRender();
+  tttRender();
 }
 
 function tttResetField(id, autoKey) {
@@ -473,7 +473,7 @@ function tttResetField(id, autoKey) {
   if (!el) return;
   el.value = TTT_AUTO[autoKey].val;
   el.dataset.userEdited = 'false';
-  ttttRender();
+  tttRender();
 }
 
 // 분석 기간 / 원육 종류 변경 시 → 자동 분석 재실행
@@ -484,11 +484,11 @@ async function tttPeriodChange() {
     if (el) el.dataset.userEdited = 'false';
   });
   await tttAutoAnalyze();
-  ttttRender();
+  tttRender();
 }
 
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
-function ttttSimulate(inp, tankMode) {
+function tttSimulate(inp, tankMode) {
   // tankMode: 'A' (잔량 먼저 + 800kg씩 - 자숙·파쇄 빨리 시작), 'B' (N등분 균등), 'E' (1호 작게 빨리시작 + 나머지 균등)
   tankMode = tankMode || 'A';
   const startMin = tttToMin(inp.startTime);
@@ -836,23 +836,23 @@ function tttBuildSecondInp(inp, firstSim) {
 }
 
 // 다중 작업 종합 시뮬: 순서대로 두 시뮬 실행
-function ttttSimulateDual(inp, tankMode) {
+function tttSimulateDual(inp, tankMode) {
   const order = document.getElementById('ttt-order')?.value || 'fc-first';
   const pkLines = parseInt(document.getElementById('ttt-pk-lines')?.value) || 2;
 
   if (order === 'fc-first') {
-    const sim1 = ttttSimulate(inp, tankMode);  // FC 먼저
+    const sim1 = tttSimulate(inp, tankMode);  // FC 먼저
     const inp2 = tttBuildSecondInp(inp, sim1);
-    const sim2 = ttttSimulate(inp2, tankMode);
+    const sim2 = tttSimulate(inp2, tankMode);
     return { sim1, sim2, inp1: inp, inp2, order, pkLines };
   } else {
     // 두 번째 먼저: 두 번째를 첫째 위치로 보내고, FC를 두 번째 위치로
     // 임시로 첫째 인풋을 비-FC 기본 inp로 만들고, FC inp를 둘째에 둠
     // 단순화: order='other-first'면 tttBuildSecondInp 로직을 반대로
     const otherFirstInp = tttBuildOtherFirstInp(inp);
-    const sim1 = ttttSimulate(otherFirstInp, tankMode);
+    const sim1 = tttSimulate(otherFirstInp, tankMode);
     const fcSecondInp = tttBuildFCSecondInp(inp, sim1);
-    const sim2 = ttttSimulate(fcSecondInp, tankMode);
+    const sim2 = tttSimulate(fcSecondInp, tankMode);
     return { sim1, sim2, inp1: otherFirstInp, inp2: fcSecondInp, order, pkLines };
   }
 }
@@ -997,8 +997,8 @@ function tttPlanNarrative(inp, sim, slots) {
 }
 
 // ── 메인 렌더링 ──────────────────────────────────────────
-function ttttRender() {
-  let inp = ttttGetInputs();
+function tttRender() {
+  let inp = tttGetInputs();
   const dualMode = tttIsDualMode();
   let dualResult = null;  // {sim1, sim2, inp1, inp2, order, pkLines}
   if (dualMode) {
@@ -1008,12 +1008,12 @@ function ttttRender() {
     // (best 선정 자체는 첫째 기준)
     const userMode = window.tttSelectedTankMode || null;
     if (userMode) {
-      dualResult = ttttSimulateDual(inp, userMode);
+      dualResult = tttSimulateDual(inp, userMode);
     } else {
       // 3 mode 다 시뮬해서 best
-      const dA = ttttSimulateDual(inp, 'A');
-      const dB = ttttSimulateDual(inp, 'B');
-      const dE = ttttSimulateDual(inp, 'E');
+      const dA = tttSimulateDual(inp, 'A');
+      const dB = tttSimulateDual(inp, 'B');
+      const dE = tttSimulateDual(inp, 'E');
       // dual best: 두 번째 sim retortEndMin 빠른 것 (전체 종료)
       const candidates = [['A',dA],['B',dB],['E',dE]];
       candidates.sort((a,b) => a[1].sim2.retortEndMin - b[1].sim2.retortEndMin);
@@ -1036,9 +1036,9 @@ function ttttRender() {
     return;
   }
   // ★ 3가지 자숙 탱크 분배 방식 자동 시뮬 → 사용자가 선택하거나 베스트 자동
-  const tankSimA = ttttSimulate(inp, 'A');
-  const tankSimB = ttttSimulate(inp, 'B');
-  const tankSimE = ttttSimulate(inp, 'E');
+  const tankSimA = tttSimulate(inp, 'A');
+  const tankSimB = tttSimulate(inp, 'B');
+  const tankSimE = tttSimulate(inp, 'E');
   const tankResults = [
     { mode: 'A', name: '잔량 먼저 시작', desc: '작은 수량 1호 → 800kg씩 나머지 (자숙·파쇄 빨리)', sim: tankSimA },
     { mode: 'B', name: 'N등분 균등', desc: '총량 ÷ 탱크수 = 모든 탱크 동일량', sim: tankSimB },
@@ -1356,7 +1356,7 @@ function ttttRender() {
   const editYield = (id, val, autoVal, n) => `
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
       <input type="number" step="0.1" value="${val}" 
-        oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttttRender()"
+        oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';tttRender()"
         style="width:70px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
       <div style="font-size:9px;color:var(--color-text-tertiary)">자동: ${autoVal}${n!==undefined?` (n=${n})`:''}</div>
     </div>`;
@@ -1364,7 +1364,7 @@ function ttttRender() {
     <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
       <div style="display:flex;align-items:center;gap:4px">
         <input type="number" step="0.1" value="${val}"
-          oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttttRender()"
+          oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';tttRender()"
           style="width:60px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
         <span style="font-size:10px;color:var(--color-text-secondary)">${unit}</span>
       </div>
@@ -1705,4 +1705,493 @@ function ttttRender() {
       });
     });
   }, 0);
+}
+
+// ============================================================
+// 수동 시나리오 모드 (Manual Scenario) - FP + FC 동시 작업 정밀 시뮬
+// ============================================================
+//
+// 모델:
+// - 전처리·파쇄: 라인 1개 (시간 순차)
+// - 자숙: FP는 가압 5호, FC는 일반 1·2호 (탱크 분리)
+// - 내포장: 라인 1개 (시간 순차), 한 라인당 이송 2명 자동
+// - 레토르트: 3대, 1대당 회차 최대 4대차, 회차 150분, B룰(회차마다 비어있는 호)
+// - 시간: FP 자숙 150분 + 와건 30분 = 180분. FC 자숙 240분 + 와건 30분 = 270분
+// ============================================================
+
+const TTM_FIXED = {
+  preprocessLines: 1,
+  crushLines: 1,
+  packingLines: 1,
+  retortMachines: 3,
+  retortCartsPerCycle: 4,
+  retortCycleMin: 150,
+  fpCookMin: 150,  // FP 자숙
+  fcCookMin: 240,  // FC 자숙
+  cookWagonMin: 30, // 와건 (자숙 후 출하 준비)
+  packTransfer: 2,  // 내포장 1라인당 이송 인원
+};
+
+// FP 시나리오 입력 구성 (실제 데이터 또는 사용자 입력)
+function ttmGetScenario() {
+  // 사용자 입력에서 기본값 가져옴
+  const startTime = document.getElementById('ttt-start')?.value || '05:00';
+  const startMin = tttToMin(startTime);
+
+  // FP (두 번째 제품) 입력
+  const meatType2 = document.getElementById('ttt-meat2')?.value || 'sig';
+  const fpInfo = {
+    sig:    { name: '시그니처 130g', kgPerEa: 0.025, eaPerCart: 800,  packEaMin: 22 },
+    trader: { name: '트레이더스 460g', kgPerEa: 0.147, eaPerCart: 2000, packEaMin: 16 },
+    mini:   { name: '미니 70g',     kgPerEa: 0.024, eaPerCart: 700,  packEaMin: 24 },
+  }[meatType2] || { name: '시그니처 130g', kgPerEa: 0.025, eaPerCart: 800, packEaMin: 22 };
+
+  const fpKg = parseFloat(document.getElementById('ttt-kg2')?.value) || 200;
+  const fcKg = parseFloat(document.getElementById('ttt-meat-kg')?.value) || 1200;
+
+  // 수율·생산성 (분석 자동값 우선)
+  const fpYpre = TTT_AUTO_OTHER.yPre.val;
+  const fpYcook = TTT_COOK_YIELD_DEFAULT['우둔'] || 55.0;
+  const fpYcrush = TTT_AUTO_OTHER.yCrush.val;
+  const fpPpre = TTT_AUTO_OTHER.pPre.val;
+  const fpPcrush = TTT_AUTO_OTHER.pCrush.val;
+
+  const fcYpre = TTT_AUTO.yPre.val;
+  const fcYcook = TTT_AUTO.yCook.val || 56.8;
+  const fcYcrush = TTT_AUTO.yCrush.val;
+  const fcPpre = TTT_AUTO.pPre.val;
+  const fcPcrush = TTT_AUTO.pCrush.val;
+
+  return {
+    startMin,
+    fp: { kg: fpKg, info: fpInfo, yPre: fpYpre, yCook: fpYcook, yCrush: fpYcrush, pPre: fpPpre, pCrush: fpPcrush },
+    fc: { kg: fcKg, kgPerEa: TTT_PACK_KG_PER_POUCH, eaPerCart: 96, packEaMin: 3.9, yPre: fcYpre, yCook: fcYcook, yCrush: fcYcrush, pPre: fcPpre, pCrush: fcPcrush },
+  };
+}
+
+// 인원 배분 기본값 (사용자 수정 가능)
+function ttmDefaultWorkers() {
+  return {
+    preFp: 7,   // FP 전처리 인원 (조출 외국인)
+    preFc: 7,   // FC 전처리 인원 (외국인)
+    crushFp: 13, // FP 파쇄 (외국인 + 일부)
+    crushFc: 18, // FC 파쇄 (풀가동)
+    packFp: 6,   // FP 내포장
+    packFc: 6,   // FC 내포장
+    // 이송은 자동 (내포장 라인당 2명)
+  };
+}
+
+// 시나리오 시뮬: 시각별 작업 단위 배치
+function ttmSimulate(scen, workers) {
+  const r2 = n => Math.round(n);
+  const round1 = n => Math.round(n*10)/10;
+
+  // === FP 공정 시간 계산 ===
+  const fpPreIn = scen.fp.kg;
+  const fpPreOut = fpPreIn * scen.fp.yPre / 100;
+  const fpCookIn = fpPreOut;
+  const fpCookOut = fpCookIn * scen.fp.yCook / 100;
+  const fpCrushIn = fpCookOut;
+  const fpCrushOut = fpCrushIn * scen.fp.yCrush / 100;
+  const fpPackIn = fpCrushOut;
+  // 시그니처는 추가 부재료 (메추리알, 소스, 파우치)로 산출이 더 큼 → 보수적으로 파쇄육 기준
+  const fpEa = Math.floor(fpPackIn / scen.fp.info.kgPerEa);
+
+  const fpPreMin = Math.ceil(fpPreIn / (scen.fp.pPre * workers.preFp) * 60);
+  const fpCrushMin = Math.ceil(fpCrushIn / (scen.fp.pCrush * workers.crushFp) * 60);
+  const fpPackMin = Math.ceil(fpEa / (scen.fp.info.packEaMin * workers.packFp / 6));
+    // (packEaMin은 6명 기준이라 인원 비례 조정)
+
+  // === FC 공정 시간 계산 ===
+  const fcPreIn = scen.fc.kg;
+  const fcPreOut = fcPreIn * scen.fc.yPre / 100;
+  const fcCookIn = fcPreOut;
+  const fcCookOut = fcCookIn * scen.fc.yCook / 100;
+  const fcCrushIn = fcCookOut;
+  const fcCrushOut = fcCrushIn * scen.fc.yCrush / 100;
+  const fcPackIn = fcCrushOut;
+  const fcEa = Math.floor(fcPackIn / scen.fc.kgPerEa);
+
+  const fcPreMin = Math.ceil(fcPreIn / (scen.fc.pPre * workers.preFc) * 60);
+  const fcCrushMin = Math.ceil(fcCrushIn / (scen.fc.pCrush * workers.crushFc) * 60);
+  const fcPackMin = Math.ceil(fcEa / (scen.fc.packEaMin * workers.packFc / 6));
+
+  // === FC 자숙 탱크 분배 (1탱크 800kg 한도) ===
+  const fcTankKg = 800;
+  const fcTanks = [];
+  let remain = fcCookIn;
+  while (remain > 0) {
+    fcTanks.push(Math.min(fcTankKg, remain));
+    remain -= fcTankKg;
+  }
+  // 시간 = FC 자숙 + 와건 (탱크 평행 진행 가정)
+  const fcCookFullMin = TTM_FIXED.fcCookMin + TTM_FIXED.cookWagonMin;
+  const fpCookFullMin = TTM_FIXED.fpCookMin + TTM_FIXED.cookWagonMin;
+
+  // === 타임라인 배치 (FP 먼저) ===
+  const t0 = scen.startMin;
+  // FP 전처리
+  const fpPre = { s: t0, e: t0 + fpPreMin };
+  // FC 전처리 (FP 전처리 끝나면)
+  const fcPre = { s: fpPre.e, e: fpPre.e + fcPreMin };
+  // FP 자숙 (가압 5호, FP 전처리 끝나면)
+  const fpCook = { s: fpPre.e, e: fpPre.e + fpCookFullMin, tank: 5 };
+  // FC 자숙 (1·2호, FC 전처리 끝나면 평행)
+  const fcCook = fcTanks.map((kg, i) => ({
+    s: fcPre.e, e: fcPre.e + fcCookFullMin, tank: i + 1, kg: r2(kg)
+  }));
+  // FP 파쇄 (FP 자숙 끝나면)
+  const fpCrush = { s: fpCook.e, e: fpCook.e + fpCrushMin };
+  // FC 파쇄 (FC 자숙 모두 끝나면 + FP 파쇄 끝나면)
+  const fcCookEnd = Math.max(...fcCook.map(c => c.e));
+  const fcCrushStart = Math.max(fcCookEnd, fpCrush.e);
+  const fcCrush = { s: fcCrushStart, e: fcCrushStart + fcCrushMin };
+  // FP 내포장 (FP 파쇄 끝나면)
+  const fpPack = { s: fpCrush.e, e: fpCrush.e + fpPackMin };
+  // FC 내포장 (FC 파쇄 끝나면 + FP 내포장 끝나면)
+  const fcPackStart = Math.max(fcCrush.e, fpPack.e);
+  const fcPack = { s: fcPackStart, e: fcPackStart + fcPackMin };
+
+  // === 레토르트 회차 분배 ===
+  // FP: eaPerCart, 4대차/회차 → 회차 수
+  const fpCarts = fpEa / scen.fp.info.eaPerCart;
+  const fpCycles = Math.ceil(fpCarts / TTM_FIXED.retortCartsPerCycle);
+  const fpCycleList = [];
+  for (let i = 0; i < fpCycles; i++) {
+    const cartsThis = Math.min(TTM_FIXED.retortCartsPerCycle, fpCarts - i * TTM_FIXED.retortCartsPerCycle);
+    fpCycleList.push({ carts: round1(cartsThis), ea: r2(Math.min(fpEa - i * TTM_FIXED.retortCartsPerCycle * scen.fp.info.eaPerCart, TTM_FIXED.retortCartsPerCycle * scen.fp.info.eaPerCart)) });
+  }
+  // 각 회차 시작: 4대차 채워지는 시각 (대차당 EA ÷ 분당 EA = 분/대차)
+  const fpCartMin = scen.fp.info.eaPerCart / (scen.fp.info.packEaMin * workers.packFp / 6);
+  // FP 회차 1: 4대차 모이면 시작 (또는 마지막 회차면 내포장 끝)
+  // 단순화: 회차 i 시작 = max(내포장 시작 + (i*4 대차 분) , 호 비는 시각)
+  // 호 배정 B룰: 회차마다 비어있는 호 (1호 → 2호 → 3호 → 1호 ...)
+  const retortBusy = [0, 0, 0]; // 1호, 2호, 3호 각각 비는 시각
+  const fpRetort = [];
+  for (let i = 0; i < fpCycleList.length; i++) {
+    const fillTime = fpPack.s + Math.ceil(fpCartMin * (i+1) * TTM_FIXED.retortCartsPerCycle);
+    const lastCycle = (i === fpCycleList.length - 1);
+    const startReady = lastCycle ? fpPack.e : Math.min(fillTime, fpPack.e);
+    // 가장 빨리 비는 호
+    let host = 0;
+    for (let h = 1; h < 3; h++) if (retortBusy[h] < retortBusy[host]) host = h;
+    const start = Math.max(startReady, retortBusy[host]);
+    const end = start + TTM_FIXED.retortCycleMin;
+    retortBusy[host] = end;
+    fpRetort.push({ s: start, e: end, host: host+1, carts: fpCycleList[i].carts, ea: fpCycleList[i].ea });
+  }
+
+  // FC 회차
+  const fcCarts = fcEa / scen.fc.eaPerCart;
+  const fcCycles = Math.ceil(fcCarts / TTM_FIXED.retortCartsPerCycle);
+  const fcCycleList = [];
+  for (let i = 0; i < fcCycles; i++) {
+    const cartsThis = Math.min(TTM_FIXED.retortCartsPerCycle, fcCarts - i * TTM_FIXED.retortCartsPerCycle);
+    fcCycleList.push({ carts: round1(cartsThis), ea: r2(Math.min(fcEa - i * TTM_FIXED.retortCartsPerCycle * scen.fc.eaPerCart, TTM_FIXED.retortCartsPerCycle * scen.fc.eaPerCart)) });
+  }
+  const fcCartMin = scen.fc.eaPerCart / (scen.fc.packEaMin * workers.packFc / 6);
+  const fcRetort = [];
+  for (let i = 0; i < fcCycleList.length; i++) {
+    const fillTime = fcPack.s + Math.ceil(fcCartMin * (i+1) * TTM_FIXED.retortCartsPerCycle);
+    const lastCycle = (i === fcCycleList.length - 1);
+    const startReady = lastCycle ? fcPack.e : Math.min(fillTime, fcPack.e);
+    let host = 0;
+    for (let h = 1; h < 3; h++) if (retortBusy[h] < retortBusy[host]) host = h;
+    const start = Math.max(startReady, retortBusy[host]);
+    const end = start + TTM_FIXED.retortCycleMin;
+    retortBusy[host] = end;
+    fcRetort.push({ s: start, e: end, host: host+1, carts: fcCycleList[i].carts, ea: fcCycleList[i].ea });
+  }
+
+  // 전체 종료 시각
+  const endMin = Math.max(...retortBusy, fpPack.e, fcPack.e);
+
+  return {
+    fp: { pre: fpPre, cook: fpCook, crush: fpCrush, pack: fpPack, retort: fpRetort, kg: fpPreIn, ea: fpEa, packIn: fpPackIn },
+    fc: { pre: fcPre, cook: fcCook, crush: fcCrush, pack: fcPack, retort: fcRetort, kg: fcPreIn, ea: fcEa, packIn: fcPackIn, tanks: fcTanks },
+    endMin,
+  };
+}
+
+// ============================================================
+// 행 분리 SVG 렌더 (한 행 = 한 작업 단위)
+// ============================================================
+function ttmRenderTimeline(scen, workers, sim) {
+  const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const fpName = scen.fp.info.name;
+
+  // 행 데이터 정렬 (위에서 아래로)
+  const rows = [];
+  rows.push({ label: '전처리',    color: '#7F77DD', s: sim.fp.pre.s,   e: sim.fp.pre.e,   text: `${fpName} ${scen.fp.kg}kg · ${workers.preFp}명` });
+  rows.push({ label: '전처리 1',  color: '#185FA5', s: sim.fc.pre.s,   e: sim.fc.pre.e,   text: `FC ${scen.fc.kg}kg · ${workers.preFc}명` });
+  rows.push({ label: '자숙',      color: '#5DCAA5', s: sim.fp.cook.s,  e: sim.fp.cook.e,  text: `${fpName} · 5호(가압) · 180분` });
+  sim.fc.cook.forEach((c, i) => {
+    rows.push({ label: `자숙 ${i+1}`, color: '#0F6E56', s: c.s, e: c.e, text: `FC · ${c.tank}호 · ${c.kg}kg · 270분` });
+  });
+  rows.push({ label: '파쇄',      color: '#7F77DD', s: sim.fp.crush.s, e: sim.fp.crush.e, text: `${fpName} · ${workers.crushFp}명` });
+  rows.push({ label: '파쇄 1',    color: '#BA7517', s: sim.fc.crush.s, e: sim.fc.crush.e, text: `FC · ${workers.crushFc}명` });
+  rows.push({ label: '내포장',    color: '#7F77DD', s: sim.fp.pack.s,  e: sim.fp.pack.e,  text: `${fpName} ${sim.fp.ea}EA · ${workers.packFp}명+이송2` });
+  rows.push({ label: '내포장 1',  color: '#534AB7', s: sim.fc.pack.s,  e: sim.fc.pack.e,  text: `FC ${sim.fc.ea}EA · ${workers.packFc}명+이송2` });
+  sim.fp.retort.forEach((r, i) => {
+    rows.push({ label: i===0?'레토르트':`레토르트 ${rows.filter(x=>x.label.startsWith('레토르트')).length}`, color: '#993556', s: r.s, e: r.e, text: `${fpName} ${r.host}호 · ${r.carts}대차 · ${r.ea}EA` });
+  });
+  sim.fc.retort.forEach((r) => {
+    const retIdx = rows.filter(x=>x.label.startsWith('레토르트')).length;
+    rows.push({ label: `레토르트 ${retIdx}`, color: '#A32D2D', s: r.s, e: r.e, text: `FC ${r.host}호 · ${r.carts}대차 · ${r.ea}EA` });
+  });
+
+  // 타임축
+  const tMin = Math.min(...rows.map(r => r.s));
+  const tMax = sim.endMin + 30;
+  const span = Math.max(1, tMax - tMin);
+  const SVG_W = 1100, LEFT = 110, RIGHT = 1080;
+  const xPos = m => LEFT + (m - tMin) / span * (RIGHT - LEFT);
+  const ROW_H = 28, BAR_H = 22;
+
+  let ticks = '', grid = '';
+  for (let h = Math.floor(tMin/60); h <= Math.ceil(tMax/60); h += 1) {
+    const x = xPos(h*60);
+    if (x >= LEFT && x <= RIGHT + 10) {
+      ticks += `<text x="${x}" y="20" text-anchor="middle" font-size="11" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
+      grid += `<line x1="${x}" y1="28" x2="${x}" y2="${36 + rows.length*ROW_H + 40}" stroke="#e5e3da" stroke-width="0.5" stroke-dasharray="2 3"/>`;
+    }
+  }
+  // 점심 영역
+  const lunchBg = `
+    <rect x="${xPos(11*60+30)}" y="28" width="${xPos(12*60+30)-xPos(11*60+30)}" height="${rows.length*ROW_H + 20}" fill="#FFF7ED" opacity="0.5"/>
+    <rect x="${xPos(12*60+30)}" y="28" width="${xPos(13*60+30)-xPos(12*60+30)}" height="${rows.length*ROW_H + 20}" fill="#FFF7ED" opacity="0.3"/>`;
+
+  // 막대
+  let bars = '';
+  rows.forEach((r, i) => {
+    const y = 36 + i * ROW_H;
+    const x1 = xPos(r.s), x2 = xPos(r.e);
+    const w = Math.max(x2 - x1, 4);
+    bars += `<text x="${LEFT-8}" y="${y+BAR_H/2+4}" text-anchor="end" font-size="12" fill="var(--color-text-secondary)" font-weight="500">${r.label}</text>`;
+    bars += `<rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="3" fill="${r.color}"/>`;
+    bars += `<text x="${x1 + w/2}" y="${y+BAR_H/2+4}" text-anchor="middle" font-size="10.5" fill="#fff" font-weight="500" pointer-events="none">${fmt(r.s)}-${fmt(r.e)}</text>`;
+    bars += `<text x="${x2 + 6}" y="${y+BAR_H/2+4}" text-anchor="start" font-size="10" fill="${r.color}">${r.text}</text>`;
+  });
+
+  // 종료 선
+  bars += `
+    <line x1="${xPos(sim.endMin)}" y1="28" x2="${xPos(sim.endMin)}" y2="${36 + rows.length*ROW_H}" stroke="#A32D2D" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.7"/>
+    <text x="${xPos(sim.endMin)}" y="${36 + rows.length*ROW_H + 16}" text-anchor="middle" font-size="11" fill="#A32D2D" font-weight="600">${fmt(sim.endMin)} 종료</text>`;
+
+  const svgH = 36 + rows.length * ROW_H + 30;
+  return `
+    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img">
+      ${lunchBg}${ticks}${grid}${bars}
+    </svg>`;
+}
+
+// ============================================================
+// 인원표 (시간 슬롯 × 공정, 수정 가능)
+// ============================================================
+function ttmRenderWorkers(workers) {
+  const totalWorkers = parseInt(document.getElementById('ttt-total-workers')?.value) || 28;
+  const mgr = parseInt(document.getElementById('ttt-mgr-count')?.value) || 2;
+  return `
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-top:14px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">👥 공정별 인원 (수정 시 시간 재계산)</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">총원 ${totalWorkers}명 · 관리 ${mgr}명. 한 라인당 이송 2명 자동.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--color-background-secondary)">
+            <th style="padding:8px;text-align:center;border:0.5px solid var(--color-border-tertiary)">공정</th>
+            <th style="padding:8px;text-align:center;border:0.5px solid var(--color-border-tertiary)">FP (시그)</th>
+            <th style="padding:8px;text-align:center;border:0.5px solid var(--color-border-tertiary)">FC (홍두깨)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:right;font-weight:500">전처리</td>
+            <td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:center"><input type="number" id="ttm-w-pre-fp" value="${workers.preFp}" min="1" max="20" oninput="ttmOnWorkerChange()" style="width:60px;text-align:center;padding:3px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px"></td>
+            <td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:center"><input type="number" id="ttm-w-pre-fc" value="${workers.preFc}" min="1" max="20" oninput="ttmOnWorkerChange()" style="width:60px;text-align:center;padding:3px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px"></td>
+          </tr>
+          <tr><td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:right;font-weight:500">파쇄</td>
+            <td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:center"><input type="number" id="ttm-w-crush-fp" value="${workers.crushFp}" min="1" max="20" oninput="ttmOnWorkerChange()" style="width:60px;text-align:center;padding:3px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px"></td>
+            <td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:center"><input type="number" id="ttm-w-crush-fc" value="${workers.crushFc}" min="1" max="20" oninput="ttmOnWorkerChange()" style="width:60px;text-align:center;padding:3px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px"></td>
+          </tr>
+          <tr><td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:right;font-weight:500">내포장</td>
+            <td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:center"><input type="number" id="ttm-w-pack-fp" value="${workers.packFp}" min="1" max="15" oninput="ttmOnWorkerChange()" style="width:60px;text-align:center;padding:3px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px"></td>
+            <td style="padding:6px;border:0.5px solid var(--color-border-tertiary);text-align:center"><input type="number" id="ttm-w-pack-fc" value="${workers.packFc}" min="1" max="15" oninput="ttmOnWorkerChange()" style="width:60px;text-align:center;padding:3px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ============================================================
+// 상부 보고서 형식
+// ============================================================
+function ttmRenderReport(scen, workers, sim) {
+  const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const dur = m => `${Math.floor(m/60)}시간 ${m%60}분`;
+  const fpName = scen.fp.info.name;
+  const totalMin = sim.endMin - scen.startMin;
+
+  const fpRetortStr = sim.fp.retort.map((r, i) => `회차${i+1} ${fmt(r.s)}~${fmt(r.e)} (${r.host}호, ${r.carts}대차, ${r.ea.toLocaleString()}EA)`).join('<br>      ');
+  const fcRetortStr = sim.fc.retort.map((r, i) => `회차${i+1} ${fmt(r.s)}~${fmt(r.e)} (${r.host}호, ${r.carts}대차, ${r.ea.toLocaleString()}EA)`).join('<br>      ');
+
+  return `
+    <div style="background:#f8f7f3;border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:18px 22px;margin-top:14px;font-size:12.5px;line-height:1.85">
+      <div style="font-size:15px;font-weight:600;margin-bottom:12px;color:var(--color-text-primary)">📋 작업 계획 보고서</div>
+
+      <div style="font-weight:600;margin-top:10px;margin-bottom:4px;color:#185FA5">【작업 개요】</div>
+      <div>• ${fpName}: ${scen.fp.kg}kg → 약 ${sim.fp.ea.toLocaleString()} EA 생산 (예상)</div>
+      <div>• FC 장조림 3KG: ${scen.fc.kg}kg → 약 ${sim.fc.ea.toLocaleString()} EA 생산 (예상)</div>
+      <div>• 작업 시작 ${fmt(scen.startMin)} · 종료 ${fmt(sim.endMin)} · 총 ${dur(totalMin)}</div>
+
+      <div style="font-weight:600;margin-top:12px;margin-bottom:4px;color:#185FA5">【공정별 일정】</div>
+      <div>1. 전처리 (단일 라인)</div>
+      <div style="padding-left:12px">- ${fpName}: ${fmt(sim.fp.pre.s)}~${fmt(sim.fp.pre.e)} (${dur(sim.fp.pre.e - sim.fp.pre.s)}, ${workers.preFp}명)</div>
+      <div style="padding-left:12px">- FC: ${fmt(sim.fc.pre.s)}~${fmt(sim.fc.pre.e)} (${dur(sim.fc.pre.e - sim.fc.pre.s)}, ${workers.preFc}명)</div>
+
+      <div>2. 자숙 (탱크 분산)</div>
+      <div style="padding-left:12px">- ${fpName}: 가압5호 ${fmt(sim.fp.cook.s)}~${fmt(sim.fp.cook.e)} (자숙 150분 + 와건 30분)</div>
+      <div style="padding-left:12px">- FC: ${sim.fc.cook.map(c => `${c.tank}호`).join('·')} 평행 ${fmt(sim.fc.cook[0].s)}~${fmt(sim.fc.cook[0].e)} (자숙 240분 + 와건 30분)</div>
+
+      <div>3. 파쇄 (단일 라인)</div>
+      <div style="padding-left:12px">- ${fpName}: ${fmt(sim.fp.crush.s)}~${fmt(sim.fp.crush.e)} (${dur(sim.fp.crush.e - sim.fp.crush.s)}, ${workers.crushFp}명)</div>
+      <div style="padding-left:12px">- FC: ${fmt(sim.fc.crush.s)}~${fmt(sim.fc.crush.e)} (${dur(sim.fc.crush.e - sim.fc.crush.s)}, ${workers.crushFc}명)</div>
+
+      <div>4. 내포장 (1라인 + 이송 2명)</div>
+      <div style="padding-left:12px">- ${fpName}: ${fmt(sim.fp.pack.s)}~${fmt(sim.fp.pack.e)} (${dur(sim.fp.pack.e - sim.fp.pack.s)}, ${workers.packFp}명+이송2)</div>
+      <div style="padding-left:12px">- FC: ${fmt(sim.fc.pack.s)}~${fmt(sim.fc.pack.e)} (${dur(sim.fc.pack.e - sim.fc.pack.s)}, ${workers.packFc}명+이송2)</div>
+
+      <div>5. 레토르트 (3대 운영, 1대당 4대차 한도)</div>
+      <div style="padding-left:12px">- ${fpName}: ${fpRetortStr}</div>
+      <div style="padding-left:12px">- FC: ${fcRetortStr}</div>
+
+      <div style="font-weight:600;margin-top:12px;margin-bottom:4px;color:#185FA5">【주요 시점】</div>
+      <div>• ${fmt(sim.fp.pack.e)} ${fpName} 내포장 완료</div>
+      <div>• ${fmt(sim.fp.retort[sim.fp.retort.length-1].e)} ${fpName} 작업 완전 종료 (레토르트 포함)</div>
+      <div>• ${fmt(sim.fc.pack.e)} FC 내포장 완료</div>
+      <div>• <strong>${fmt(sim.endMin)} 전체 종료</strong></div>
+
+      <div style="font-weight:600;margin-top:12px;margin-bottom:4px;color:#185FA5">【생산성 지표 (예상)】</div>
+      <div>• ${fpName}: ${sim.fp.ea.toLocaleString()} EA</div>
+      <div>• FC: ${sim.fc.ea.toLocaleString()} EA</div>
+      <div>• 총 산출: ${(sim.fp.ea + sim.fc.ea).toLocaleString()} EA</div>
+    </div>`;
+}
+
+// ============================================================
+// 인원 변경 시 재계산
+// ============================================================
+function ttmOnWorkerChange() {
+  ttmRender();
+}
+
+// 현재 인원 입력 읽기
+function ttmGetCurrentWorkers() {
+  const get = (id, def) => {
+    const v = parseInt(document.getElementById(id)?.value);
+    return isFinite(v) && v > 0 ? v : def;
+  };
+  const def = ttmDefaultWorkers();
+  return {
+    preFp: get('ttm-w-pre-fp', def.preFp),
+    preFc: get('ttm-w-pre-fc', def.preFc),
+    crushFp: get('ttm-w-crush-fp', def.crushFp),
+    crushFc: get('ttm-w-crush-fc', def.crushFc),
+    packFp: get('ttm-w-pack-fp', def.packFp),
+    packFc: get('ttm-w-pack-fc', def.packFc),
+  };
+}
+
+// 시나리오 모드 메인 렌더 (탭 자체는 기존 result 영역에 그림)
+function ttmRender() {
+  try {
+    const scen = ttmGetScenario();
+    const workers = ttmGetCurrentWorkers();
+    const sim = ttmSimulate(scen, workers);
+    const html = `
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;margin-top:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:14px;font-weight:600">📅 시나리오 타임라인</div>
+          <button onclick="ttmDownloadExcel()" style="background:#185FA5;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">📥 엑셀 다운로드</button>
+        </div>
+        ${ttmRenderTimeline(scen, workers, sim)}
+      </div>
+      ${ttmRenderWorkers(workers)}
+      ${ttmRenderReport(scen, workers, sim)}`;
+    const out = document.getElementById('ttm-output');
+    if (out) out.innerHTML = html;
+  } catch (e) {
+    console.error('[ttm] render error:', e);
+    const out = document.getElementById('ttm-output');
+    if (out) out.innerHTML = `<div style="color:#A32D2D;padding:20px">시뮬 오류: ${e.message}</div>`;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.ttmRender = ttmRender;
+  window.ttmOnWorkerChange = ttmOnWorkerChange;
+}
+
+// ============================================================
+// 엑셀 다운로드 (수식 포함 — 엑셀에서 인원 바꾸면 시간 자동 계산)
+// ============================================================
+function ttmDownloadExcel() {
+  const scen = ttmGetScenario();
+  const workers = ttmGetCurrentWorkers();
+  const sim = ttmSimulate(scen, workers);
+
+  // CSV 대신 SpreadsheetML (xls) 또는 단순 CSV with formulas
+  // 간단히: 인원 셀(B열) + 시간 계산 수식(C·D·E열) 박은 표
+  // Excel은 CSV 안의 수식도 인식. ="=" prefix로 강제
+
+  const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const round1 = n => Math.round(n*10)/10;
+
+  // CSV 형식 (UTF-8 BOM, 엑셀 친화)
+  // 행: 공정, 제품, 원육량, 인원, 생산성, 소요시간(수식), 시작, 종료
+  const sep = ',';
+  const lines = [];
+  lines.push(['공정','제품','원육량(kg)','EA','인원','수율(%)','생산성','소요(분)','시작','종료'].join(sep));
+
+  // FP 전처리
+  lines.push(['전처리', scen.fp.info.name, scen.fp.kg, '-', workers.preFp, scen.fp.yPre, scen.fp.pPre + ' kg/인시', `=CEILING(C2*60/(G2*E2)*1,1)`, fmt(sim.fp.pre.s), fmt(sim.fp.pre.e)].join(sep));
+  // FC 전처리
+  lines.push(['전처리 1', 'FC 장조림 3KG', scen.fc.kg, '-', workers.preFc, scen.fc.yPre, scen.fc.pPre + ' kg/인시', `=CEILING(C3*60/(G3*E3)*1,1)`, fmt(sim.fc.pre.s), fmt(sim.fc.pre.e)].join(sep));
+  // FP 자숙
+  lines.push(['자숙', scen.fp.info.name, sim.fp.packIn ? round1(scen.fp.kg * scen.fp.yPre / 100) : '-', '-', '자동', scen.fp.yCook, '-', '180 (150+와건30)', fmt(sim.fp.cook.s), fmt(sim.fp.cook.e)].join(sep));
+  // FC 자숙
+  sim.fc.cook.forEach((c, i) => {
+    lines.push([`자숙 ${i+1}`, 'FC 장조림 3KG', c.kg, '-', '자동', scen.fc.yCook, '-', '270 (240+와건30)', fmt(c.s), fmt(c.e)].join(sep));
+  });
+  // FP 파쇄
+  lines.push(['파쇄', scen.fp.info.name, round1(sim.fp.kg * scen.fp.yPre/100 * scen.fp.yCook/100), '-', workers.crushFp, scen.fp.yCrush, scen.fp.pCrush + ' kg/인시', '계산', fmt(sim.fp.crush.s), fmt(sim.fp.crush.e)].join(sep));
+  // FC 파쇄
+  lines.push(['파쇄 1', 'FC 장조림 3KG', round1(sim.fc.kg * scen.fc.yPre/100 * scen.fc.yCook/100), '-', workers.crushFc, scen.fc.yCrush, scen.fc.pCrush + ' kg/인시', '계산', fmt(sim.fc.crush.s), fmt(sim.fc.crush.e)].join(sep));
+  // FP 내포장
+  lines.push(['내포장', scen.fp.info.name, '-', sim.fp.ea, workers.packFp + '+이송2', '-', scen.fp.info.packEaMin + ' EA/분', '계산', fmt(sim.fp.pack.s), fmt(sim.fp.pack.e)].join(sep));
+  // FC 내포장
+  lines.push(['내포장 1', 'FC 장조림 3KG', '-', sim.fc.ea, workers.packFc + '+이송2', '-', scen.fc.packEaMin + ' EA/분', '계산', fmt(sim.fc.pack.s), fmt(sim.fc.pack.e)].join(sep));
+  // FP 레토르트
+  sim.fp.retort.forEach((r, i) => {
+    lines.push([(i===0?'레토르트':`레토르트 ${i+1}`), scen.fp.info.name, '-', r.ea, `${r.host}호`, '-', `${r.carts}대차`, '150', fmt(r.s), fmt(r.e)].join(sep));
+  });
+  // FC 레토르트
+  const fpRetortCount = sim.fp.retort.length;
+  sim.fc.retort.forEach((r, i) => {
+    lines.push([`레토르트 ${fpRetortCount + i + 1 - (fpRetortCount===0?1:0)}`, 'FC 장조림 3KG', '-', r.ea, `${r.host}호`, '-', `${r.carts}대차`, '150', fmt(r.s), fmt(r.e)].join(sep));
+  });
+
+  const csv = '\uFEFF' + lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `타임테이블_시나리오_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+if (typeof window !== 'undefined') {
+  window.ttmDownloadExcel = ttmDownloadExcel;
 }
