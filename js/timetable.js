@@ -293,8 +293,16 @@ async function ttAutoAnalyze() {
     if (ckInY > 0) TT_AUTO.yCook = { val: +(ckOutY/ckInY*100).toFixed(1), n: ckN };
     else TT_AUTO.yCook = { val: TT_COOK_YIELD_DEFAULT[meatType] || 56.8, n: 0 };
 
-    if (crYldDen > 0) TT_AUTO.yCrush = { val: +(crYldNum/crYldDen*100).toFixed(1), n: crN };
-    else TT_AUTO.yCrush = { ...TT_AUTO.yCrush, n: crN };
+    // 파쇄 수율 = 단계수율 (시뮬 식 crushOut = crushIn × yCrush / 100과 일치)
+    // 단계수율은 같은 레코드 안의 kg/kgIn이라 진행 중인 날에도 정확함
+    // 원육기준 누적수율은 참고용으로 별도 보관 (valOrig)
+    if (crInP > 0) {
+      const stageYld = +(crInPOut/crInP*100).toFixed(1);
+      const origYld = crYldDen > 0 ? +(crYldNum/crYldDen*100).toFixed(1) : null;
+      TT_AUTO.yCrush = { val: stageYld, valOrig: origYld, n: crN };
+    } else {
+      TT_AUTO.yCrush = { ...TT_AUTO.yCrush, n: crN };
+    }
 
     // pPre.val=투입 기준 (전처리 표준), pCrush.val=산출 기준 (파쇄 표준)
     // (참고 필드 — 라벨에 같이 표시: pPre.valOut=산출, pCrush.valIn=투입)
@@ -376,7 +384,18 @@ function ttFillAutoValues() {
     el.textContent = info.n > 0 ? `자동: ${info.val} (n=${info.n})` : `자동: ${info.val} · 데이터 없음`;
   };
   lab('tt-y-pre-auto', TT_AUTO.yPre);
-  lab('tt-y-crush-auto', TT_AUTO.yCrush);
+  // 파쇄 수율: 공정수율(val)이 표준 + 원육기준(valOrig)은 참고용
+  {
+    const el = document.getElementById('tt-y-crush-auto');
+    if (el) {
+      const i = TT_AUTO.yCrush;
+      if (i.n > 0 && i.valOrig != null) {
+        el.textContent = `자동: 공정 ${i.val}% / 원육기준 ${i.valOrig}% (n=${i.n})`;
+      } else {
+        el.textContent = i.n > 0 ? `자동: ${i.val} (n=${i.n})` : `자동: ${i.val} · 데이터 없음`;
+      }
+    }
+  }
   // 전처리 생산성: 투입 기준이 표준 (val), 산출도 참고용으로 같이 표시
   {
     const el = document.getElementById('tt-p-pre-auto');
