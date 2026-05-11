@@ -332,7 +332,7 @@ async function ttPeriodChange() {
 
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
 function ttSimulate(inp, tankMode) {
-  // tankMode: 'A' (1호 가득 + 잔량 - 현재), 'B' (N등분 균등), 'E' (1호 작게 빨리시작 + 나머지 균등)
+  // tankMode: 'A' (잔량 먼저 + 800kg씩 - 자숙·파쇄 빨리 시작), 'B' (N등분 균등), 'E' (1호 작게 빨리시작 + 나머지 균등)
   tankMode = tankMode || 'A';
   const startMin = ttToMin(inp.startTime);
   const joinMin = ttToMin(inp.joinTime);
@@ -360,11 +360,14 @@ function ttSimulate(inp, tankMode) {
   const cookCycles = Math.max(1, Math.ceil(cookIn / TT_FIXED.tankKg));
   let tankKgs;  // 각 탱크 자숙 산출 량 (= 자숙 투입 - 자숙수율 손실 후)... 정확히는 자숙 투입량
   if (tankMode === 'A') {
-    // 1호 가득 → 마지막에 잔량
+    // 잔량 먼저 → 1호 가득 (작은 수량 먼저 시작해서 자숙·파쇄 빨리 시작)
     tankKgs = [];
-    for (let i = 0; i < cookCycles; i++) {
-      const isLast = i === cookCycles - 1;
-      tankKgs.push(isLast ? Math.max(0, cookIn - i * TT_FIXED.tankKg) : TT_FIXED.tankKg);
+    const remainder = Math.max(0, cookIn - (cookCycles - 1) * TT_FIXED.tankKg);
+    if (cookCycles === 1) {
+      tankKgs = [cookIn];
+    } else {
+      tankKgs.push(remainder);
+      for (let i = 1; i < cookCycles; i++) tankKgs.push(TT_FIXED.tankKg);
     }
   } else if (tankMode === 'B') {
     // N등분 균등
@@ -753,7 +756,7 @@ function ttRender() {
   const tankSimB = ttSimulate(inp, 'B');
   const tankSimE = ttSimulate(inp, 'E');
   const tankResults = [
-    { mode: 'A', name: '1호 가득 채우기', desc: '1호 750kg + 잔량 마지막 (현재)', sim: tankSimA },
+    { mode: 'A', name: '잔량 먼저 시작', desc: '작은 수량 1호 → 800kg씩 나머지 (자숙·파쇄 빨리)', sim: tankSimA },
     { mode: 'B', name: 'N등분 균등', desc: '총량 ÷ 탱크수 = 모든 탱크 동일량', sim: tankSimB },
     { mode: 'E', name: '1호 작게 빨리시작', desc: '1호 510kg(외국인 1.5h) + 나머지 균등', sim: tankSimE },
   ];
