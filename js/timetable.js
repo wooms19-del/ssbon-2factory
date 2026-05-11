@@ -195,15 +195,20 @@ async function ttAutoAnalyze() {
       preN++;
     });
 
-    // 전처리 공정수율 분모: thawing 중 end가 분석 기간 내이고 type 일치하는 totalKg 합
-    // (preprocess.date와 thawing.end 일치, type 일치 → 해당 작업의 해동 원물)
+    // 전처리 공정수율 분모: thawing 중 type 일치 + end가 분석 기간 내
+    // end 형식 호환 (일별요약 _endsOnDay 로직):
+    //  - datetime 'YYYY-MM-DD HH:MM' → end 첫 10글자 사용
+    //  - 옛 형식 'HH:MM'             → thawing.date 사용
+    //  - 비어있음                     → 진행중 제외
     let preRmKg = 0;
     thawDocs.forEach(d => {
       const r = d.data();
       const endStr = String(r.end||'');
       if (!endStr) return; // 진행중 제외
-      const endDate = endStr.slice(0,10);
-      if (!inRange(endDate)) return;
+      let endDate;
+      if (endStr.length >= 10 && endStr[4]==='-') endDate = endStr.slice(0,10);
+      else endDate = String(r.date||'').slice(0,10); // 옛 'HH:MM' 형식 → date 사용
+      if (!endDate || !inRange(endDate)) return;
       if ((r.type||'') !== meatType) return;
       preRmKg += +r.totalKg||0;
     });
@@ -352,14 +357,16 @@ async function ttAutoAnalyze() {
         oPrePH += wk * (m/60);
         oPreN++;
       });
-      // 다른 type의 thawing 합 (end가 분석 기간 내)
+      // 다른 type의 thawing 합 (end가 분석 기간 내, 형식 호환)
       let oPreRmKg = 0;
       thawDocs.forEach(d => {
         const r = d.data();
         const endStr = String(r.end||'');
         if (!endStr) return;
-        const endDate = endStr.slice(0,10);
-        if (!inRange(endDate)) return;
+        let endDate;
+        if (endStr.length >= 10 && endStr[4]==='-') endDate = endStr.slice(0,10);
+        else endDate = String(r.date||'').slice(0,10);
+        if (!endDate || !inRange(endDate)) return;
         const rType = r.type||'';
         if (isFC ? rType === meatType : rType !== meatType) return;
         oPreRmKg += +r.totalKg||0;
