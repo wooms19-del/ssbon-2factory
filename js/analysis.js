@@ -1140,8 +1140,8 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
       if (!m) return 0;
       return m[2].toUpperCase()==='KG' ? parseFloat(m[1])*1000 : parseFloat(m[1]);
     };
-    // testRun 필터 (이번달 막대와 동일)
-    const _prevTestOpK = new Set((opData||[]).filter(r => (r.testRun||r.isTest) && String(r.date||'').slice(0,7)===prevYm).map(r => `${String(r.date||'').slice(0,10)}_${r.product||''}`));
+    // testRun 필터 (이번달 막대와 동일) — prevOp 사용
+    const _prevTestOpK = new Set((prevOp||[]).filter(r => r.testRun||r.isTest).map(r => `${String(r.date||'').slice(0,10)}_${r.product||''}`));
     const _prevIsTest = r => !!(r.testRun || r.isTest || _prevTestOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`));
     // 1단계: 그 날 그 제품의 ea 합 (testRun 제외)
     const _prevByDateProd = {};
@@ -1154,7 +1154,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     });
     // 외포장 EA 맵 (이번달과 동일 — outerEa 필드, testRun 제외)
     const _prevOpEaMap = {};
-    (opData||[]).filter(r => !r.testRun && !r.isTest && String(r.date||'').slice(0,7)===prevYm).forEach(r=>{
+    (prevOp||[]).filter(r => !r.testRun && !r.isTest).forEach(r=>{
       const dk = (String(r.date||'').slice(0,10))+'|'+(r.product||'');
       _prevOpEaMap[dk] = (_prevOpEaMap[dk]||0) + (parseInt(r.outerEa)||0);
     });
