@@ -36,6 +36,17 @@ let TT_AUTO = {
   pPackEa: { val: 8, n: 0 },
 };
 
+// 다중 작업용 두 번째 제품 자동값 (비-FC 원육 + 선택 제품)
+// 단일 작업 모드에서는 사용 안 함
+let TT_AUTO_OTHER = {
+  yPre: { val: 89.3, n: 0 },
+  yCook: { val: 55.0, n: 0 },
+  yCrush: { val: 96.1, n: 0 },
+  pPre: { val: 48.2, n: 0 },
+  pCrush: { val: 17.2, n: 0 },
+  pPackEa: { val: 16, n: 0 },  // 비-FC는 일반적으로 EA/분 더 높음 (작은 제품)
+};
+
 // ── 진입 시 자동 초기화 ──────────────────────────────────
 function ttInit() {
   ttAutoAnalyze().then(ttRender);
@@ -47,10 +58,19 @@ function ttSelectTankMode(mode) {
   ttRender();
 }
 
+// 동시 작업 토글 (체크박스 onchange)
+function ttToggleDual() {
+  const enabled = document.getElementById('tt-dual-enabled')?.checked;
+  const block = document.getElementById('tt-dual-block');
+  if (block) block.style.display = enabled ? 'flex' : 'none';
+  ttRender();
+}
+
 // 페이지 진입 시 (탭 활성화 등에서 호출)
 if (typeof window !== 'undefined') {
   window.ttInit = ttInit;
   window.ttSelectTankMode = ttSelectTankMode;
+  window.ttToggleDual = ttToggleDual;
 }
 
 // ── 시간 유틸 ────────────────────────────────────────────
@@ -276,6 +296,56 @@ async function ttAutoAnalyze() {
     if (crPH > 0) TT_AUTO.pCrush = { val: +(crInP/crPH).toFixed(1), n: crN };
     if (pkMin > 0) TT_AUTO.pPackEa = { val: +(pkEa/pkMin).toFixed(1), n: pkN };
 
+    // ── 다중 모드: 두 번째 제품(비-FC) 자동값 별도 계산 ──
+    // 단일 모드에서는 사용되지 않지만 미리 채워둠 (토글 켜는 즉시 사용 가능)
+    // 첫 번째가 FC면 두 번째는 비-FC. 첫 번째가 비-FC면 두 번째도 비-FC(다른 제품).
+    // 단순화: 비-FC 통계만 계산하고 보관 (실제 사용은 ttGetInputs에서)
+    {
+      const otherMeatType = isFC ? '우둔' : meatType; // FC 분석 중이면 우둔을 비교용으로
+      // 전처리 (다른 type)
+      let oPreInY=0, oPreOutY=0, oPreInP=0, oPrePH=0, oPreN=0;
+      preDocs.forEach(d => {
+        const r = d.data();
+        if (!inRange(r.date)) return;
+        if (isFC ? r.type === meatType : r.type !== meatType) return; // 반대 type만
+        const kg = +r.kg||0, w = +r.waste||0, wk = +r.workers||0;
+        const m = minutesBetween(r.start, r.end);
+        if (kg <= 0 || wk <= 0 || m <= 0) return;
+        if (w > 0) { oPreInY += kg; oPreOutY += (kg - w); }
+        oPreInP += kg;
+        oPrePH += wk * (m/60);
+        oPreN++;
+      });
+      // 자숙 (다른 type)
+      let oCkInY=0, oCkOutY=0, oCkN=0;
+      cookDocs.forEach(d => {
+        const r = d.data();
+        if (!inRange(r.date)) return;
+        if (isFC ? r.type === meatType : r.type !== meatType) return;
+        const kgIn = +r.kgIn||0, kgOut = +r.kg||0;
+        if (kgIn > 0 && kgOut > 0) { oCkInY += kgIn; oCkOutY += kgOut; oCkN++; }
+      });
+      // 내포장 (반대 분류)
+      let oPkEa=0, oPkMin=0, oPkN=0;
+      packDocs.forEach(d => {
+        const r = d.data();
+        if (!inRange(r.date)) return;
+        const ea = +r.ea||0, m = minutesBetween(r.start, r.end);
+        if (ea <= 0 || m <= 0) return;
+        const prod = (r.product||'').toString();
+        const isFCProd = /FC/i.test(prod);
+        if (isFC === isFCProd) return; // 반대 분류만
+        oPkEa += ea; oPkMin += m; oPkN++;
+      });
+      // 파쇄: 비-FC 원육은 보통 한 종류(우둔)만 작업하므로 단순 합산 (chain-trace 생략)
+      // 단일 모드 검증에는 영향 없음
+      if (oPreInY > 0) TT_AUTO_OTHER.yPre = { val: +(oPreOutY/oPreInY*100).toFixed(1), n: oPreN };
+      if (oCkInY > 0) TT_AUTO_OTHER.yCook = { val: +(oCkOutY/oCkInY*100).toFixed(1), n: oCkN };
+      else TT_AUTO_OTHER.yCook = { val: TT_COOK_YIELD_DEFAULT[otherMeatType] || 55.0, n: 0 };
+      if (oPrePH > 0) TT_AUTO_OTHER.pPre = { val: +(oPreInP/oPrePH).toFixed(1), n: oPreN };
+      if (oPkMin > 0) TT_AUTO_OTHER.pPackEa = { val: +(oPkEa/oPkMin).toFixed(1), n: oPkN };
+    }
+
     ttFillAutoValues();
   } catch (e) {
     console.error('[TT] 자동 분석 실패:', e);
@@ -346,7 +416,9 @@ function ttSimulate(inp, tankMode) {
   const crushOut = crushIn * inp.yCrush / 100;
   const packIn = crushOut;
   const packOut = packIn * TT_PACK_YIELD / 100;
-  const pouches = Math.floor(packOut / TT_PACK_KG_PER_POUCH);
+  // 제품별 kg/EA: FC는 1.35kg, 비-FC는 productInfo에서 받음
+  const kgPerEaUsed = (inp.productInfo && inp.productInfo.kgPerEa) ? inp.productInfo.kgPerEa : TT_PACK_KG_PER_POUCH;
+  const pouches = Math.floor(packOut / kgPerEaUsed);
 
   // 전처리 시간
   const phase1Min = Math.max(0, joinMin - startMin);
@@ -550,12 +622,16 @@ function ttSimulate(inp, tankMode) {
   //  - 마지막 회차 = max(누적 시점, 내포장 종료)
   //
   // 효과: 4대차 가득 모을 필요 없음 → 회차 빨리 시작 → 전체 종료 빠름
-  const retortCycles = Math.ceil(pouches / TT_FIXED.retortPerCycle);
+  // 제품별 상수 (단일 모드는 FC, 다중 모드의 비-FC 시뮬은 productInfo로 갈아끼움)
+  const pInfo = inp.productInfo || { eaPerCart: 96, retortCycleMin: TT_FIXED.retortCycleMin };
+  const EA_PER_CART = pInfo.eaPerCart;
+  const RETORT_CYCLE_MIN = pInfo.retortCycleMin;
+  const MAX_CARTS_PER_BATCH = 4;
+  const MAX_EA_PER_BATCH = EA_PER_CART * MAX_CARTS_PER_BATCH;
+  const retortCycles = Math.ceil(pouches / MAX_EA_PER_BATCH);
   const eaPerMin = inp.pPackEa;
   const NUM_RETORTS = 3;
   const TOTAL_CARTS = 8;
-  const EA_PER_CART = 96;
-  const MAX_CARTS_PER_BATCH = 4;
 
   // EA 균등 분배 (정수 단위, 마지막에 잔여 합산)
   const eaPerBatch = Math.floor(pouches / retortCycles);
@@ -603,7 +679,7 @@ function ttSimulate(inp, tankMode) {
     }
 
     const start = candidateStart;
-    const end = start + TT_FIXED.retortCycleMin;
+    const end = start + RETORT_CYCLE_MIN;
     retortStartTimes.push(start);
     retortEndTimes.push(end);
     retortFreeAt[earliestRetort] = end;
@@ -629,6 +705,105 @@ function ttSimulate(inp, tankMode) {
     batchEa, batchCarts,
     cookYield,
   };
+}
+
+// ── 다중 작업 시뮬 (순차 파이프라인) ───────────────────────
+// 두 번째 제품별 대차/레토르트 사이클 정보
+const TT_PRODUCT_INFO = {
+  // FC 3KG (홍두깨) — 기본 케이스 (참고용, 단일 시뮬에서 이미 처리)
+  'fc':     { name: 'FC 3KG',        eaPerCart: 96,    retortCycleMin: 150, kgPerEa: 1.35 },
+  // 두 번째 후보들 (비-FC)
+  'trader': { name: '트레이더스 460g', eaPerCart: 380,  retortCycleMin: 120, kgPerEa: 0.20 },  // 460g + 손실 고려 ~0.20kg 원육/EA
+  'sig':    { name: '시그니처 130g',   eaPerCart: 1024, retortCycleMin: 120, kgPerEa: 0.057 }, // 130g 기준
+  'mini':   { name: '미니 70g 5개입',  eaPerCart: 1280, retortCycleMin: 120, kgPerEa: 0.046 }, // 5개입 350g 기준
+};
+
+// 두 번째 제품용 inp 구성 (단일 ttSimulate가 그대로 받을 수 있게)
+function ttBuildSecondInp(inp, firstSim) {
+  const meat2 = document.getElementById('tt-meat2')?.value || 'trader';
+  const kg2 = parseFloat(document.getElementById('tt-kg2')?.value) || 500;
+  const info = TT_PRODUCT_INFO[meat2] || TT_PRODUCT_INFO['trader'];
+
+  // 둘째 원육 시작 시각 = 첫째 전처리 종료 시점 (작업자 풀 옮겨감)
+  const secondStartMin = firstSim.preEndMin;
+  const fmtTime = (m) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+
+  // 둘째 시뮬의 startTime/joinTime: 같이 secondStartMin 으로 (이미 한국인 합류 후)
+  // earlyWorkers는 전 인원 사용 가능
+  return {
+    ...inp,
+    meatType: '우둔',  // 비-FC 기본
+    meatKg: kg2,
+    startTime: fmtTime(secondStartMin),
+    joinTime: fmtTime(secondStartMin),
+    earlyWorkers: inp.wkPre,  // 한국인 합류 후이므로 전 전처리 인원 사용
+    // 비-FC 자동값으로 yield/productivity 갈아끼우기
+    yPre: TT_AUTO_OTHER.yPre.val,
+    yCrush: TT_AUTO_OTHER.yCrush.val,
+    pPre: TT_AUTO_OTHER.pPre.val,
+    pCrush: TT_AUTO_OTHER.pCrush.val,
+    pPackEa: TT_AUTO_OTHER.pPackEa.val,
+    // 비-FC 제품 정보 (시뮬에서 사용 — 추후 ttSimulate에서 inp.productInfo 참조 시)
+    productInfo: info,
+  };
+}
+
+// 다중 작업 종합 시뮬: 순서대로 두 시뮬 실행
+function ttSimulateDual(inp, tankMode) {
+  const order = document.getElementById('tt-order')?.value || 'fc-first';
+  const pkLines = parseInt(document.getElementById('tt-pk-lines')?.value) || 2;
+
+  if (order === 'fc-first') {
+    const sim1 = ttSimulate(inp, tankMode);  // FC 먼저
+    const inp2 = ttBuildSecondInp(inp, sim1);
+    const sim2 = ttSimulate(inp2, tankMode);
+    return { sim1, sim2, inp1: inp, inp2, order, pkLines };
+  } else {
+    // 두 번째 먼저: 두 번째를 첫째 위치로 보내고, FC를 두 번째 위치로
+    // 임시로 첫째 인풋을 비-FC 기본 inp로 만들고, FC inp를 둘째에 둠
+    // 단순화: order='other-first'면 ttBuildSecondInp 로직을 반대로
+    const otherFirstInp = ttBuildOtherFirstInp(inp);
+    const sim1 = ttSimulate(otherFirstInp, tankMode);
+    const fcSecondInp = ttBuildFCSecondInp(inp, sim1);
+    const sim2 = ttSimulate(fcSecondInp, tankMode);
+    return { sim1, sim2, inp1: otherFirstInp, inp2: fcSecondInp, order, pkLines };
+  }
+}
+
+// other-first 케이스: 비-FC를 첫째로
+function ttBuildOtherFirstInp(inp) {
+  const meat2 = document.getElementById('tt-meat2')?.value || 'trader';
+  const kg2 = parseFloat(document.getElementById('tt-kg2')?.value) || 500;
+  const info = TT_PRODUCT_INFO[meat2] || TT_PRODUCT_INFO['trader'];
+  return {
+    ...inp,
+    meatType: '우둔',
+    meatKg: kg2,
+    yPre: TT_AUTO_OTHER.yPre.val,
+    yCrush: TT_AUTO_OTHER.yCrush.val,
+    pPre: TT_AUTO_OTHER.pPre.val,
+    pCrush: TT_AUTO_OTHER.pCrush.val,
+    pPackEa: TT_AUTO_OTHER.pPackEa.val,
+    productInfo: info,
+  };
+}
+
+// other-first 케이스: FC를 둘째로 (첫째 비-FC 종료 후)
+function ttBuildFCSecondInp(inp, firstSim) {
+  const secondStartMin = firstSim.preEndMin;
+  const fmtTime = (m) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  return {
+    ...inp,
+    startTime: fmtTime(secondStartMin),
+    joinTime: fmtTime(secondStartMin),
+    earlyWorkers: inp.wkPre,
+    productInfo: TT_PRODUCT_INFO['fc'],
+  };
+}
+
+// 동시 작업 토글 상태 확인
+function ttIsDualMode() {
+  return document.getElementById('tt-dual-enabled')?.checked === true;
 }
 
 // ── 인원 운용 슬롯 자동 ─────────────────────────────────
@@ -736,7 +911,29 @@ function ttPlanNarrative(inp, sim, slots) {
 
 // ── 메인 렌더링 ──────────────────────────────────────────
 function ttRender() {
-  const inp = ttGetInputs();
+  let inp = ttGetInputs();
+  const dualMode = ttIsDualMode();
+  let dualResult = null;  // {sim1, sim2, inp1, inp2, order, pkLines}
+  if (dualMode) {
+    // 다중 모드: 첫째 sim을 ttRender의 메인 sim으로 사용 (기존 path 재활용)
+    // 둘째 sim은 결과 박스 아래에 별도 표시
+    // tankMode는 사용자가 클릭한 게 있으면 그것, 없으면 일단 'A'로 시뮬해서 best 선정
+    // (best 선정 자체는 첫째 기준)
+    const userMode = window.ttSelectedTankMode || null;
+    if (userMode) {
+      dualResult = ttSimulateDual(inp, userMode);
+    } else {
+      // 3 mode 다 시뮬해서 best
+      const dA = ttSimulateDual(inp, 'A');
+      const dB = ttSimulateDual(inp, 'B');
+      const dE = ttSimulateDual(inp, 'E');
+      // dual best: 두 번째 sim retortEndMin 빠른 것 (전체 종료)
+      const candidates = [['A',dA],['B',dB],['E',dE]];
+      candidates.sort((a,b) => a[1].sim2.retortEndMin - b[1].sim2.retortEndMin);
+      dualResult = candidates[0][1];
+    }
+    inp = dualResult.inp1;
+  }
 
   // 자동 계산된 파쇄 인원을 입력란 영역에 표시
   const dispPeak = document.getElementById('tt-crush-peak-display');
@@ -1359,8 +1556,42 @@ function ttRender() {
       </div>
     </div>`;
 
+  // 다중 작업 모드: 두 번째 작업 박스 (sim2 기반)
+  let dualBox = '';
+  if (dualMode && dualResult) {
+    const sim2 = dualResult.sim2;
+    const inp2 = dualResult.inp2;
+    const orderLabel = dualResult.order === 'fc-first' ? 'FC → 두 번째' : '두 번째 → FC';
+    const productName = (inp2.productInfo && inp2.productInfo.name) || '제품';
+    const totalEndMin = Math.max(sim2.retortEndMin, sim.retortEndMin);
+    const fcEa = (dualResult.order === 'fc-first') ? sim.pouches : sim2.pouches;
+    const otherEa = (dualResult.order === 'fc-first') ? sim2.pouches : sim.pouches;
+    dualBox = `
+    <div style="background:linear-gradient(135deg,#FFF4E6 0%,#fef9f3 100%);border:1px solid #D88A30;border-radius:12px;padding:18px 22px;margin-top:14px;margin-bottom:16px">
+      <div style="font-size:11px;color:#9A5D17;font-weight:600;letter-spacing:0.5px;margin-bottom:8px">⚡ 동시 작업 · 순서: ${orderLabel} (파이프라인 순차)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:12px">
+        <div style="background:rgba(255,255,255,0.6);border-radius:8px;padding:10px 14px">
+          <div style="font-size:11px;color:#185FA5;font-weight:600;margin-bottom:4px">① ${inp.meatType} ${inp.meatKg.toLocaleString()}kg</div>
+          <div style="color:var(--color-text-secondary)">전처리 ${ttFmt(sim.startMin)}~${ttFmt(sim.preEndMin)} → 내포장 ${ttFmt(sim.packEndMin)}</div>
+          <div style="color:var(--color-text-secondary)">레토르트 종료: <strong>${ttFmt(sim.retortEndMin)}</strong> · ${sim.pouches.toLocaleString()}개</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.6);border-radius:8px;padding:10px 14px">
+          <div style="font-size:11px;color:#D88A30;font-weight:600;margin-bottom:4px">② ${productName} ${inp2.meatKg.toLocaleString()}kg</div>
+          <div style="color:var(--color-text-secondary)">전처리 ${ttFmt(sim2.startMin)}~${ttFmt(sim2.preEndMin)} → 내포장 ${ttFmt(sim2.packEndMin)}</div>
+          <div style="color:var(--color-text-secondary)">레토르트 종료: <strong>${ttFmt(sim2.retortEndMin)}</strong> · ${sim2.pouches.toLocaleString()}개</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--color-text-primary);margin-top:10px;padding-top:8px;border-top:0.5px dashed rgba(0,0,0,0.1)">
+        <strong style="color:#0F6E56">총 종료: ${ttFmt(totalEndMin)}</strong>
+        · 총 산출: FC ${fcEa.toLocaleString()} + 비-FC ${otherEa.toLocaleString()} = ${(fcEa+otherEa).toLocaleString()}개
+        · 내포장 라인 ${dualResult.pkLines}대 (이송 ${dualResult.pkLines * 2}명)
+      </div>
+    </div>`;
+  }
+
   document.getElementById('tt-result').innerHTML = `
     ${conclusion}
+    ${dualBox}
     ${planBox}
     ${splitView}
     ${reportBox}`;
