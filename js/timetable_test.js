@@ -49,7 +49,7 @@ let TTT_AUTO_OTHER = {
 
 // ── 진입 시 자동 초기화 ──────────────────────────────────
 function tttInit() {
-  tttAutoAnalyze().then(tttRender);
+  tttAutoAnalyze().then(() => tttAutoAnalyzeOther().then(tttRender));
   // ttm 호버 툴팁 리스너 (innerHTML script 실행 안 되므로 여기서 한 번만 등록)
   if (!window.__ttmTipInited) {
     window.__ttmTipInited = true;
@@ -1806,34 +1806,11 @@ function tttRender() {
     </div>`;
   }
 
-  // 테스트 탭: 기존 단일 시뮬 결과 숨김 (시나리오 모드로 대체)
-  document.getElementById('ttt-result').innerHTML = '';
-
-  // 호버 툴팁 활성화 (SVG 막대)
-  setTimeout(() => {
-    const tip = document.getElementById('tttTip');
-    if (!tip) return;
-    document.querySelectorAll('.ttt-bar').forEach(bar => {
-      bar.addEventListener('mouseenter', () => {
-        const title = bar.dataset.tipTitle || '';
-        const info = (bar.dataset.tipInfo || '').split('|').filter(s => s);
-        tip.innerHTML = `<div class="ttt-tip-title">${title}</div>` + info.map(line => `<div>${line}</div>`).join('');
-        tip.style.display = 'block';
-      });
-      bar.addEventListener('mousemove', e => {
-        const x = Math.min(e.clientX + 16, window.innerWidth - 360);
-        const y = Math.min(e.clientY + 16, window.innerHeight - 200);
-        tip.style.left = x + 'px';
-        tip.style.top = y + 'px';
-      });
-      bar.addEventListener('mouseleave', () => {
-        tip.style.display = 'none';
-      });
-    });
-  }, 0);
-
-  // 시나리오 모드 자동 갱신 (기존 결과 대신)
-  if (typeof ttmRender === 'function') ttmRender();
+  // dual 모드: ttmRender가 ttt-result를 채움 / 단일 모드: 위에서 이미 채움
+  if (dualMode) {
+    document.getElementById('ttt-result').innerHTML = '';
+    if (typeof ttmRender === 'function') ttmRender();
+  }
 }
 
 // ============================================================
@@ -2432,11 +2409,11 @@ function ttmRender() {
       </div>
       ${ttmRenderWorkers(workers)}
       ${ttmRenderReport(scen, workers, sim)}`;
-    const out = document.getElementById('ttm-output');
+    const out = document.getElementById('ttt-result');
     if (out) out.innerHTML = html;
   } catch (e) {
     console.error('[ttm] render error:', e);
-    const out = document.getElementById('ttm-output');
+    const out = document.getElementById('ttt-result');
     if (out) out.innerHTML = `<div style="color:#A32D2D;padding:20px">시뮬 오류: ${e.message}</div>`;
   }
 }
