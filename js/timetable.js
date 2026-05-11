@@ -413,14 +413,23 @@ function ttSimulate(inp, tankMode) {
   // 단순화: 전처리 끝났으면 → 12:30부터 시작 가능 (파쇄가 1시간 가동했으니까)
   //         전처리 안 끝났으면 → 13:30부터 (모드 A 동일)
   // ── 내포장 시작 시점 ──
-  // 내포장 시작 = 13:30 고정 (풀가동 시점)
-  // 이유:
-  //   · 파쇄가 어느정도 모여야 내포장 가능 (이론적 "첫 산출 도달"은 비현실적)
-  //   · 13:30 풀가동 = 6명 안정적 배치 시점
-  //   · 첫 파쇄 호분이 13:30 이전 끝나도 13:30까지 대기
-  const PACK_START_FIXED = 13*60 + 30;
-  let packStartMin = PACK_START_FIXED;
-  // 11:30~12:30 점심 1차, 12:30~13:30 점심 2차는 어차피 13:30 이후이므로 영향 없음
+  // 규칙: 13:30 시점에 파쇄 산출 ≥ 200kg이면 13:30 시작
+  //       부족하면 → 200kg 도달할 때까지 대기
+  const PACK_START_BASE = 13*60 + 30;
+  const PACK_START_MIN_KG = 200;  // 산출 누적 200kg 이상
+  // crushStartMin부터 분당 누적 (crushWorkersAt × pCrush × yCrush)
+  let crushAccumOut = 0;
+  let packStartMin = PACK_START_BASE;
+  let kgAtBase = 0;
+  for (let t = crushStartMin; t < 28*60; t++) {
+    const w = crushWorkersAt(t);
+    if (w > 0) crushAccumOut += inp.pCrush * w / 60 * (inp.yCrush / 100);
+    if (t + 1 === PACK_START_BASE) kgAtBase = crushAccumOut;
+    if (t + 1 >= PACK_START_BASE && crushAccumOut >= PACK_START_MIN_KG) {
+      packStartMin = t + 1;
+      break;
+    }
+  }
   const packWorkersAt = (t) => {
     if (t < packStartMin) return 0;
     return inp.wkPack;
@@ -445,37 +454,6 @@ function ttSimulate(inp, tankMode) {
   // 둘 중 늦은 쪽
   const packEndMin = Math.max(packSelfEndMin, lastBatchPackEndMin);
   const packMin = packEndMin - packStartMin;
-
-  // ── 내포장 호별 구간 (시각화용, 시뮬 결과 변경 X) ──
-  // 실제 내포장은 연속 흐름이지만, 파쇄 호별 EA 비율로 구간을 나눠서 표시
-  // 각 호분 시작 = max(이 호분 파쇄 종료, 이전 호분 내포장 종료, packStartMin)
-  // 각 호분 끝 = 시작 + 그 호분 EA가 처리되는 시간 (점심 정지 반영)
-  const tankPackTimes = [];
-  let prevPackEnd = packStartMin;
-  for (let i = 0; i < tankCrushTimes.length; i++) {
-    const tc = tankCrushTimes[i];
-    const tankPackEa = Math.round(tc.kg * (inp.yCrush / 100) / TT_PACK_KG_PER_POUCH);
-    // 시작: 이 호 파쇄가 끝나야 + 이전 호분 내포장이 끝나야 + 내포장 시작 시각 이후
-    const segStart = Math.max(tc.end, prevPackEnd, packStartMin);
-    // 끝: segStart부터 1분씩 처리해서 tankPackEa 도달
-    let processed = 0;
-    let segEnd = segStart;
-    for (let t = segStart; t < 28*60 && processed < tankPackEa; t++) {
-      processed += packSpeedAt(t);
-      segEnd = t + 1;
-    }
-    // gap = 이전 호분 내포장 종료 ~ 이 호분 시작
-    const gap = i === 0 ? 0 : segStart - prevPackEnd;
-    tankPackTimes.push({
-      idx: tc.idx,
-      start: segStart,
-      end: segEnd,
-      ea: tankPackEa,
-      kg: tc.kg,
-      gap,
-    });
-    prevPackEnd = segEnd;
-  }
 
   // 레토르트: 3대 병렬 + 대차 8개, EA 균등 분배 (전체 회차에 고르게)
   //
@@ -561,7 +539,6 @@ function ttSimulate(inp, tankMode) {
     crushSelfEndMin, lastTankCrushEndMin, lastTankOutKg,
     packStartMin, packEndMin,
     packSelfEndMin, lastBatchPackEndMin, lastTankPackEa,
-    tankPackTimes,
     retortStartMin, retortEndMin, retortCycles,
     retortStartTimes, retortEndTimes,
     batchEa, batchCarts,
@@ -852,29 +829,14 @@ function ttRender() {
   });
   yCursor += ROW_H;
 
-  // ── 내포장 (자숙 호별 분할 — 시각화) ──
-  // 실제는 연속 흐름이지만, 파쇄 호별 EA 비율로 구간 표시
+  // ── 내포장 (단일 막대, 연속 흐름) ──
+  // 시작: packStartMin (13:30 + 파쇄 산출 200kg 이상 조건)
+  // 종료: packEndMin (자체 처리 종료 vs 마지막 산출분 통과, 둘 중 늦은쪽)
   bars += rowLabel(yCursor, BAR_H, '내포장');
-  const tankPackColors = ['#7F77DD', '#A39DE8', '#5E55C2', '#B8B2EE'];
-  sim.tankPackTimes.forEach((tp, i) => {
-    const color = tankPackColors[i % tankPackColors.length];
-    const durMin = tp.end - tp.start;
-    const isLast = i === sim.tankPackTimes.length - 1;
-    const adjustedEnd = isLast ? tp.end : tp.end - 1;
-    const widthPx = xPos(adjustedEnd) - xPos(tp.start);
-    const label = widthPx >= 80
-      ? `${tp.idx}호분 ${tp.ea}EA`
-      : widthPx >= 30
-        ? `${tp.idx}호분`
-        : '';
-    // gap 정보: 이전 호분과 사이가 비어있으면 표시
-    const gapInfo = tp.gap > 0 ? `이전 호분 종료 후 ${tp.gap}분 대기 (파쇄 ${tp.idx}호분 도착 대기)` : '직전 호분과 연속';
-    bars += segBar(yCursor, BAR_H, tp.start, adjustedEnd, color,
-      label,
-      `자숙 ${tp.idx}호분 내포장`,
-      `EA: ${tp.ea}개 (파쇄 ${Math.round(tp.kg)}kg 산출분)|시각: ${ttFmt(tp.start)}~${ttFmt(tp.end)} (${durMin}분)|속도: ${inp.pPackEa} EA/분 (기계 1대)|${gapInfo}`,
-      {fillOpacity: 0.9, stroke: '#fff', strokeWidth: 1});
-  });
+  bars += segBar(yCursor, BAR_H, sim.packStartMin, sim.packEndMin, '#7F77DD',
+    `${inp.wkPack}명 · ${inp.pPackEa}EA/분`,
+    '내포장',
+    `시각: ${ttFmt(sim.packStartMin)}~${ttFmt(sim.packEndMin)}|인원: ${inp.wkPack}명|속도: ${inp.pPackEa} EA/분 (기계 1대 한도)|총: ${sim.pouches.toLocaleString()} EA|시작 조건: 13:30 + 파쇄 산출 ≥ 200kg|자체 처리 종료: ${ttFmt(sim.packSelfEndMin)}|마지막 산출분 통과: ${ttFmt(sim.lastBatchPackEndMin)} (둘 중 늦은쪽)`);
   yCursor += ROW_H;
 
   // ── 레토르트 (각 회차별 - EA 균등 분배) ──
