@@ -2215,7 +2215,7 @@ function renderDailyFromLocal_(d){
     if(ppGroup[t]) {
       const inKg = r2(rmByType[t]||thByType[t]||rmKg||0);
       const ppWaste = r2((ppGroup[t]._recs||[]).reduce((s,r)=>s+(parseFloat(r.waste)||0),0));
-      const ppWorkers = (ppGroup[t]._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0);
+      const ppWorkers = Math.round((ppGroup[t]._recs||[]).reduce((s,r)=>s+(parseFloat(r.workers)||0),0) / Math.max((ppGroup[t]._recs||[]).length,1));
       const ppBoxes = rmBoxByType[t]||0;
       procRows.push({name:'전처리', type:t, origKg:inKg, in:inKg, out:r2(ppGroup[t].kg), waste:ppWaste, mh:r2(ppGroup[t].mh), h:calcActualHours(ppGroup[t]._recs||[])||r2(ppGroup[t].h), workers:ppWorkers, boxes:ppBoxes});
     }
