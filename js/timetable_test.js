@@ -49,13 +49,13 @@ let TTT_AUTO_OTHER = {
 
 // ── 진입 시 자동 초기화 ──────────────────────────────────
 function tttInit() {
-  tttAutoAnalyze().then(tttRender);
+  tttAutoAnalyze().then(ttttRender);
 }
 
 // 사용자가 자숙 분배 방식 클릭 → 화면 전체 재렌더
 function tttSelectTankMode(mode) {
-  window.ttSelectedTankMode = mode;
-  tttRender();
+  window.tttSelectedTankMode = mode;
+  ttttRender();
 }
 
 // 동시 작업 토글 (체크박스 onchange)
@@ -63,7 +63,7 @@ function tttToggleDual() {
   const enabled = document.getElementById('ttt-dual-enabled')?.checked;
   const block = document.getElementById('ttt-dual-block');
   if (block) block.style.display = enabled ? 'flex' : 'none';
-  tttRender();
+  ttttRender();
 }
 
 // 페이지 진입 시 (탭 활성화 등에서 호출)
@@ -89,7 +89,7 @@ function tttToMin(t) {
 }
 
 // ── 입력값 수집 ──────────────────────────────────────────
-function tttGetInputs() {
+function ttttGetInputs() {
   const get = (id, def) => {
     const el = document.getElementById(id);
     if (!el) return def;
@@ -341,7 +341,7 @@ async function tttAutoAnalyze() {
     // ── 다중 모드: 두 번째 제품(비-FC) 자동값 별도 계산 ──
     // 단일 모드에서는 사용되지 않지만 미리 채워둠 (토글 켜는 즉시 사용 가능)
     // 첫 번째가 FC면 두 번째는 비-FC. 첫 번째가 비-FC면 두 번째도 비-FC(다른 제품).
-    // 단순화: 비-FC 통계만 계산하고 보관 (실제 사용은 ttGetInputs에서)
+    // 단순화: 비-FC 통계만 계산하고 보관 (실제 사용은 tttGetInputs에서)
     {
       const otherMeatType = isFC ? '우둔' : meatType; // FC 분석 중이면 우둔을 비교용으로
       // 전처리 (다른 type) - 공정수율은 일별요약 정의 (preprocess.kg / thawing.totalKg)
@@ -465,7 +465,7 @@ function tttFillAutoValues() {
 
 function tttMarkEdited(el) {
   el.dataset.userEdited = 'true';
-  tttRender();
+  ttttRender();
 }
 
 function tttResetField(id, autoKey) {
@@ -473,7 +473,7 @@ function tttResetField(id, autoKey) {
   if (!el) return;
   el.value = TTT_AUTO[autoKey].val;
   el.dataset.userEdited = 'false';
-  tttRender();
+  ttttRender();
 }
 
 // 분석 기간 / 원육 종류 변경 시 → 자동 분석 재실행
@@ -484,11 +484,11 @@ async function tttPeriodChange() {
     if (el) el.dataset.userEdited = 'false';
   });
   await tttAutoAnalyze();
-  tttRender();
+  ttttRender();
 }
 
 // ── 시뮬레이션 엔진 ──────────────────────────────────────
-function tttSimulate(inp, tankMode) {
+function ttttSimulate(inp, tankMode) {
   // tankMode: 'A' (잔량 먼저 + 800kg씩 - 자숙·파쇄 빨리 시작), 'B' (N등분 균등), 'E' (1호 작게 빨리시작 + 나머지 균등)
   tankMode = tankMode || 'A';
   const startMin = tttToMin(inp.startTime);
@@ -805,7 +805,7 @@ const TTT_PRODUCT_INFO = {
   'mini':   { name: '미니 70g 5개입',  eaPerCart: 1280, retortCycleMin: 120, kgPerEa: 0.046 }, // 5개입 350g 기준
 };
 
-// 두 번째 제품용 inp 구성 (단일 ttSimulate가 그대로 받을 수 있게)
+// 두 번째 제품용 inp 구성 (단일 tttSimulate가 그대로 받을 수 있게)
 function tttBuildSecondInp(inp, firstSim) {
   const meat2 = document.getElementById('ttt-meat2')?.value || 'trader';
   const kg2 = parseFloat(document.getElementById('ttt-kg2')?.value) || 500;
@@ -830,29 +830,29 @@ function tttBuildSecondInp(inp, firstSim) {
     pPre: TTT_AUTO_OTHER.pPre.val,
     pCrush: TTT_AUTO_OTHER.pCrush.val,
     pPackEa: TTT_AUTO_OTHER.pPackEa.val,
-    // 비-FC 제품 정보 (시뮬에서 사용 — 추후 ttSimulate에서 inp.productInfo 참조 시)
+    // 비-FC 제품 정보 (시뮬에서 사용 — 추후 tttSimulate에서 inp.productInfo 참조 시)
     productInfo: info,
   };
 }
 
 // 다중 작업 종합 시뮬: 순서대로 두 시뮬 실행
-function tttSimulateDual(inp, tankMode) {
+function ttttSimulateDual(inp, tankMode) {
   const order = document.getElementById('ttt-order')?.value || 'fc-first';
   const pkLines = parseInt(document.getElementById('ttt-pk-lines')?.value) || 2;
 
   if (order === 'fc-first') {
-    const sim1 = tttSimulate(inp, tankMode);  // FC 먼저
+    const sim1 = ttttSimulate(inp, tankMode);  // FC 먼저
     const inp2 = tttBuildSecondInp(inp, sim1);
-    const sim2 = tttSimulate(inp2, tankMode);
+    const sim2 = ttttSimulate(inp2, tankMode);
     return { sim1, sim2, inp1: inp, inp2, order, pkLines };
   } else {
     // 두 번째 먼저: 두 번째를 첫째 위치로 보내고, FC를 두 번째 위치로
     // 임시로 첫째 인풋을 비-FC 기본 inp로 만들고, FC inp를 둘째에 둠
     // 단순화: order='other-first'면 tttBuildSecondInp 로직을 반대로
     const otherFirstInp = tttBuildOtherFirstInp(inp);
-    const sim1 = tttSimulate(otherFirstInp, tankMode);
+    const sim1 = ttttSimulate(otherFirstInp, tankMode);
     const fcSecondInp = tttBuildFCSecondInp(inp, sim1);
-    const sim2 = tttSimulate(fcSecondInp, tankMode);
+    const sim2 = ttttSimulate(fcSecondInp, tankMode);
     return { sim1, sim2, inp1: otherFirstInp, inp2: fcSecondInp, order, pkLines };
   }
 }
@@ -997,23 +997,23 @@ function tttPlanNarrative(inp, sim, slots) {
 }
 
 // ── 메인 렌더링 ──────────────────────────────────────────
-function tttRender() {
-  let inp = tttGetInputs();
+function ttttRender() {
+  let inp = ttttGetInputs();
   const dualMode = tttIsDualMode();
   let dualResult = null;  // {sim1, sim2, inp1, inp2, order, pkLines}
   if (dualMode) {
-    // 다중 모드: 첫째 sim을 ttRender의 메인 sim으로 사용 (기존 path 재활용)
+    // 다중 모드: 첫째 sim을 tttRender의 메인 sim으로 사용 (기존 path 재활용)
     // 둘째 sim은 결과 박스 아래에 별도 표시
     // tankMode는 사용자가 클릭한 게 있으면 그것, 없으면 일단 'A'로 시뮬해서 best 선정
     // (best 선정 자체는 첫째 기준)
-    const userMode = window.ttSelectedTankMode || null;
+    const userMode = window.tttSelectedTankMode || null;
     if (userMode) {
-      dualResult = tttSimulateDual(inp, userMode);
+      dualResult = ttttSimulateDual(inp, userMode);
     } else {
       // 3 mode 다 시뮬해서 best
-      const dA = tttSimulateDual(inp, 'A');
-      const dB = tttSimulateDual(inp, 'B');
-      const dE = tttSimulateDual(inp, 'E');
+      const dA = ttttSimulateDual(inp, 'A');
+      const dB = ttttSimulateDual(inp, 'B');
+      const dE = ttttSimulateDual(inp, 'E');
       // dual best: 두 번째 sim retortEndMin 빠른 것 (전체 종료)
       const candidates = [['A',dA],['B',dB],['E',dE]];
       candidates.sort((a,b) => a[1].sim2.retortEndMin - b[1].sim2.retortEndMin);
@@ -1036,9 +1036,9 @@ function tttRender() {
     return;
   }
   // ★ 3가지 자숙 탱크 분배 방식 자동 시뮬 → 사용자가 선택하거나 베스트 자동
-  const tankSimA = tttSimulate(inp, 'A');
-  const tankSimB = tttSimulate(inp, 'B');
-  const tankSimE = tttSimulate(inp, 'E');
+  const tankSimA = ttttSimulate(inp, 'A');
+  const tankSimB = ttttSimulate(inp, 'B');
+  const tankSimE = ttttSimulate(inp, 'E');
   const tankResults = [
     { mode: 'A', name: '잔량 먼저 시작', desc: '작은 수량 1호 → 800kg씩 나머지 (자숙·파쇄 빨리)', sim: tankSimA },
     { mode: 'B', name: 'N등분 균등', desc: '총량 ÷ 탱크수 = 모든 탱크 동일량', sim: tankSimB },
@@ -1047,7 +1047,7 @@ function tttRender() {
   // 베스트 (레토르트 종료 빠른 순) — 정렬은 표에 차이 표시용
   const tankBest = [...tankResults].sort((a, b) => a.sim.retortEndMin - b.sim.retortEndMin)[0];
   // 사용자가 클릭한 모드 있으면 그것 사용, 없으면 베스트
-  const userTankMode = window.ttSelectedTankMode || null;
+  const userTankMode = window.tttSelectedTankMode || null;
   const tankSelected = userTankMode
     ? tankResults.find(r => r.mode === userTankMode) || tankBest
     : tankBest;
@@ -1278,17 +1278,17 @@ function tttRender() {
 
   const timelineSvg = `
     <style>
-      .tt-bar { cursor:pointer; transition:filter 0.15s; }
-      .tt-bar:hover rect { filter:brightness(1.15); stroke:#000 !important; stroke-width:1 !important; stroke-dasharray:none !important; }
-      .tt-tip { position:fixed; background:#222; color:#fff; padding:10px 14px; border-radius:6px; font-size:12px; line-height:1.7; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:9999; pointer-events:none; max-width:340px; display:none; }
-      .tt-tip-title { color:#FFD27A; font-weight:700; margin-bottom:4px; }
-      .tt-cell { transition:background 0.1s; }
-      .tt-cell:hover { background:#FFF5CC !important; cursor:default; }
+      .ttt-bar { cursor:pointer; transition:filter 0.15s; }
+      .ttt-bar:hover rect { filter:brightness(1.15); stroke:#000 !important; stroke-width:1 !important; stroke-dasharray:none !important; }
+      .ttt-tip { position:fixed; background:#222; color:#fff; padding:10px 14px; border-radius:6px; font-size:12px; line-height:1.7; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:9999; pointer-events:none; max-width:340px; display:none; }
+      .ttt-tip-title { color:#FFD27A; font-weight:700; margin-bottom:4px; }
+      .ttt-cell { transition:background 0.1s; }
+      .ttt-cell:hover { background:#FFF5CC !important; cursor:default; }
     </style>
-    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img" id="ttTimelineSvg">
+    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img" id="tttTimelineSvg">
       ${lunchBg}${ticks}${grid}${bars}
     </svg>
-    <div id="ttTip" class="ttt-tip"></div>`;
+    <div id="tttTip" class="ttt-tip"></div>`;
 
   // 시간대별 인원 활용 표 (시안 3 + 격자 + 호버)
   const wkHeads = ['전처리','파쇄','내포장','이송','외포장','세팅','청소','점심','관리'];
@@ -1337,8 +1337,8 @@ function tttRender() {
   const svgRatio = svgH / SVG_W;  // SVG 높이/너비 비율
   const splitView = `
     <style>
-      @media (max-width: 900px) { #tt-split { grid-template-columns: 1fr !important; } }
-      #ttTimelineSvg { display:block; width:100%; height:auto; }
+      @media (max-width: 900px) { #ttt-split { grid-template-columns: 1fr !important; } }
+      #tttTimelineSvg { display:block; width:100%; height:auto; }
     </style>
     <div id="ttt-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:stretch">
       <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
@@ -1356,7 +1356,7 @@ function tttRender() {
   const editYield = (id, val, autoVal, n) => `
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
       <input type="number" step="0.1" value="${val}" 
-        oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';tttRender()"
+        oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttttRender()"
         style="width:70px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
       <div style="font-size:9px;color:var(--color-text-tertiary)">자동: ${autoVal}${n!==undefined?` (n=${n})`:''}</div>
     </div>`;
@@ -1364,7 +1364,7 @@ function tttRender() {
     <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
       <div style="display:flex;align-items:center;gap:4px">
         <input type="number" step="0.1" value="${val}"
-          oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';tttRender()"
+          oninput="document.getElementById('${id}').value=this.value;document.getElementById('${id}').dataset.userEdited='true';ttttRender()"
           style="width:60px;height:26px;font-size:12px;text-align:right;padding:0 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:#fff">
         <span style="font-size:10px;color:var(--color-text-secondary)">${unit}</span>
       </div>
@@ -1685,9 +1685,9 @@ function tttRender() {
 
   // 호버 툴팁 활성화 (SVG 막대)
   setTimeout(() => {
-    const tip = document.getElementById('ttTip');
+    const tip = document.getElementById('tttTip');
     if (!tip) return;
-    document.querySelectorAll('.tt-bar').forEach(bar => {
+    document.querySelectorAll('.ttt-bar').forEach(bar => {
       bar.addEventListener('mouseenter', () => {
         const title = bar.dataset.tipTitle || '';
         const info = (bar.dataset.tipInfo || '').split('|').filter(s => s);
