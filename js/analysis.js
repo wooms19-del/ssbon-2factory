@@ -1129,35 +1129,47 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     // 4월 평균값 (한 줄 가로선용)
     const _avgDef = prevByIdx.length ? (prevByIdx.reduce((s,r)=>s+(r.defectPct||0),0)/prevByIdx.length) : null;
     const _avgYld = _pYldByIdx.length ? (_pYldByIdx.reduce((s,r)=>s+(r.yld||0),0)/_pYldByIdx.length) : null;
-    // 4월 일평균 KG (내포장) — 이번달과 동일한 방식 (제품명 g 추출)
-    // 막대 그래프와 가로선 기준 일치 (kgea 아님, prodGramPerEA)
+    // 4월 일평균 KG — 이번달 막대 그래프와 완전 동일하게:
+    //   · testRun/isTest 제외
+    //   · 그 날 그 제품의 ea 합 (record 여러 개면 합산)
+    //   · outerpacking 있으면 outerEa로 대체
+    //   · ea × prodGramPerEA / 1000 → 제품별 반올림 → 합 = dayTotal
+    //   · dayTotal 들의 평균
     const _prevGramPerEA = full => {
       const m = (full||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i);
       if (!m) return 0;
       return m[2].toUpperCase()==='KG' ? parseFloat(m[1])*1000 : parseFloat(m[1]);
     };
-    // 전월: 외포장 있으면 outerEa, 없으면 packing ea × 제품 g
-    const _prevDayKgs = [];
-    Object.entries(prevGrouped).forEach(([date, allR])=>{
-      let dayTotal = 0;
-      allR.forEach(row=>{
-        const oe = prevOpMap[date+'|'+row.product] || 0;
-        // row.pkKg는 ea × kgea 인데 ea만 다시 구해야 함 → prevPk에서 직접
-        const ea = oe > 0 ? oe : (function(){
-          // 그 날 그 제품의 packing ea 합
-          let total = 0;
-          (prevPk||[]).forEach(r=>{
-            if(String(r.date||'').slice(0,10)===date && (r.product||'기타')===row.product){
-              total += parseFloat(r.ea)||0;
-            }
-          });
-          return total;
-        })();
-        const gPerEA = _prevGramPerEA(row.product);
-        dayTotal += Math.round(ea * gPerEA / 1000);
-      });
-      if(dayTotal > 0) _prevDayKgs.push(dayTotal);
+    // testRun 필터 (이번달 막대와 동일)
+    const _prevTestOpK = new Set((opData||[]).filter(r => (r.testRun||r.isTest) && String(r.date||'').slice(0,7)===prevYm).map(r => `${String(r.date||'').slice(0,10)}_${r.product||''}`));
+    const _prevIsTest = r => !!(r.testRun || r.isTest || _prevTestOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`));
+    // 1단계: 그 날 그 제품의 ea 합 (testRun 제외)
+    const _prevByDateProd = {};
+    (prevPk||[]).filter(r => !_prevIsTest(r)).forEach(r=>{
+      const d = String(r.date||'').slice(0,10);
+      const prod = r.product||'기타';
+      const key = d+'|'+prod;
+      if(!_prevByDateProd[key]) _prevByDateProd[key] = {date:d, product:prod, ea:0};
+      _prevByDateProd[key].ea += parseFloat(r.ea)||0;
     });
+    // 외포장 EA 맵 (이번달과 동일 — outerEa 필드, testRun 제외)
+    const _prevOpEaMap = {};
+    (opData||[]).filter(r => !r.testRun && !r.isTest && String(r.date||'').slice(0,7)===prevYm).forEach(r=>{
+      const dk = (String(r.date||'').slice(0,10))+'|'+(r.product||'');
+      _prevOpEaMap[dk] = (_prevOpEaMap[dk]||0) + (parseInt(r.outerEa)||0);
+    });
+    // 2단계: 일별 kg 합산 (이번달 _cellByDate 빌드 방식 그대로)
+    const _prevDayKgMap = {};
+    Object.values(_prevByDateProd).forEach(row => {
+      const outerEa = _prevOpEaMap[row.date+'|'+row.product] || 0;
+      const ea = outerEa > 0 ? outerEa : Math.round(row.ea || 0);
+      if(ea <= 0) return;
+      const gPerEA = _prevGramPerEA(row.product);
+      const kg = Math.round(ea * gPerEA / 1000);
+      _prevDayKgMap[row.date] = (_prevDayKgMap[row.date]||0) + kg;
+    });
+    // 3단계: 일평균
+    const _prevDayKgs = Object.values(_prevDayKgMap).filter(v => v > 0);
     const _avgPkKg = _prevDayKgs.length ? Math.round(_prevDayKgs.reduce((s,v)=>s+v,0)/_prevDayKgs.length) : null;
     // 4월 일평균 원육 사용량 — pRm(원육 합) / pDays
     const _avgRmKg = pDays>0 ? pRm/pDays : null;
