@@ -1702,12 +1702,8 @@ function tttRender() {
     </div>`;
   }
 
-  document.getElementById('ttt-result').innerHTML = `
-    ${conclusion}
-    ${dualBox}
-    ${planBox}
-    ${splitView}
-    ${reportBox}`;
+  // 테스트 탭: 기존 단일 시뮬 결과 숨김 (시나리오 모드로 대체)
+  document.getElementById('ttt-result').innerHTML = '';
 
   // 호버 툴팁 활성화 (SVG 막대)
   setTimeout(() => {
@@ -1731,6 +1727,9 @@ function tttRender() {
       });
     });
   }, 0);
+
+  // 시나리오 모드 자동 갱신 (기존 결과 대신)
+  if (typeof ttmRender === 'function') ttmRender();
 }
 
 // ============================================================
@@ -1854,30 +1853,48 @@ function ttmSimulate(scen, workers) {
   const fcCrushMin = Math.ceil(fcCrushIn / (fcPcrush * workers.crushFc) * 60);
   const fcPackMin = Math.ceil(fcEa / (fcPpackEaMin * workers.packFc / 6));
 
-  // === FC 자숙 탱크 분배 (1탱크 800kg 한도) ===
-  const fcTankKg = 800;
-  const fcTanks = [];
-  let remain = fcCookIn;
-  while (remain > 0) {
-    fcTanks.push(Math.min(fcTankKg, remain));
-    remain -= fcTankKg;
-  }
-  // 시간 = FC 자숙 + 와건 (탱크 평행 진행 가정)
-  const fcCookFullMin = TTM_FIXED.fcCookMin + TTM_FIXED.cookWagonMin;
-  const fpCookFullMin = TTM_FIXED.fpCookMin + TTM_FIXED.cookWagonMin;
-
   // === 타임라인 배치 (FP 먼저) ===
   const t0 = scen.startMin;
-  // FP 전처리
   const fpPre = { s: t0, e: t0 + fpPreMin };
-  // FC 전처리 (FP 전처리 끝나면)
   const fcPre = { s: fpPre.e, e: fpPre.e + fcPreMin };
-  // FP 자숙 (가압 5호, FP 전처리 끝나면)
-  const fpCook = { s: fpPre.e, e: fpPre.e + fpCookFullMin, tank: 5 };
-  // FC 자숙 (1·2호, FC 전처리 끝나면 평행)
-  const fcCook = fcTanks.map((kg, i) => ({
-    s: fcPre.e, e: fcPre.e + fcCookFullMin, tank: i + 1, kg: r2(kg)
+  const fpCook = { s: fpPre.e, e: fpPre.e + (TTM_FIXED.fpCookMin + TTM_FIXED.cookWagonMin), tank: 5 };
+
+  // === FC 자숙 탱크 분배 (기존 A/B/E 방식, 순차 투입) ===
+  const fcTankKg = 800;
+  const fcCookCycles = Math.max(1, Math.ceil(fcCookIn / fcTankKg));
+  // 탱크 분배: B(N등분 균등)를 기본으로 — ttmSimulate는 단순화, 전체 비교는 ttmRender에서
+  const fcTankKgs = Array(fcCookCycles).fill(fcCookIn / fcCookCycles);
+
+  // 각 탱크 순차 투입 시각: 전처리 속도 기반
+  // FC 전처리 시작~종료 = fcPre.s ~ fcPre.e
+  // 전처리 인원: 초기 earlyWorkers(외국인) → joinMin 이후 wkPre
+  const fcPreStart = fcPre.s;
+  const fcJoinMin = tttToMin(inp.joinTime);
+  const fcEarlyWorkers = inp.earlyWorkers;
+  const fcPhase1Kg = fcPpre * fcEarlyWorkers * (Math.max(0, fcJoinMin - fcPreStart) / 60);
+  const fcTankInTimes = [];
+  let fcCumOut = 0;
+  for (let i = 0; i < fcCookCycles; i++) {
+    fcCumOut += fcTankKgs[i];
+    const targetInKg = fcCumOut / (fcYpre / 100);
+    let tankInMin;
+    if (targetInKg <= fcPhase1Kg) {
+      tankInMin = fcPreStart + Math.round(targetInKg / (fcPpre * fcEarlyWorkers) * 60);
+    } else {
+      const extraKg = targetInKg - fcPhase1Kg;
+      tankInMin = fcJoinMin + Math.round(extraKg / (fcPpre * workers.preFc) * 60);
+    }
+    if (i === fcCookCycles - 1) tankInMin = Math.min(tankInMin, fcPre.e);
+    fcTankInTimes.push(tankInMin);
+  }
+  const fcCookFullMin = TTM_FIXED.fcCookMin + TTM_FIXED.cookWagonMin;
+  const fcTankOutTimes = fcTankInTimes.map(t => t + fcCookFullMin);
+
+  // FC 자숙 cook 배열 (순차 시작 시각 반영)
+  const fcCook = fcTankKgs.map((kg, i) => ({
+    s: fcTankInTimes[i], e: fcTankOutTimes[i], tank: i + 1, kg: r2(kg)
   }));
+  const fpCookFullMin = TTM_FIXED.fpCookMin + TTM_FIXED.cookWagonMin;
   // FP 파쇄 (FP 자숙 끝나면)
   const fpCrush = { s: fpCook.e, e: fpCook.e + fpCrushMin };
   // FC 파쇄 (FC 자숙 모두 끝나면 + FP 파쇄 끝나면)
