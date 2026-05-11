@@ -1196,18 +1196,20 @@ function ttRender() {
     const crossLunch1 = tc.start < LUNCH1_S && tc.end > LUNCH1_S;
     const crossLunch2 = tc.start < LUNCH1_E && tc.end > LUNCH1_E;
     const crossPeak = tc.start < LUNCH2_E && tc.end > LUNCH2_E;
+    // 새 점심 룰: 파쇄 전담 = wkPackPeak - wkPre (전처리조 제외 순수 파쇄 인원)
+    const crushOnly = Math.max(0, inp.wkPackPeak - inp.wkPre);
+    const crushLunch1 = inp.wkPre + inp.wkPack + inp.wkTrans; // 점심1: 전처리+내포장+이송 파쇄 투입
     const segmentInfo = [];
     if (tc.start < LUNCH1_S) segmentInfo.push(`${ttFmt(tc.start)}~${ttFmt(Math.min(LUNCH1_S, tc.end))}: ${inp.wkCrush}명`);
     if (crossLunch1 || (tc.start >= LUNCH1_S && tc.start < LUNCH1_E)) {
       const segS = Math.max(tc.start, LUNCH1_S);
       const segE = Math.min(tc.end, LUNCH1_E);
-      const w = sim.preEndMin <= LUNCH1_S ? inp.wkPre : 0;
-      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${w}명${w>0?' (전처리조)':' (정지)'}`);
+      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${crushLunch1}명 (파쇄전담 점심 → 전처리·내포장·이송 파쇄 투입)`);
     }
     if (crossLunch2 || (tc.start >= LUNCH1_E && tc.start < LUNCH2_E)) {
       const segS = Math.max(tc.start, LUNCH1_E);
       const segE = Math.min(tc.end, LUNCH2_E);
-      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${inp.wkCrush + inp.wkTrans}명 (이송 합류)`);
+      if (segE > segS) segmentInfo.push(`${ttFmt(segS)}~${ttFmt(segE)}: ${crushOnly}명 (파쇄전담 복귀, 전처리·내포장·이송 점심2)`);
     }
     if (tc.end > LUNCH2_E) {
       const segS = Math.max(tc.start, LUNCH2_E);
