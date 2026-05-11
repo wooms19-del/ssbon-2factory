@@ -929,19 +929,17 @@ function ttPlanSlots(inp, sim) {
     sum: total,
   });
 
-  // 슬롯 4: 점심 1차 (11:30~12:30)
-  // 전처리 끝났으면 → 전처리조가 파쇄로 합류
-  // 안 끝났으면 → 전처리 계속, 파쇄 0
+  // 슬롯 4: 점심 1차 (11:30~12:30) — 후공정조 + 외포장조 점심, 전처리조는 파쇄 합류
   if (preEndedBeforeLunch) {
-    // 후공정조 통째 점심 + 전처리조가 파쇄로 합류
-    const lunch1 = total - inp.wkPre - 1;  // 점심 = 후공정조 + 외포장조 등
+    // 점심1 = 후공정조(파쇄·내포장·이송) + 외포장조 + 세팅 등 = 총 - 전처리조 - 관리1
+    const lunch1 = total - inp.wkPre - 1;
     slots.push({
       range: `11:30~12:30`,
       cells: { 파쇄: inp.wkPre, 점심: Math.max(0, lunch1), 관리: 1 },
       sum: total,
     });
   } else {
-    // 전처리 진행 중 → 모드 A처럼
+    // 전처리 진행 중
     slots.push({
       range: `11:30~12:30`,
       cells: { 전처리: inp.wkPre, 점심: total - inp.wkPre - 1, 관리: 1 },
@@ -949,12 +947,22 @@ function ttPlanSlots(inp, sim) {
     });
   }
 
-  // 슬롯 5: 점심 2차 (12:30~13:30)
-  // 후공정조 복귀 + 이송 합류 → 파쇄 = wkCrush + wkTrans
-  // 전처리조 점심
+  // 슬롯 5: 점심 2차 (12:30~13:30) — 전처리조만 점심, 후공정조는 복귀해서 파쇄 가동
+  // 점심2 = 전처리조 = wkPre (점심1에 갔던 사람들은 다시 일터로 복귀)
+  // 파쇄 = wkCrush + wkTrans (후공정조 복귀 + 이송 합류)
+  // 외포장조는 이미 점심1에 다녀왔으므로 이제 작업 (외포장 계속 또는 다른 일)
+  // → 합 = 전처리(점심) + 파쇄 + 관리 + 외포장(작업) = 28
+  // 외포장 등 = 28 - wkPre - (wkCrush+wkTrans) - 1
+  const lunch2 = inp.wkPre; // 전처리조만 점심
+  const others2 = Math.max(0, total - inp.wkPre - (inp.wkCrush + inp.wkTrans) - 1);
   slots.push({
     range: `12:30~13:30`,
-    cells: { 파쇄: inp.wkCrush + inp.wkTrans, 점심: total - inp.wkCrush - inp.wkTrans - 1, 관리: 1 },
+    cells: {
+      파쇄: inp.wkCrush + inp.wkTrans,
+      점심: lunch2,
+      외포장: others2, // 남는 사람은 외포장 (잔여 작업)
+      관리: 1,
+    },
     sum: total,
   });
 
