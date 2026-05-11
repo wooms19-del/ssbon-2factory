@@ -2105,78 +2105,155 @@ function ttmRenderTimeline(scen, workers, sim) {
   const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
   const fpName = scen.fp.info.name;
 
-  // 행 데이터 정렬 (위에서 아래로)
-  const rows = [];
-  rows.push({ label: '전처리',    color: '#7F77DD', s: sim.fp.pre.s,   e: sim.fp.pre.e,   text: `${fpName} ${scen.fp.kg}kg · ${workers.preFp}명` });
-  rows.push({ label: '전처리 1',  color: '#185FA5', s: sim.fc.pre.s,   e: sim.fc.pre.e,   text: `FC ${scen.fc.kg}kg · ${workers.preFc}명` });
-  rows.push({ label: '자숙',      color: '#5DCAA5', s: sim.fp.cook.s,  e: sim.fp.cook.e,  text: `${fpName} · 5호(가압) · 180분` });
-  sim.fc.cook.forEach((c, i) => {
-    rows.push({ label: `자숙 ${i+1}`, color: '#0F6E56', s: c.s, e: c.e, text: `FC · ${c.tank}호 · ${c.kg}kg · 270분` });
-  });
-  rows.push({ label: '파쇄',      color: '#7F77DD', s: sim.fp.crush.s, e: sim.fp.crush.e, text: `${fpName} · ${workers.crushFp}명` });
-  (sim.fc.crushes || [sim.fc.crush]).forEach((c, i) => {
-    rows.push({ label: i===0 ? '파쇄 1' : `파쇄 ${i+2}`, color: '#BA7517', s: c.s, e: c.e, text: `FC ${c.tank}호 · ${c.kg}kg · ${workers.crushFc}명` });
-  });
-  rows.push({ label: '내포장',    color: '#7F77DD', s: sim.fp.pack.s,  e: sim.fp.pack.e,  text: `${fpName} ${sim.fp.ea}EA · ${workers.packFp}명+이송2` });
-  rows.push({ label: '내포장 1',  color: '#534AB7', s: sim.fc.pack.s,  e: sim.fc.pack.e,  text: `FC ${sim.fc.ea}EA · ${workers.packFc}명+이송2` });
-  sim.fp.retort.forEach((r, i) => {
-    rows.push({ label: i===0?'레토르트':`레토르트 ${rows.filter(x=>x.label.startsWith('레토르트')).length}`, color: '#993556', s: r.s, e: r.e, text: `${fpName} ${r.host}호 · ${r.carts}대차 · ${r.ea}EA` });
-  });
-  sim.fc.retort.forEach((r) => {
-    const retIdx = rows.filter(x=>x.label.startsWith('레토르트')).length;
-    rows.push({ label: `레토르트 ${retIdx}`, color: '#A32D2D', s: r.s, e: r.e, text: `FC ${r.host}호 · ${r.carts}대차 · ${r.ea}EA` });
-  });
-
-  // 타임축 (압축)
-  const tMin = Math.min(...rows.map(r => r.s));
+  const SVG_W = 800, LEFT = 100, RIGHT = 780;
+  const tMin = sim.fp.pre.s;
   const tMax = sim.endMin + 30;
   const span = Math.max(1, tMax - tMin);
-  const SVG_W = 760, LEFT = 80, RIGHT = 740;
   const xPos = m => LEFT + (m - tMin) / span * (RIGHT - LEFT);
-  const ROW_H = 19, BAR_H = 15;
+  const ROW_H = 30, BAR_H = 26;
 
+  // 눈금 + 그리드
   let ticks = '', grid = '';
-  for (let h = Math.floor(tMin/60); h <= Math.ceil(tMax/60); h += 1) {
+  for (let h = Math.floor(tMin/60); h <= Math.ceil(tMax/60); h++) {
     const x = xPos(h*60);
     if (x >= LEFT && x <= RIGHT + 10) {
-      ticks += `<text x="${x}" y="14" text-anchor="middle" font-size="9.5" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
-      grid += `<line x1="${x}" y1="20" x2="${x}" y2="${24 + rows.length*ROW_H + 22}" stroke="#e5e3da" stroke-width="0.5" stroke-dasharray="2 3"/>`;
+      ticks += `<text x="${x}" y="20" text-anchor="middle" font-size="11" fill="var(--color-text-secondary)">${String(h%24).padStart(2,'0')}</text>`;
+      grid  += `<line x1="${x}" y1="28" x2="${x}" y2="999" stroke="#e5e3da" stroke-width="0.5" stroke-dasharray="2 3"/>`;
     }
   }
-  // 점심 영역
-  const lunchBg = `
-    <rect x="${xPos(11*60+30)}" y="20" width="${xPos(12*60+30)-xPos(11*60+30)}" height="${rows.length*ROW_H + 10}" fill="#FFF7ED" opacity="0.5"/>
-    <rect x="${xPos(12*60+30)}" y="20" width="${xPos(13*60+30)-xPos(12*60+30)}" height="${rows.length*ROW_H + 10}" fill="#FFF7ED" opacity="0.3"/>`;
 
-  // 막대 (단순: 막대만, 라벨은 좌측 / 상세는 호버 툴팁)
+  // 점심 음영
+  const lunchBg = `
+    <rect x="${xPos(11*60+30)}" y="28" width="${xPos(12*60+30)-xPos(11*60+30)}" height="999" fill="#FFF7ED" opacity="0.6"/>
+    <rect x="${xPos(12*60+30)}" y="28" width="${xPos(13*60+30)-xPos(12*60+30)}" height="999" fill="#FFF7ED" opacity="0.4"/>`;
+
+  // 막대 함수 (원본 스타일: 내부 텍스트 + 우측 라벨 + 호버)
+  const bar = (y, s, e, color, innerTxt, rightTxt, tipTitle, tipLines) => {
+    const x1 = xPos(s), x2 = xPos(e), w = Math.max(x2-x1, 3);
+    const tipInfo = tipLines.join('|');
+    return `<g class="ttt-bar" data-tip-title="${tipTitle}" data-tip-info="${tipInfo}">
+      <rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="3" fill="${color}"/>
+      ${innerTxt && w > 40 ? `<text x="${(x1+x2)/2}" y="${y+BAR_H/2+4}" text-anchor="middle" font-size="10" fill="#fff" font-weight="600" pointer-events="none">${innerTxt}</text>` : ''}
+    </g>
+    ${rightTxt ? `<text x="${x2+5}" y="${y+BAR_H/2+4}" text-anchor="start" font-size="9.5" fill="${color}" pointer-events="none">${rightTxt}</text>` : ''}`;
+  };
+  const label = (y, txt) => `<text x="${LEFT-8}" y="${y+BAR_H/2+4}" text-anchor="end" font-size="12" fill="var(--color-text-secondary)" font-weight="500">${txt}</text>`;
+
   let bars = '';
-  rows.forEach((r, i) => {
-    const y = 24 + i * ROW_H;
-    const x1 = xPos(r.s), x2 = xPos(r.e);
-    const w = Math.max(x2 - x1, 3);
-    bars += `<text x="${LEFT-6}" y="${y+BAR_H/2+3.5}" text-anchor="end" font-size="10.5" fill="var(--color-text-secondary)" font-weight="500">${r.label}</text>`;
-    bars += `<g class="ttm-bar" data-tip="${fmt(r.s)}-${fmt(r.e)} · ${r.text}">
-      <rect x="${x1}" y="${y}" width="${w}" height="${BAR_H}" rx="2.5" fill="${r.color}"/>
-    </g>`;
-    bars += `<text x="${x2 + 4}" y="${y+BAR_H/2+3.5}" text-anchor="start" font-size="9.5" fill="${r.color}" pointer-events="none">${fmt(r.s)}~${fmt(r.e)}</text>`;
+  let yCursor = 36;
+
+  // FP 전처리
+  bars += label(yCursor, '전처리');
+  bars += bar(yCursor, sim.fp.pre.s, sim.fp.pre.e, '#7F77DD',
+    `${workers.preFp}명 · ${scen.fp.kg}kg`,
+    `${scen.fp.kg}kg`,
+    `${fpName} 전처리`,
+    [`시각: ${fmt(sim.fp.pre.s)}~${fmt(sim.fp.pre.e)}`, `인원: ${workers.preFp}명`, `원육: ${scen.fp.kg}kg`]);
+  yCursor += ROW_H;
+
+  // FC 전처리
+  bars += label(yCursor, '전처리 1');
+  bars += bar(yCursor, sim.fc.pre.s, sim.fc.pre.e, '#185FA5',
+    `${workers.preFc}명 · ${scen.fc.kg}kg`,
+    `${workers.yCrushFc ? workers.yCrushFc+'%' : ''} · ${workers.pPreFc}kg/인시`,
+    `FC 전처리`,
+    [`시각: ${fmt(sim.fc.pre.s)}~${fmt(sim.fc.pre.e)}`, `인원: ${workers.preFc}명`, `원육: ${scen.fc.kg}kg`, `생산성: ${workers.pPreFc}kg/인시`]);
+  yCursor += ROW_H;
+
+  // FP 자숙
+  bars += label(yCursor, '자숙');
+  bars += bar(yCursor, sim.fp.cook.s, sim.fp.cook.e, '#5DCAA5',
+    `${fpName} · 가압`,
+    ``,
+    `${fpName} 자숙`,
+    [`시각: ${fmt(sim.fp.cook.s)}~${fmt(sim.fp.cook.e)}`, `탱크: 가압 5호`, `자숙: 150분`]);
+  yCursor += ROW_H;
+
+  // FC 자숙 탱크별
+  sim.fc.cook.forEach((c, i) => {
+    bars += label(yCursor, `자숙 ${i+1}`);
+    bars += bar(yCursor, c.s, c.e, '#0F6E56',
+      `${c.kg}kg`,
+      `${c.kg}kg`,
+      `FC 자숙 ${i+1}호`,
+      [`시각: ${fmt(c.s)}~${fmt(c.e)}`, `탱크: ${c.tank}호`, `투입: ${c.kg}kg`, `자숙: 240분`]);
+    yCursor += ROW_H;
   });
 
-  // 종료 선
-  bars += `
-    <line x1="${xPos(sim.endMin)}" y1="20" x2="${xPos(sim.endMin)}" y2="${24 + rows.length*ROW_H}" stroke="#A32D2D" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.7"/>
-    <text x="${xPos(sim.endMin)}" y="${24 + rows.length*ROW_H + 12}" text-anchor="middle" font-size="10" fill="#A32D2D" font-weight="600">${fmt(sim.endMin)} 종료</text>`;
+  // FP 파쇄
+  bars += label(yCursor, '파쇄');
+  bars += bar(yCursor, sim.fp.crush.s, sim.fp.crush.e, '#7F77DD',
+    `${workers.crushFp}명`,
+    `${workers.yCrushFp}% · ${workers.pCrushFp}kg/인시`,
+    `${fpName} 파쇄`,
+    [`시각: ${fmt(sim.fp.crush.s)}~${fmt(sim.fp.crush.e)}`, `인원: ${workers.crushFp}명`, `수율: ${workers.yCrushFp}%`, `생산성: ${workers.pCrushFp}kg/인시`]);
+  yCursor += ROW_H;
 
-  const svgH = 24 + rows.length * ROW_H + 24;
+  // FC 파쇄 탱크별
+  (sim.fc.crushes || [sim.fc.crush]).forEach((c, i) => {
+    bars += label(yCursor, `파쇄 ${i+1}`);
+    bars += bar(yCursor, c.s, c.e, '#BA7517',
+      `${c.tank}호 · ${c.kg}kg`,
+      `${c.kg}kg`,
+      `FC 파쇄 ${c.tank}호`,
+      [`시각: ${fmt(c.s)}~${fmt(c.e)}`, `탱크: ${c.tank}호`, `파쇄량: ${c.kg}kg`, `인원: ${workers.crushFc}명`]);
+    yCursor += ROW_H;
+  });
+
+  // FP 내포장
+  bars += label(yCursor, '내포장');
+  bars += bar(yCursor, sim.fp.pack.s, sim.fp.pack.e, '#9B59B6',
+    `${workers.packFp}명 · ${sim.fp.ea.toLocaleString()}EA`,
+    `${sim.fp.ea.toLocaleString()}EA`,
+    `${fpName} 내포장`,
+    [`시각: ${fmt(sim.fp.pack.s)}~${fmt(sim.fp.pack.e)}`, `인원: ${workers.packFp}명 + 이송2`, `산출: ${sim.fp.ea.toLocaleString()}EA`]);
+  yCursor += ROW_H;
+
+  // FC 내포장
+  bars += label(yCursor, '내포장 1');
+  bars += bar(yCursor, sim.fc.pack.s, sim.fc.pack.e, '#534AB7',
+    `${workers.packFc}명 · ${sim.fc.ea.toLocaleString()}EA`,
+    `${sim.fc.ea.toLocaleString()}EA`,
+    `FC 내포장`,
+    [`시각: ${fmt(sim.fc.pack.s)}~${fmt(sim.fc.pack.e)}`, `인원: ${workers.packFc}명 + 이송2`, `산출: ${sim.fc.ea.toLocaleString()}EA`]);
+  yCursor += ROW_H;
+
+  // 레토르트
+  [...sim.fp.retort.map(r=>({...r,isFp:true})), ...sim.fc.retort.map(r=>({...r,isFp:false}))].forEach((r, i) => {
+    const lbl = i===0 ? '레토르트' : `레토르트 ${i+1}`;
+    const color = r.isFp ? '#993556' : '#A32D2D';
+    const nm = r.isFp ? fpName : 'FC';
+    bars += label(yCursor, lbl);
+    bars += bar(yCursor, r.s, r.e, color,
+      `${r.carts}대차 · ${r.ea.toLocaleString()}EA`,
+      `${r.ea.toLocaleString()}EA`,
+      `${nm} 레토르트 ${r.host}호`,
+      [`시각: ${fmt(r.s)}~${fmt(r.e)}`, `레토르트: ${r.host}호`, `대차: ${r.carts}대차`, `수량: ${r.ea.toLocaleString()}EA`]);
+    yCursor += ROW_H;
+  });
+
+  // 점심
+  bars += label(yCursor, '점심');
+  bars += bar(yCursor, 11*60+30, 12*60+30, '#E8A838', '1차', '', '점심 1차', [`11:30~12:30`]);
+  bars += bar(yCursor, 12*60+30, 13*60+30, '#C8882A', '2차', '', '점심 2차', [`12:30~13:30`]);
+  yCursor += ROW_H;
+
+  // 종료선
+  bars += `<line x1="${xPos(sim.endMin)}" y1="28" x2="${xPos(sim.endMin)}" y2="${yCursor}" stroke="#A32D2D" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.8"/>
+    <text x="${xPos(sim.endMin)}" y="${yCursor+14}" text-anchor="middle" font-size="11" fill="#A32D2D" font-weight="700">${fmt(sim.endMin)} 종료</text>`;
+
+  const svgH = yCursor + 22;
   return `
     <style>
-      .ttm-bar { cursor: pointer; transition: filter 0.15s; }
-      .ttm-bar:hover rect { filter: brightness(1.15); stroke: #000; stroke-width: 1; }
-      #ttm-tip { position: fixed; background: #222; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 9999; pointer-events: none; max-width: 320px; display: none; }
+      .ttt-bar { cursor:pointer; }
+      .ttt-bar:hover rect { filter:brightness(1.12); }
+      #tttTip { position:fixed; background:#222; color:#fff; padding:8px 12px; border-radius:6px; font-size:12px; line-height:1.6; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:9999; pointer-events:none; max-width:280px; display:none; }
+      .ttt-tip-title { font-weight:700; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.2); padding-bottom:3px; }
     </style>
-    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}" role="img" style="max-width:100%">
+    <svg width="100%" viewBox="0 0 ${SVG_W} ${svgH}">
       ${lunchBg}${ticks}${grid}${bars}
     </svg>
-    <div id="ttm-tip"></div>`;
+    <div id="tttTip"></div>`;
 }
 
 // ============================================================
