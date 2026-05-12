@@ -417,7 +417,7 @@
     var opBoxMap = {};
     opReal.forEach(function(r){
       var k = String(r.date||'').slice(0,10)+'|'+(r.product||'');
-      opMap[k] = (opMap[k]||0) + (parseInt(r.outerEa,10)||0);
+      opMap[k] = (opMap[k]||0) + opEa(r);
       // 박스 사용량 = outerBoxes (정상) + boxDefect (불량 박스도 사용한 거)
       opBoxMap[k] = (opBoxMap[k]||0) + (parseInt(r.outerBoxes,10)||0) + (parseInt(r.boxDefect,10)||0);
     });

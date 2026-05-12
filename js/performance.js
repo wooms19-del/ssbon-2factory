@@ -293,7 +293,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     if(r.testRun||r.isTest) return;
     var key=d(r)+'|'+(r.product||'');
     if(!opMap[key]) opMap[key]={ea:0,boxes:0,tray:0,trayDef:0,unitCnt:0,boxDef:0};
-    opMap[key].ea += parseInt(r.outerEa)||0;
+    opMap[key].ea += opEa(r);
     opMap[key].boxes += parseInt(r.outerBoxes)||0;
     opMap[key].tray += parseInt(r.trayUsed||r.tray)||0;
     opMap[key].trayDef += parseInt(r.trayDefect)||0;
@@ -817,7 +817,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
   op.filter(function(r){return r.testRun||r.isTest;}).forEach(function(r){
     var key=d(r)+'|'+(r.product||'');
     if(!testOpByKey[key]) testOpByKey[key]={ea:0,boxes:0};
-    testOpByKey[key].ea+=parseInt(r.outerEa)||0;
+    testOpByKey[key].ea+=opEa(r);
     testOpByKey[key].boxes+=parseInt(r.outerBoxes)||0;
   });
   var testRows=[];

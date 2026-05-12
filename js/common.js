@@ -14,6 +14,16 @@ firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
 // ============================================================
+// 외포장 완료 EA 계산 헬퍼
+// outerEa(박스×입수) + remainEa(잔량 EA) 합산
+// 외포장 EA를 표시/집계하는 모든 곳에서 사용
+// ============================================================
+function opEa(r){
+  if(!r) return 0;
+  return (parseInt(r.outerEa)||0) + (parseInt(r.remainEa)||0);
+}
+
+// ============================================================
 // 🔄 자동 reload — 새 코드 배포 시 모든 디바이스 즉시 reload
 // 사용 예: deploy 후 _config/version 문서의 value를 새 timestamp로 set
 // 태블릿이 며칠 켜져있어도 자동 갱신됨

@@ -115,10 +115,10 @@ async function renderMonthly() {
   const totalDef = pkClean.reduce((s,r)=>s+(parseFloat(r.defect)||0), 0);
   const workDays = new Set(pkClean.map(r=>String(r.date||'').slice(0,10)).filter(Boolean)).size;
   const totalBoxes   = opReal.reduce((s,r)=>s+(parseInt(r.outerBoxes)||0), 0);
-  const totalOuterEA = opReal.reduce((s,r)=>s+(parseInt(r.outerEa)||0), 0);
+  const totalOuterEA = opReal.reduce((s,r)=>s+opEa(r), 0);
   // 총 생산 EA = 테이블과 동일: 외포장 있으면 외포장EA, 없으면 내포장EA
   const _kpiOpMap={};
-  opReal.forEach(r=>{ _kpiOpMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=parseInt(r.outerEa)||0; });
+  opReal.forEach(r=>{ _kpiOpMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=opEa(r); });
   const _kpiDpMap={};
   pkClean.forEach(r=>{ const key=`${String(r.date||'').slice(0,10)}_${r.product||''}`;
     if(!_kpiDpMap[key]) _kpiDpMap[key]=0;
@@ -164,7 +164,7 @@ async function renderMonthly() {
   const _isTestPk=r=>!!(r.testRun||r.isTest||_testOpK.has(`${String(r.date||'').slice(0,10)}_${r.product||''}`));
   // 외포장 map (date_product → outerEa)
   const _opEaMap={};
-  opReal.forEach(r=>{ _opEaMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=parseInt(r.outerEa)||0; });
+  opReal.forEach(r=>{ _opEaMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=opEa(r); });
   // 날짜+제품 단위로 내포장 집계 (testRun 제외)
   const _dpMap={};
   pk.filter(r=>!_isTestPk(r)).forEach(r=>{
@@ -183,7 +183,7 @@ async function renderMonthly() {
   const opByProd = {};
   opReal.forEach(r=>{ const k=r.product||'기타';
     if(!opByProd[k]) opByProd[k]={outerEa:0,boxes:0};
-    opByProd[k].outerEa+=parseInt(r.outerEa)||0; opByProd[k].boxes+=parseInt(r.outerBoxes)||0;
+    opByProd[k].outerEa+=opEa(r); opByProd[k].boxes+=parseInt(r.outerBoxes)||0;
   });
   const tbody=document.getElementById('mo_prod_tbl'), tfoot=document.getElementById('mo_prod_total');
   let totEA=0,totDef=0,totOuter=0,totBx=0,totPkEa=0;
@@ -340,7 +340,7 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
   const opMap = {};
   (opData||[]).filter(r=>!r.testRun&&!r.isTest).forEach(r=>{
     const dk = (String(r.date||'').slice(0,10))+'|'+(r.product||'');
-    opMap[dk] = (opMap[dk]||0) + (parseInt(r.outerEa)||0);
+    opMap[dk] = (opMap[dk]||0) + opEa(r);
   });
 
   // 글로벌 저장 (필터용)
@@ -1076,7 +1076,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     const prevOpMap={};
     prevOp.filter(r=>!r.testRun&&!r.isTest).forEach(r=>{
       const dk=String(r.date||'').slice(0,10)+'|'+(r.product||'');
-      prevOpMap[dk]=(prevOpMap[dk]||0)+(parseInt(r.outerEa)||0);
+      prevOpMap[dk]=(prevOpMap[dk]||0)+opEa(r);
     });
     const prevBDP={};
     _prevPkClean2.forEach(r=>{
@@ -1196,7 +1196,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     const _prevOpEaMap = {};
     (prevOp||[]).filter(r => !r.testRun && !r.isTest).forEach(r=>{
       const dk = (String(r.date||'').slice(0,10))+'|'+(r.product||'');
-      _prevOpEaMap[dk] = (_prevOpEaMap[dk]||0) + (parseInt(r.outerEa)||0);
+      _prevOpEaMap[dk] = (_prevOpEaMap[dk]||0) + opEa(r);
     });
     // 2단계: 일별 kg 합산 (이번달 _cellByDate 빌드 방식 그대로)
     const _prevDayKgMap = {};
