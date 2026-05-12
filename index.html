@@ -517,9 +517,10 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="ct" style="margin:0">공정 타임라인</div>
-      <div id="tlMode" style="display:flex;gap:4px">
+      <div id="tlMode" style="display:flex;gap:4px;align-items:center">
         <button type="button" onclick="setTlMode('integrated')" id="tlModeIntegrated" class="btn bo bsm" style="font-size:11px;padding:3px 9px">통합</button>
         <button type="button" onclick="setTlMode('byCart')" id="tlModeByCart" class="btn bo bsm" style="font-size:11px;padding:3px 9px">카트별</button>
+        <button type="button" onclick="exportTimeline()" class="dnbtn" title="타임라인 엑셀 다운로드" style="font-size:11px;padding:3px 9px;background:#fff7e6;border:1px solid #ffb366;color:#e67e22;font-weight:600;border-radius:4px;margin-left:6px">📥 엑셀</button>
       </div>
     </div>
     <div class="tlw" id="tlWrap"><div class="emp">데이터 없음</div></div>
@@ -1610,7 +1611,7 @@
 <script src="js/packing.js?v=1778145851"></script>
 <script src="js/csv_upload.js?v=1778129561"></script>
 <script src="js/daily_report.js?v=1778546951"></script>
-<script src="js/analysis.js?v=1778547898"></script>
+<script src="js/analysis.js?v=1778550054"></script>
 <script src="js/ai_analysis.js?v=1778129561"></script>
 <script src="js/dashboard.js?v=1778129561"></script>
 <script src="js/trace.js?v=1778148449"></script>
