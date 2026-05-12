@@ -810,7 +810,10 @@ function renderPkPending(){
             ${r.sauceTank ? ' · 소스 '+r.sauceTank : ''}
           </div>
         </div>
-        <button class="btn bs bsm" onclick="togglePkEndForm('${r.id}')">종료 입력</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn bs bsm" onclick="togglePkEndForm('${r.id}')">종료 입력</button>
+          <button class="btn bo bsm" style="color:var(--d);border-color:var(--d)" onclick="deletePkPending('${r.id}')">삭제</button>
+        </div>
       </div>
       <!-- 종료 입력 폼 (숨김) -->
       <div id="pkEndForm_${r.id}" style="display:none;padding:12px;background:#fff">
@@ -906,6 +909,21 @@ function getPkEndSauceTanks(pendId){
     if(t) tanks.push({tank: t, kg: kg});
   });
   return tanks.length ? tanks : null;
+}
+
+// 진행중 포장 삭제 (cooking deleteCkPending 패턴)
+async function deletePkPending(id){
+  if(!confirm('진행중인 포장을 삭제하시겠습니까?')) return;
+  if(!L.packing_pending) L.packing_pending=[];
+  const rec = L.packing_pending.find(r=>r.id===id);
+  if(rec && rec.fbId){
+    try { await fbDelete('packing_pending', rec.fbId); }
+    catch(e){ console.error('Firebase packing_pending 삭제 오류',e); }
+  }
+  L.packing_pending = L.packing_pending.filter(r=>r.id!==id);
+  saveL();
+  renderPkPending();
+  toast('포장 삭제됨','i');
 }
 
 function togglePkEndForm(id){
