@@ -2545,14 +2545,17 @@ function ttmRender() {
         <div style="font-size:14px;font-weight:600">📅 시나리오 타임라인 + 시간대별 인원 활용</div>
         <button onclick="ttmDownloadExcel()" style="background:#185FA5;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">📥 엑셀 다운로드</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:8px">📋 공정 타임라인</div>
-          ${ttmRenderTimeline(scen, workers, sim)}
+      <style>
+        @media (max-width: 900px) { #ttm-split { grid-template-columns: 1fr !important; } }
+      </style>
+      <div id="ttm-split" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:stretch">
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;flex-shrink:0">📋 공정 타임라인</div>
+          <div style="flex:1;display:flex;align-items:flex-start;min-height:0">${ttmRenderTimeline(scen, workers, sim)}</div>
         </div>
-        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:8px">👥 시간대별 인원 활용</div>
-          ${ttmRenderWorkerSlots(scen, workers, sim)}
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px;min-width:0;display:flex;flex-direction:column">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;flex-shrink:0">👥 시간대별 인원 활용</div>
+          <div style="flex:1;display:flex;flex-direction:column;min-height:0">${ttmRenderWorkerSlots(scen, workers, sim)}</div>
         </div>
       </div>
       ${ttmRenderReport(scen, workers, sim)}`;
