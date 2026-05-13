@@ -159,6 +159,10 @@
       + '#mpTbl tbody tr.row-pinned:not(.sumRow):not(.avgRow):not(.prevRow):not(.diffRow) td{background:#fde68a !important}'
       // 합계/평균 등 sticky 셀 배경 일치
       + '#mpTbl tr.sumRow td{background:#fef3c7;font-weight:700;color:#78350f;border-top:2px solid #92400e;padding:9px 8px}'
+      + '#mpTbl tr.subTotalRow td{background:#dbeafe;font-weight:700;color:#1e3a8a;border-top:2px solid #1d4ed8;padding:8px}'
+      + '#mpTbl tr.sharedRow{cursor:help}'
+      + '#mpTbl tr.sharedRow td{background:inherit !important}'
+      + '#mpTbl tr.sharedRow:hover td{filter:brightness(0.95)}'
       + '#mpTbl tr.avgRow td{background:#dcfce7;font-weight:600;color:#14532d;padding:9px 8px}'
       + '#mpTbl tr.prevRow td{background:#f1f5f9;color:#475569;padding:9px 8px}'
       + '#mpTbl tr.diffRow td{background:#fee2e2;font-style:normal;font-weight:600;padding:9px 8px;border-bottom:2px solid #b91c1c}'
@@ -674,6 +678,7 @@
         rows.push({
           date: dt, dayNo: dayNo[dt], dateRowIdx: idx,
           product: p.product,
+          _isMainRow: true,  // ★ 메인 행 (서브토탈/합계 대상)
           rmKg: _r2(alloc.rmKg),
           ppKg: _r2(alloc.ppKg), ppHours: _r2(alloc.ppHours), ppWorkers: r1(alloc.ppWorkers), ppPersonHours: _r2(alloc.ppPersonHours),
           ckKg: _r2(alloc.ckKg), ckHours: _r2(alloc.ckHours), ckWorkers: r1(alloc.ckWorkers), ckPersonHours: _r2(alloc.ckPersonHours),
@@ -721,6 +726,8 @@
         rows.push({
           date: dt, dayNo: dayNo[dt], dateRowIdx: idx2,
           product: p.product,
+          _isMainRow: false,  // ★ 부위별 보조 행 (서브토탈/합계에서 제외)
+          _isPartRow: true,
           rmKg: _r2(src.rmKg),
           ppKg: _r2(src.pp.kg),
           ppHours: _r2(src.pp.hours),
@@ -763,6 +770,8 @@
     var __grpMap = {};
     rows.forEach(function(r){
       if(r.noMeat){ r._grpKey = null; return; }
+      // ★ 메인 행만 그룹화 (부위별 보조 행은 제외)
+      if(r._isMainRow === false) return;
       var key = r.date + '|' + (r.type || '');
       if(!__grpMap[key]) __grpMap[key] = [];
       r._grpKey = key;
@@ -786,7 +795,35 @@
         r._grpFirst = (i===0);
         r._grpRowIdx = i;
         if(grp.length > 1){
-          if(i === 0){
+          // ★ 그룹 모드(제품별) → 행마다 비율 분배 (필터 유무 무관)
+          //   '없음' 모드일 때만 기존 풀+0 표시
+          var splitMode = (_mpGroupMode === 'product');
+          if(splitMode){
+            // ★ 각 행이 자기 td 출력하도록 rowspan 효과 끔
+            r._grpSize = 1;
+            r._grpFirst = true;
+            // 각 행의 완제품 고기 비율로 분배
+            var ratio = grpMeatKg > 0 ? ((r.pkEa||0)*(r.kgea||0))/grpMeatKg : 1/grp.length;
+            r.rmKg = _r2(rmTotal * ratio);
+            r.ppKg = _r2(ppItem.kg * ratio);
+            r.ppHours = _r2(ppItem.hours * ratio);
+            r.ppPersonHours = _r2(ppItem.personHours * ratio);
+            r.ppWorkers = ppItem.hours>0 ? r1(ppItem.personHours/ppItem.hours) : 0;
+            r.ckKg = _r2(ckItem.kg * ratio);
+            r.ckHours = _r2(ckItem.hours * ratio);
+            r.ckPersonHours = _r2(ckItem.personHours * ratio);
+            r.ckWorkers = ckItem.hours>0 ? r1(ckItem.personHours/ckItem.hours) : 0;
+            r.shKg = _r2(shItem.kg * ratio);
+            r.shHours = _r2(shItem.hours * ratio);
+            r.shPersonHours = _r2(shItem.personHours * ratio);
+            r.shWorkers = shItem.hours>0 ? r1(shItem.personHours/shItem.hours) : 0;
+            r._grpMeatKg = grpMeatKg;
+            // ★ 공유 마커 (화면에서 같은 배경색 + 툴팁)
+            r._sharedKey = r.date + '|' + (r.type||'');
+            r._sharedTotal = rmTotal;
+            r._sharedProds = grp.map(function(x){return x.product;});
+            r._sharedType = t;
+          } else if(i === 0){
             r.rmKg = _r2(rmTotal);
             r.ppKg = _r2(ppItem.kg);
             r.ppHours = _r2(ppItem.hours);
@@ -968,21 +1005,104 @@
     });
 
     // ★ 그룹 모드별 집계 (제품별 / 원육별 / 없음)
-    if(_mpGroupMode === 'product' || _mpGroupMode === 'part'){
+    if(_mpGroupMode === 'product'){
+      // ★ 제품별 = 합산하지 않음. 제품별로 일자 행 유지 + 끝에 서브토탈 추가
+      // 1) 제품별로 모으기
+      var byProd = {};
+      var prodOrder = [];
+      calcRows.forEach(function(r){
+        var key = r.product || '?';
+        if(!byProd[key]){ byProd[key] = []; prodOrder.push(key); }
+        byProd[key].push(r);
+      });
+      // 2) 각 제품 행 + 서브토탈 행 만들기
+      var newRows = [];
+      prodOrder.forEach(function(prod){
+        var list = byProd[prod];
+        // 일자순 정렬
+        list.sort(function(a,b){
+          return String(a.date||'').localeCompare(String(b.date||''));
+        });
+        // ★ 일자별 메인 행만 표시 (부위별 보조 행은 숨김)
+        var displayList = list.filter(function(r){ return r._isMainRow !== false; });
+        displayList.forEach(function(r){
+          // ★ 제품별 모드에서는 일자/부위 rowspan 효과 끄기 — 모든 행에 td 출력
+          r.dateRowIdx = 0;
+          r._grpSize = 1;
+          r._grpFirst = true;
+          newRows.push(r);
+        });
+        // ★ 서브토탈 계산 — 메인 행만 합산 (부위별 보조 행 제외, 이중 집계 방지)
+        var sumList = list.filter(function(r){ return r._isMainRow !== false; });
+        var sub = {
+          product: prod,
+          type: '',
+          date: '',
+          dayNo: '',
+          isSubTotal: true,
+          _subTotalProd: prod,
+          rmKg:0, ppKg:0, ppHours:0, ppPersonHours:0,
+          ckKg:0, ckHours:0, ckPersonHours:0,
+          shKg:0, shHours:0, shPersonHours:0,
+          pkEa:0, pkHours:0, pkPersonHours:0,
+          meatKg:0, prodKg:0,
+          pouchUsed:0, sauceKgUsed:0, subKgUsed:0, boxUsed:0,
+          kgea: sumList[0] ? sumList[0].kgea : 0,
+          kgTot: sumList[0] ? sumList[0].kgTot : 0,
+          _workDays: new Set()
+        };
+        sumList.forEach(function(r){
+          sub.rmKg += r.rmKg||0;
+          sub.ppKg += r.ppKg||0; sub.ppHours += r.ppHours||0; sub.ppPersonHours += r.ppPersonHours||0;
+          sub.ckKg += r.ckKg||0; sub.ckHours += r.ckHours||0; sub.ckPersonHours += r.ckPersonHours||0;
+          sub.shKg += r.shKg||0; sub.shHours += r.shHours||0; sub.shPersonHours += r.shPersonHours||0;
+          sub.pkEa += r.pkEa||0; sub.pkHours += r.pkHours||0; sub.pkPersonHours += r.pkPersonHours||0;
+          sub.meatKg += r.meatKg||0; sub.prodKg += r.prodKg||0;
+          sub.pouchUsed += r.pouchUsed||0;
+          sub.sauceKgUsed += r.sauceKgUsed||0;
+          sub.subKgUsed += r.subKgUsed||0;
+          sub.boxUsed += r.boxUsed||0;
+          if(r.date) sub._workDays.add(r.date);
+        });
+        sub.date = sub._workDays.size + '일';
+        delete sub._workDays;
+        var rm = sub.rmKg;
+        var ppT = sub.ppPersonHours, ckT = sub.ckPersonHours, shT = sub.shPersonHours, pkT = sub.pkPersonHours;
+        sub.rmKg = _r2(rm);
+        sub.ppKg = _r2(sub.ppKg); sub.ckKg = _r2(sub.ckKg); sub.shKg = _r2(sub.shKg);
+        sub.meatKg = _r2(sub.meatKg); sub.prodKg = _r2(sub.prodKg);
+        sub.prodPp = rm&&ppT?_r2(rm/ppT):0;
+        sub.prodCk = rm&&ckT?_r2(rm/ckT):0;
+        sub.prodSh = rm&&shT?_r2(rm/shT):0;
+        sub.prodPk = rm&&pkT?_r2(rm/pkT):0;
+        sub.prodAll = rm&&(ppT+ckT+shT+pkT)?_r2(rm/(ppT+ckT+shT+pkT)):0;
+        sub.yieldRmPp = rm?_r2(sub.ppKg/rm*100)/100:0;
+        sub.yieldRmCk = rm?_r2(sub.ckKg/rm*100)/100:0;
+        sub.yieldRmSh = rm?_r2(sub.shKg/rm*100)/100:0;
+        sub.yieldRmPk = rm?_r2(sub.meatKg/rm*100)/100:0;
+        sub.yieldPp = rm?_r2(sub.ppKg/rm*100)/100:0;
+        sub.yieldCk = sub.ppKg?_r2(sub.ckKg/sub.ppKg*100)/100:0;
+        sub.yieldSh = sub.ckKg?_r2(sub.shKg/sub.ckKg*100)/100:0;
+        sub.yieldPk = sub.shKg?_r2(sub.meatKg/sub.shKg*100)/100:0;
+        newRows.push(sub);
+      });
+      calcRows = newRows;
+      // ★ 필터 적용
+      if(_mpGroupFilter.size > 0){
+        calcRows = calcRows.filter(function(r){
+          return _mpGroupFilter.has(r.product);
+        });
+      }
+    } else if(_mpGroupMode === 'part'){
       var grouped = {};
       var groupOrder = [];
       calcRows.forEach(function(r){
-        var key;
-        if(_mpGroupMode === 'product'){
-          key = r.product || '?';
-        } else {
-          key = r.type || (r.isNoMeat?'무육':'?');
-        }
+        var key = r.type || (r.isNoMeat?'무육':'?');
         if(!grouped[key]){
           grouped[key] = {
-            product: (_mpGroupMode === 'product') ? key : '',
-            type: (_mpGroupMode === 'part') ? key : '',
-            typeList: (_mpGroupMode === 'part') ? [key] : [],
+            product: '',
+            type: key,
+            typeList: [key],
             isNoMeat: (key==='무육'),
             date: '',
             dayNo: '',
@@ -1043,7 +1163,7 @@
       // ★ 필터 적용 — 빈 Set이면 전체 통과, 아니면 선택된 것만
       if(_mpGroupFilter.size > 0){
         calcRows = calcRows.filter(function(r){
-          var key = (_mpGroupMode === 'product') ? r.product : (r.type || (r.isNoMeat?'무육':''));
+          var key = r.type || (r.isNoMeat?'무육':'');
           return _mpGroupFilter.has(key);
         });
         // dayNo 재배열
@@ -1154,7 +1274,35 @@
       var cnt = dateCntMap[r.date] || 1;
       var grpCnt = r._grpSize || 1;
       var isGrpFirst = r._grpFirst !== false;
-      return '<tr>'+visibleCols.map(function(c,_i_){
+      var trClass = r.isSubTotal ? ' class="subTotalRow"' : '';
+      // ★ 공유 행 시각적 마커 (같은 일자+부위에 여러 제품일 때)
+      var trAttr = '';
+      if(!r.isSubTotal && r._sharedKey && r._sharedProds && r._sharedProds.length > 1){
+        // 공유 키를 해시해서 색상 살짝 변경 (같은 키 = 같은 색)
+        var hash = 0;
+        for(var ci=0; ci<r._sharedKey.length; ci++){ hash = (hash*31 + r._sharedKey.charCodeAt(ci)) & 0xffffff; }
+        var hue = hash % 360;
+        trAttr = ' class="sharedRow" style="background:hsl('+hue+',70%,95%)" title="'+r._sharedType+' '+(r._sharedTotal||0).toFixed(2)+'kg 공유 → '+r._sharedProds.join(', ')+'"';
+      }
+      // ★ 서브토탈 행: 왼쪽 3컬럼(생산일수/일자/제품명) colspan으로 합쳐 라벨로 표시
+      if(r.isSubTotal){
+        var head = '<td colspan="3" class="sum-label" style="text-align:center">'+(r._subTotalProd||r.product||'')+' 소계 ('+(r.date||'')+')</td>';
+        var rest = visibleCols.slice(3).map(function(c,_i_){
+          var v = r[c[0]];
+          if(__PART_COLS[c[0]]){
+            if(typeof v==='number') return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtCell(v, c)+'</td>';
+            return '<td class="'+_grpCls(c, _i_+3)+'">'+(v==null?'-':v)+'</td>';
+          }
+          if(c[0]==='pkEa'){
+            var s = v ? Math.round(v).toLocaleString() : '-';
+            return '<td class="'+_grpCls(c, _i_+3)+'">'+s+'</td>';
+          }
+          if(typeof v==='number') return '<td class="'+_grpCls(c, _i_+3)+'">'+fmtCell(v, c)+'</td>';
+          return '<td class="'+_grpCls(c, _i_+3)+'">'+(v==null?'-':v)+'</td>';
+        }).join('');
+        return '<tr'+trClass+'>'+head+rest+'</tr>';
+      }
+      return '<tr'+(trAttr||trClass)+'>'+visibleCols.map(function(c,_i_){
         var v = r[c[0]];
         // dayNo, date: 그날 첫 행에만 rowspan 출력. 둘째 부위 행부터는 td 생략
         if(c[0]==='dayNo'){
