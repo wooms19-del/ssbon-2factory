@@ -1266,12 +1266,21 @@ function startEditPkPending(id){
     const subSel = r2.querySelector('.pk-row-subnm');
     if(subSel && rec.subName) subSel.value = rec.subName;
     // 와건 hidden + 토글 버튼 클릭 시뮬 (wagon 비어있으면 wagonDist 키로 폴백)
+    // ★ 수정 모드는 다른 record에서 "완료"된 와건이라도 자기 record는 살려야 함
+    //    그래서 btn.click 대신 pkAddWagonRow 직접 호출 (done 체크 우회)
     const wagonStr = rec.wagon || (rec.wagonDist ? Object.keys(rec.wagonDist).join(',') : '');
     if(wagonStr){
       const wagons = wagonStr.split(',').map(x=>x.trim()).filter(Boolean);
       wagons.forEach(w=>{
         const btn = r2.querySelector(`.pk-wagon-btn[data-w="${w}"][data-kind="wagon"]`);
-        if(btn && btn.dataset.done!=='true') btn.click();
+        if(btn){
+          // 시각적으로 활성 표시
+          btn.style.background = '#72243E';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#72243E';
+        }
+        // row 직접 추가 (done 막힘 우회)
+        if(typeof pkAddWagonRow === 'function') pkAddWagonRow(idx, w, 'wagon');
       });
     }
     const cartStr = rec.cart || (rec.cartDist ? Object.keys(rec.cartDist).join(',') : '');
@@ -1279,34 +1288,28 @@ function startEditPkPending(id){
       const carts = cartStr.split(',').map(x=>x.trim()).filter(Boolean);
       carts.forEach(c=>{
         const btn = r2.querySelector(`.pk-wagon-btn[data-w="${c}"][data-kind="cart"]`);
-        if(btn && btn.dataset.done!=='true') btn.click();
+        if(btn){
+          btn.style.background = '#1a56db';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#1a56db';
+        }
+        if(typeof pkAddWagonRow === 'function') pkAddWagonRow(idx, c, 'cart');
       });
     }
-    // 와건별 kg 분배 채우기 (wagonDist/cartDist) — togglePkWagon이 row 추가했으니 그 안의 kg input 갱신
-    if(rec.wagonDist){
-      setTimeout(()=>{
-        Object.entries(rec.wagonDist).forEach(([w,kg])=>{
-          const wdRow = r2.querySelector(`.pk-wd-row[data-w="${w}"][data-kind="wagon"]`);
-          if(wdRow){
-            const kgInp = wdRow.querySelector('.pk-wd-kg');
-            if(kgInp) kgInp.value = kg;
-          }
-        });
-        if(typeof pkWagonSumChange==='function') pkWagonSumChange(idx);
-      }, 100);
+    // 와건별 kg 분배 채우기 — row가 pkAddWagonRow로 이미 동기 생성됨, 바로 값 채움
+    function _fillDist(distObj, kindAttr){
+      if(!distObj) return;
+      Object.entries(distObj).forEach(([w,kg])=>{
+        const wdRow = r2.querySelector(`.pk-wd-row[data-w="${w}"][data-kind="${kindAttr}"]`);
+        if(wdRow){
+          const kgInp = wdRow.querySelector('.pk-wd-kg');
+          if(kgInp) kgInp.value = kg;
+        }
+      });
+      if(typeof pkWagonSumChange==='function') pkWagonSumChange(idx);
     }
-    if(rec.cartDist){
-      setTimeout(()=>{
-        Object.entries(rec.cartDist).forEach(([c,kg])=>{
-          const wdRow = r2.querySelector(`.pk-wd-row[data-w="${c}"][data-kind="cart"]`);
-          if(wdRow){
-            const kgInp = wdRow.querySelector('.pk-wd-kg');
-            if(kgInp) kgInp.value = kg;
-          }
-        });
-        if(typeof pkWagonSumChange==='function') pkWagonSumChange(idx);
-      }, 100);
-    }
+    _fillDist(rec.wagonDist, 'wagon');
+    _fillDist(rec.cartDist, 'cart');
   }, 50);
   // 시작 카드로 스크롤
   document.getElementById('pk_startCard').scrollIntoView({behavior:'smooth', block:'start'});
