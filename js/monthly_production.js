@@ -14,6 +14,7 @@
   /* ===== 상태 ===== */
   var _mpYm = null;
   var _mpData = null;
+  var _mpRaw = null; // raw 데이터 캐시 (mode 변경 시 재처리용)
   // 화면이 마지막으로 렌더한 데이터 (다운로드에서 동일하게 사용)
   var _lastRendered = null;  // {calcRows, visibleCols, sum, dayCount}
   var _mpPrevData = null;
@@ -167,7 +168,9 @@
       + '#mpTbl tr.prevRow td{background:#f1f5f9;color:#475569;padding:9px 8px}'
       + '#mpTbl tr.diffRow td{background:#fee2e2;font-style:normal;font-weight:600;padding:9px 8px;border-bottom:2px solid #b91c1c}'
       // 합계/평균 행은 colspan="3" 한 셀이 3컬럼 차지 → 그 셀에 sum-label 클래스로 sticky
-      + '#mpTbl tr.sumRow td.sum-label,#mpTbl tr.avgRow td.sum-label,#mpTbl tr.prevRow td.sum-label,#mpTbl tr.diffRow td.sum-label{position:sticky;left:0;z-index:5;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
+      + '#mpTbl tr.sumRow td.sum-label,#mpTbl tr.avgRow td.sum-label,#mpTbl tr.prevRow td.sum-label,#mpTbl tr.diffRow td.sum-label,#mpTbl tr.subTotalRow td.sum-label{position:sticky;left:0;z-index:5;box-shadow:4px 0 6px -3px rgba(0,0,0,0.12)}'
+      // 서브토탈 sticky 셀 배경 일치 (subTotalRow 배경색과 동일)
+      + '#mpTbl tr.subTotalRow td.sum-label{background:#dbeafe}'
       + '#mpTbl td.product{font-weight:500;color:#1e40af}'
       + '#mpTbl td.dateCell{font-weight:600;color:#1e293b}'
       + '#mpTbl td.dayNoCell{color:#6b7280;font-size:11.5px}'
@@ -226,6 +229,11 @@
   function mpSetGroupMode(val){
     _mpGroupMode = val;
     _mpGroupFilter = new Set();  // 모드 바뀌면 필터 리셋 (전체 선택)
+    // ★ mode 변경 시 분배 로직이 다시 돌아야 함 (raw 캐시로 _mpProcess 재실행)
+    if(_mpRaw){
+      _mpData     = _mpProcess(_mpRaw[0],_mpRaw[1],_mpRaw[2],_mpRaw[3],_mpRaw[4],_mpRaw[5]);
+      _mpPrevData = _mpProcess(_mpRaw[6],_mpRaw[7],_mpRaw[8],_mpRaw[9],_mpRaw[10],_mpRaw[11]);
+    }
     _mpRenderShell();
     if(_mpData) _mpRender();
   }
@@ -316,6 +324,7 @@
           fbGetRange('cooking',      pFrom,    pTo)
         ]);
 
+        _mpRaw = R;  // raw 데이터 캐시 — mode 변경 시 _mpProcess 재실행용
         _mpData     = _mpProcess(R[0],R[1],R[2],R[3],R[4],R[5]);
         _mpPrevData = _mpProcess(R[6],R[7],R[8],R[9],R[10],R[11]);
         _mpRender();
@@ -790,6 +799,8 @@
       var grpMeatKg = grp.reduce(function(s,r){
         return s + (r.pkEa||0) * (r.kgea||0);
       }, 0);
+      // 그룹 합산 포장 인시 (생산성 포장/전체 그룹 기준 계산용)
+      var grpPkPH = grp.reduce(function(s,r){ return s + (r.pkPersonHours||0); }, 0);
       grp.forEach(function(r, i){
         r._grpSize  = grp.length;
         r._grpFirst = (i===0);
@@ -817,7 +828,16 @@
             r.shHours = _r2(shItem.hours * ratio);
             r.shPersonHours = _r2(shItem.personHours * ratio);
             r.shWorkers = shItem.hours>0 ? r1(shItem.personHours/shItem.hours) : 0;
-            r._grpMeatKg = grpMeatKg;
+            // ★ splitMode에서는 yield 계산도 분배 기준 — 자기 행 meatKg만 사용
+            // (옛: r._grpMeatKg = grpMeatKg → 그룹 합산값이라 분배된 rm 대비 비율이 폭발함)
+            r._grpMeatKg = (r.pkEa||0) * (r.kgea||0);
+            // ★ 생산성 5개 그룹 합산값 (calcRows에서 사용)
+            // 그룹의 원료가 같으니 생산성도 그룹 단위로 동일하게 표시되도록
+            r._grpRmTotal = rmTotal;          // 그룹 원육 합 (분배 전 전체)
+            r._grpPpPH = ppItem.personHours;  // 그룹 전처리 인시 합
+            r._grpCkPH = ckItem.personHours;  // 그룹 자숙 인시 합
+            r._grpShPH = shItem.personHours;  // 그룹 파쇄 인시 합
+            r._grpPkPH = grpPkPH;             // 그룹 포장 인시 합 (제품들 합산)
             // ★ 공유 마커 (화면에서 같은 배경색 + 툴팁)
             r._sharedKey = r.date + '|' + (r.type||'');
             r._sharedTotal = rmTotal;
@@ -838,6 +858,9 @@
             r.shPersonHours = _r2(shItem.personHours);
             r.shWorkers = shItem.hours>0 ? r1(shItem.personHours/shItem.hours) : 0;
             r._grpMeatKg = grpMeatKg;
+            // ★ 생산성 포장/전체 병합 표시용 — 첫 행에 그룹 포장 인시 합 세팅
+            // (자기 행 pkPersonHours만 쓰면 시그니처만의 시간으로 나뉘어 과대 표시됨)
+            r.pkPersonHours = _r2(grpPkPH);
           } else {
             __PART_KEYS.forEach(function(k){ r[k] = 0; });
           }
@@ -977,10 +1000,13 @@
     });
 
     var calcRows = rows0.map(function(r){
-      var ppT = r.ppPersonHours || 0;
-      var ckT = r.ckPersonHours || 0;
-      var shT = r.shPersonHours || 0;
-      var pkT = r.pkPersonHours || 0;
+      // ★ 그룹(공유 원육) 케이스: 그룹 합산 기준으로 생산성 계산 (두 행 동일 값)
+      // 그룹 아니면 자기 행 값 사용 (기존 동작 유지)
+      var ppT = (r._grpPpPH !== undefined) ? r._grpPpPH : (r.ppPersonHours || 0);
+      var ckT = (r._grpCkPH !== undefined) ? r._grpCkPH : (r.ckPersonHours || 0);
+      var shT = (r._grpShPH !== undefined) ? r._grpShPH : (r.shPersonHours || 0);
+      var pkT = (r._grpPkPH !== undefined) ? r._grpPkPH : (r.pkPersonHours || 0);
+      var rmForProd = (r._grpRmTotal !== undefined) ? r._grpRmTotal : (r.rmKg || 0);
       var meatKg = r.pkEa * (r.kgea||0);
       var prodKg = r.pkEa * (r.kgTot||0);
       var rm = r.rmKg;
@@ -988,11 +1014,11 @@
       var grpMeat = r._grpMeatKg || meatKg;
       return Object.assign({}, r, {
         meatKg:_r2(meatKg), prodKg:_r2(prodKg),
-        prodPp: rm&&ppT?_r2(rm/ppT):0,
-        prodCk: rm&&ckT?_r2(rm/ckT):0,
-        prodSh: rm&&shT?_r2(rm/shT):0,
-        prodPk: rm&&pkT?_r2(rm/pkT):0,
-        prodAll: rm&&(ppT+ckT+shT+pkT)?_r2(rm/(ppT+ckT+shT+pkT)):0,
+        prodPp: rmForProd&&ppT?_r2(rmForProd/ppT):0,
+        prodCk: rmForProd&&ckT?_r2(rmForProd/ckT):0,
+        prodSh: rmForProd&&shT?_r2(rmForProd/shT):0,
+        prodPk: rmForProd&&pkT?_r2(rmForProd/pkT):0,
+        prodAll: rmForProd&&(ppT+ckT+shT+pkT)?_r2(rmForProd/(ppT+ckT+shT+pkT)):0,
         yieldRmPp: rm?_r2(r.ppKg/rm*100)/100:0,
         yieldRmCk: rm?_r2(r.ckKg/rm*100)/100:0,
         yieldRmSh: rm?_r2(r.shKg/rm*100)/100:0,
@@ -1265,7 +1291,7 @@
       'rmKg':1,'ppKg':1,'ppHours':1,'ppWorkers':1,'ppPersonHours':1,
       'ckKg':1,'ckHours':1,'ckWorkers':1,'ckPersonHours':1,
       'shKg':1,'shHours':1,'shWorkers':1,'shPersonHours':1,
-      'prodPp':1,'prodCk':1,'prodSh':1,
+      'prodPp':1,'prodCk':1,'prodSh':1,'prodPk':1,'prodAll':1,
       'yieldRmPp':1,'yieldRmCk':1,'yieldRmSh':1,'yieldRmPk':1,
       'yieldPp':1,'yieldCk':1,'yieldSh':1,'yieldPk':1
     };
