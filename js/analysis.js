@@ -1738,34 +1738,38 @@ function goDate(dateStr){
 }
 
 var _chDayDir=0;
-function chDay(d){
-  // 로컬 날짜 문자열 변환 헬퍼 (시간대 무관)
-  function _ld(date){
-    return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
-  }
-  var dt=new Date(DDATE+'T00:00:00');  // 로컬 자정으로 파싱
-  var todayStr = _ld(new Date());
-  // 최초 데이터 날짜 계산 — packing 있는 날만 (포장 없으면 생산 안 한 것)
-  var allDates=[];
-  if(L&&L.packing) L.packing.forEach(function(r){if(r.date)allDates.push(r.date.slice(0,10));});
-  allDates.sort();
-  var firstDateStr = allDates.length ? allDates[0] : null;
+var _chDayBusy=false;
+async function chDay(d){
+  if(_chDayBusy) return;
+  _chDayBusy=true;
+  try{
+    // 로컬 날짜 문자열 변환 헬퍼 (시간대 무관)
+    function _ld(date){
+      return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+    }
+    var dt=new Date(DDATE+'T00:00:00');  // 로컬 자정으로 파싱
+    var todayStr = _ld(new Date());
 
-  for(var i=0;i<60;i++){
-    dt.setDate(dt.getDate()+d);
-    var ds = _ld(dt);  // 로컬 날짜 문자열
-    // 미래 차단 (문자열 비교)
-    if(ds > todayStr){ toast('오늘 이후 날짜입니다','d'); return; }
-    // 과거 한계 차단
-    if(d<0 && firstDateStr && ds < firstDateStr){ toast('더 이상 데이터가 없습니다','d'); return; }
-    // 해당 날짜에 데이터 있는지 L에서 체크 — packing 있는 날만 생산일 (포장 없으면 생산 안 한 것)
-    var has=false;
-    if(L&&L.packing) has=has||L.packing.some(function(r){return r.date&&r.date.slice(0,10)===ds;});
-    // ★ 오늘 날짜는 packing 0건이라도 통과 (작업 중일 수 있음)
-    if(ds === todayStr) has = true;
-    if(has){ DDATE=ds; renderDaily(); return; }
+    // packing 있는 날 = 생산일. 서버에서 직접 확인 (L 캐시 의존 안 함)
+    for(var i=0;i<60;i++){
+      dt.setDate(dt.getDate()+d);
+      var ds = _ld(dt);
+      // 미래 차단
+      if(ds > todayStr){ toast('오늘 이후 날짜입니다','d'); return; }
+      // 오늘은 packing 0건이어도 통과 (작업 중일 수 있음)
+      if(ds === todayStr){ DDATE=ds; renderDaily(); return; }
+      // 서버에서 packing 조회 — 1건이라도 있으면 생산일로 간주
+      var has=false;
+      try{
+        var recs = await fbGetByDate('packing', ds);
+        if(recs && recs.length) has=true;
+      }catch(e){ /* 조회 실패 시 그 날 스킵 */ }
+      if(has){ DDATE=ds; renderDaily(); return; }
+    }
+    toast('해당 방향에 데이터가 없습니다','d');
+  } finally {
+    _chDayBusy=false;
   }
-  toast('해당 방향에 데이터가 없습니다','d');
 }
 
 // 전처리 wagons → 해동 매칭으로 원육KG 계산 (중복 와건 제거)
