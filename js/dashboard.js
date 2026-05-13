@@ -403,8 +403,6 @@ async function renderDbWeekChart(from,to,period){
 
 function renderSettings(){
   updateAccCounts();
-  // 분석 목표 form 채우기
-  if(typeof renderTargetsForm === 'function') renderTargetsForm();
   // 제품 목록
   const pdEl = document.getElementById('pdList');
   if(pdEl){
@@ -486,12 +484,6 @@ function renderSettings(){
   // 레시피 목록
   renderRecipeSelect();
   renderRcList();
-
-  // 알람 임계값 로드
-  if(typeof loadAlarmThresholdsToUI === 'function') loadAlarmThresholdsToUI();
-
-  // 카카오톡 알림 상태 렌더
-  if(typeof _renderKakaoStatus === 'function') _renderKakaoStatus();
 }
 
 // 제품 수정 시작 - 폼에 기존값 채우기

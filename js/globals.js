@@ -1,9 +1,6 @@
 // 모든 함수가 로드된 후 window 등록
 document.addEventListener('DOMContentLoaded', function() {
   window.saveSettings = saveSettings;
-  window.saveTargets = saveTargets;
-  window.getTargets = getTargets;
-  window.renderTargetsForm = renderTargetsForm;
   window.showTab = showTab;
   window.savePkEdit = savePkEdit;
   window.chMonth = chMonth;
@@ -21,8 +18,6 @@ document.addEventListener('DOMContentLoaded', function() {
   window.startThawing = startThawing;
   window.renderThawWaiting = renderThawWaiting;
   window.updateTwSummary = updateTwSummary;
-  window.onPpWagonChange = onPpWagonChange;
-  window.onPpStartBtn = onPpStartBtn;
   window.saveP = saveP;
   window.delR = delR;
   window.chDay = chDay;
@@ -50,7 +45,6 @@ document.addEventListener('DOMContentLoaded', function() {
   window.renderTrend = renderTrend;
   window.renderDaily = renderDaily;
   window.setPd = setPd;
-  window.getSelectedWagons = getSelectedWagons;
   window.addGt = addGt;
   window.delGt = delGt;
   window.loadRecipe = loadRecipe;
@@ -60,11 +54,8 @@ document.addEventListener('DOMContentLoaded', function() {
   window.saveRecipe = saveRecipe;
   window.delRecipe = delRecipe;
   window.selectRecipe = selectRecipe;
-  window.updPpWagon = updPpWagon;
   window.renderCkCageList = renderCkCageList;
-  window.renderShWagonList = renderShWagonList;
   window.onCkCageChange = onCkCageChange;
-  window.onShWagonChange = onShWagonChange;
   function onPkWagonDirectInput(idx){
     const directInput = document.querySelector(`#pkRow_${idx} .pk-row-wagon-input`);
     const hidden = document.querySelector(`#pkRow_${idx} .pk-row-wagon`);
@@ -81,7 +72,6 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-  window.renderPkWagonList = renderPkWagonList;
   window.onPkWagonChange = onPkWagonChange;
   window.uploadCSV = uploadBarcodes;
   window.uploadBarcodes = uploadBarcodes;
@@ -99,14 +89,16 @@ document.addEventListener('DOMContentLoaded', function() {
   window.renderCkPending = renderCkPending;
   window.toggleCkEndForm = toggleCkEndForm;
   window.saveCkEnd = saveCkEnd;
+  window.onCkRowGroupChange = onCkRowGroupChange;  // ★ v2: 묶음 선택 시 부위 자동 채움
+  window.ckEditPending = ckEditPending;
+  window.ckEditPendingCancel = ckEditPendingCancel;
+  window.ckEditPendingSave = ckEditPendingSave;
   // 아코디언
   window.toggleAcc = toggleAcc;
   // 자숙 새 함수
   window.onCkStartBtn = onCkStartBtn;
   window.addCkTankRow = addCkTankRow;
   window.removeCkRow = removeCkRow;
-  // 파쇄 새 함수
-  window.onShStartBtn = onShStartBtn;
   // 포장 새 함수
   window.setPkNow = setPkNow;
   window.addPkMachRow = addPkMachRow;
@@ -115,6 +107,9 @@ document.addEventListener('DOMContentLoaded', function() {
   window.onPkStartBtn = onPkStartBtn;
   window.showPkStartCard = showPkStartCard;
   window.renderPkPending = renderPkPending;
+  window.startEditPkPending = startEditPkPending;
+  window.cancelEditPkPending = cancelEditPkPending;
+  window.renderPkWagonList = renderPkWagonList;
   window.togglePkEndForm = togglePkEndForm;
   window.savePkEnd = savePkEnd;
   // ============================================================

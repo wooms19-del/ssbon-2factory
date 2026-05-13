@@ -158,52 +158,9 @@
   </div>
 </div>
 
-<!-- ===== 전처리 ===== -->
+<!-- ===== 전처리 (v2가 동적 렌더링) ===== -->
 <div class="pg" id="p-preprocess">
-  <!-- 방혈 현황 (미종료 대차 확인용) -->
-  <div class="card">
-    <div class="ct">🧊 방혈 현황</div>
-    <div id="thawInfo"><div class="emp">방혈 데이터 없음</div></div>
-  </div>
-  <div class="card">
-    <div class="ct">전처리 입력</div>
-
-    <!-- STEP 1: 대차 선택 (다중 선택) -->
-    <div style="font-size:12px;font-weight:700;color:var(--g5);margin-bottom:6px">① 대차 선택 <span style="font-weight:400;color:var(--g4)">(여러 대차 선택 가능)</span></div>
-    <div id="pp_wagonChecks" style="margin-bottom:0.5rem"></div>
-    <div id="ppWagonInfo" class="hid" style="margin-bottom:1rem"></div>
-    <!-- hidden - 기존 코드 호환용 -->
-    <select id="pp_wagon" style="display:none"><option value="">선택</option></select>
-
-    <!-- 자동 채워지는 hidden 필드들 (대차 카드 안에서 수집) -->
-    <input type="hidden" id="pp_start">
-    <input type="hidden" id="pp_end">
-    <input type="hidden" id="pp_type">
-    <input type="hidden" id="pp_cage">
-
-    <!-- 추가 입력 -->
-    <div class="fg">
-      <div class="fgrp">
-        <label class="fl">인원</label>
-        <input class="fc" type="number" id="pp_workers" placeholder="0">
-      </div>
-      <div class="fgrp">
-        <label class="fl">전처리 KG <span style="font-size:11px;color:var(--g4)">(자동)</span></label>
-        <input class="fc" type="number" step="0.01" id="pp_kg" placeholder="0.00" readonly style="background:#f8f8f8">
-      </div>
-      <div class="fgrp">
-        <label class="fl">비가식부 KG</label>
-        <input class="fc" type="number" step="0.01" id="pp_waste" placeholder="0.00" oninput="syncPpWasteByType()">
-        <!-- 원육 2종 이상 시 자동 펼침 -->
-        <div id="pp_wasteByType" style="display:none;margin-top:6px;padding:8px;background:#f0f7ff;border:1px dashed #1a56db;border-radius:6px">
-          <div style="font-size:11px;color:#1a56db;margin-bottom:4px;font-weight:600">⚠ 원육 2종 이상 — 원육별로 분리 입력</div>
-          <div id="pp_wasteByTypeRows" style="display:flex;flex-direction:column;gap:4px"></div>
-        </div>
-      </div>
-    </div>
-    <button class="btn bp bblk" onclick="saveP('preprocess')">저장</button>
-  </div>
-  <div class="card"><div class="ct">오늘 전처리</div><div id="list-preprocess"><div class="emp">데이터 없음</div></div></div>
+  <div class="emp">로딩중...</div>
 </div>
 
 <!-- ===== 자숙 ===== -->
@@ -218,6 +175,12 @@
   <!-- ▶ 자숙 시작 카드 -->
   <div class="card" id="ck_startCard">
     <div class="ct">자숙 시작</div>
+    <!-- ★ 공통 인원 (모든 탱크 동일) -->
+    <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+      <label style="font-size:13px;font-weight:600;color:#1a56db">자숙 인원</label>
+      <input type="number" id="ck_workers" value="2" min="0" step="1" style="width:80px;height:32px;padding:0 8px;text-align:center;font-size:14px;border:1px solid #B5D4F4;border-radius:4px;background:#fff">
+      <span style="font-size:12px;color:#185FA5">명 · 모든 탱크 공통 적용</span>
+    </div>
     <div style="font-size:12px;font-weight:700;color:var(--g5);margin-bottom:6px">탱크별 입력 <span style="font-weight:400;color:var(--g4)">(가동할 탱크 수만큼 추가)</span></div>
     <div id="ck_tankRows"></div>
     <button class="btn bo bsm" onclick="addCkTankRow()" style="margin-bottom:1rem;width:100%">+ 탱크 추가</button>
@@ -240,21 +203,9 @@
   </div>
 </div>
 
-<!-- ===== 파쇄 ===== -->
+<!-- ===== 파쇄 (v2가 동적 렌더링) ===== -->
 <div class="pg" id="p-shredding">
-  <div class="card">
-    <div class="ct">🔗 자숙 완료 와건</div>
-    <div id="sh_wagonList"><div class="emp">자숙 완료된 와건 없음</div></div>
-  </div>
-  <div class="card">
-    <div class="ct">파쇄 입력 (와건별)</div>
-    <div id="sh_rows"></div>
-    <div style="display:flex;gap:6px;margin-top:10px">
-      <button class="btn" onclick="shAddRow()" style="flex:1;padding:10px">+ 와건 추가</button>
-      <button class="btn bp bblk" onclick="saveShAll()" style="flex:2;padding:10px">일괄 저장</button>
-    </div>
-  </div>
-  <div class="card"><div class="ct">오늘 파쇄</div><div id="list-shredding"><div class="emp">데이터 없음</div></div></div>
+  <div class="emp">로딩중...</div>
 </div>
 
 <!-- ===== 포장 ===== -->
@@ -268,13 +219,21 @@
 
   <!-- ▶ 시작 입력 카드 -->
   <div class="card" id="pk_startCard">
-    <div class="ct">포장 시작</div>
+    <!-- 수정 모드 헤더 (수정 중일 때만 표시) -->
+    <div id="pk_editBanner" style="display:none;background:#fff7ed;border:1.5px solid #fb923c;border-radius:6px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="background:#fb923c;color:#fff;font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600">✏️ 수정 모드</span>
+        <span id="pk_editTarget" style="font-size:13px;font-weight:600;color:#c2410c"></span>
+      </div>
+      <button class="btn bo bsm" style="color:#c2410c;border-color:#c2410c" onclick="cancelEditPkPending()">수정 취소</button>
+    </div>
+    <div class="ct" id="pk_startCardTitle">포장 시작</div>
 
     <div style="font-size:12px;font-weight:700;color:var(--g5);margin-bottom:6px">설비별 입력 <span style="font-weight:400;color:var(--g4)">(가동할 설비 수만큼 추가)</span></div>
     <div id="pk_machRows"></div>
-    <button class="btn bo bsm" onclick="addPkMachRow()" style="margin-bottom:1rem;width:100%">+ 설비 추가</button>
+    <button class="btn bo bsm" id="pk_addMachBtn" onclick="addPkMachRow()" style="margin-bottom:1rem;width:100%">+ 설비 추가</button>
 
-    <button class="btn bp bblk" onclick="onPkStartBtn()">시작</button>
+    <button class="btn bp bblk" id="pk_startBtn" onclick="onPkStartBtn()">시작</button>
   </div>
 
   <!-- ⏳ 진행중 설비 카드 -->
@@ -1601,14 +1560,14 @@
 <!-- Kakao JavaScript SDK -->
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js" integrity="sha384-DKYJZ8NLiK8MN4/C5P2dtSmLQ4KwPaoqAfyA/DfmEc1VDxu4yyC7wy6K1Hs90nka" crossorigin="anonymous"></script>
 <script>if(window.Kakao){Kakao.init('3c36e1a3bb9ea2d4445a5cd30dd906c1');}</script>
-<script src="js/common.js?v=1778547898"></script>
+<script src="js/common.js?v=1778597878"></script>
 <script src="js/barcode.js?v=1778129561"></script>
 <script src="js/thawing.js?v=1778129561"></script>
-<script src="js/preprocess.js?v=1778134100"></script>
-<script src="js/process_save.js?v=1778129561"></script>
-<script src="js/cooking.js?v=1778209050"></script>
-<script src="js/shredding.js?v=1778129561"></script>
-<script src="js/packing.js?v=1778573127"></script>
+<script src="js/preprocess_v2.js?v=1778596509"></script>
+<script src="js/process_save.js?v=1778594572"></script>
+<script src="js/cooking_v2.js?v=1778596916"></script>
+<script src="js/shredding_v2.js?v=1778597290"></script>
+<script src="js/packing.js?v=1778600626"></script>
 <script src="js/csv_upload.js?v=1778129561"></script>
 <script src="js/daily_report.js?v=1778546951"></script>
 <script src="js/analysis.js?v=1778550054"></script>
@@ -1618,11 +1577,11 @@
 <script src="js/outerpacking.js?v=1778547898"></script>
 <script src="js/settings.js?v=1778129561"></script>
 <script src="js/kakao.js?v=1778129561"></script>
-<script src="js/app.js?v=1778488027"></script>
+<script src="js/app.js?v=1778600292"></script>
 <script src="js/schedule.js?v=1778132322"></script>
 <script src="js/attendance.js?v=1778129561"></script>
 <script src="js/timepicker.js?v=1778129561"></script>
-<script src="js/globals.js?v=1778129561"></script>
+<script src="js/globals.js?v=1778599476"></script>
 <script src="js/performance.js?v=1778547898"></script>
 <script src="js/monthly_production.js?v=1778547898"></script>
 <script src="js/timetable.js?v=1778495630"></script>

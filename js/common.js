@@ -327,20 +327,31 @@ var _unsubscribes = [];
 // ============================================================
 // 로컬 스토리지 (오프라인 버퍼)
 // ============================================================
+// ============================================================
+// 작업 데이터 (thawing/preprocess/cooking/shredding/packing/sauce, _pending 포함, barcodes)
+// → localStorage에 절대 저장하지 않음. Firestore가 단일 source of truth.
+// 설정 데이터 (products/sauces/submats/gtinMap/recipes) → localStorage OK (별도 정리 예정).
+// ============================================================
+const WORK_KEYS = ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce',
+                   'packing_pending','cooking_pending'];
+
 function pruneOldData(d) {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
   const cutStr = cutoff.toISOString().slice(0,10);
-  ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce'].forEach(k => {
+  WORK_KEYS.filter(k => k !== 'packing_pending' && k !== 'cooking_pending').forEach(k => {
     if(Array.isArray(d[k])) d[k] = d[k].filter(r => String(r.date||'').slice(0,10) >= cutStr);
   });
 }
 function loadL(){
   try{
     const raw = JSON.parse(localStorage.getItem(SK));
-    if(!raw) return nL();
     const base = nL();
-    ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce',
-     'packing_pending','cooking_pending'].forEach(k => { if(!Array.isArray(raw[k])) raw[k]=base[k]||[]; });
+    if(!raw){
+      return base;  // 작업 데이터 모두 빈 배열 (Firestore 로드 대기)
+    }
+    // ★ 작업 데이터는 localStorage 무시 — 항상 빈 배열로 시작 (Firestore가 채움)
+    WORK_KEYS.forEach(k => { raw[k] = []; });
+    // 설정 데이터만 localStorage 사용
     if(!raw.products || !raw.products.length) raw.products = base.products;
     else {
       // 베이스에 추가된 신제품이 있으면 자동 병합 (사용자 localStorage에 누락된 것)
@@ -354,12 +365,20 @@ function loadL(){
     if(!raw.submats)  raw.submats  = base.submats;
     if(!raw.gtinMap)  raw.gtinMap  = base.gtinMap;
     if(!raw.recipes)  raw.recipes  = {};
-    pruneOldData(raw);
     return raw;
   }
   catch(e){ return nL(); }
 }
-function saveL(){ if(L) localStorage.setItem(SK, JSON.stringify(L)); }
+function saveL(){
+  if(!L) return;
+  // ★ 작업 데이터는 localStorage에서 제외하고 설정 데이터만 저장
+  const persist = {};
+  Object.keys(L).forEach(k => {
+    if(!WORK_KEYS.includes(k)) persist[k] = L[k];
+  });
+  try { localStorage.setItem(SK, JSON.stringify(persist)); }
+  catch(e){ console.warn('saveL 실패:', e); }
+}
 function nL(){
   return {
     barcodes:[], thawing:[], preprocess:[], cooking:[], shredding:[], packing:[], sauce:[],
@@ -397,7 +416,10 @@ function dayOfWeek(dateStr){ const d=new Date(dateStr+'T00:00:00'); return DAYS[
 function dateWithDay(dateStr){ return dateStr+' ('+dayOfWeek(dateStr)+')'; }
 function setText(id,v){ const el=document.getElementById(id); if(el) el.textContent=v; }
 function getYesterday_(){
-  const d = new Date(); d.setDate(d.getDate()-1);
+  // ★ tod() 기반 (헤더 날짜 변경 반영) + 로컬 컴포넌트 직접 조립 (UTC 어긋남 방지)
+  const today = (typeof tod==='function') ? tod() : new Date().toISOString().slice(0,10);
+  const d = new Date(today + 'T00:00:00');
+  d.setDate(d.getDate()-1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function gid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
@@ -664,6 +686,12 @@ async function loadFromServer(date) {
     const cols = ['barcodes','thawing','preprocess','cooking','shredding','packing','sauce'];
     const colMap = {barcodes:'barcode', thawing:'thawing', preprocess:'preprocess',
       cooking:'cooking', shredding:'shredding', packing:'packing', sauce:'sauce'};
+    // ★ 잘못된 fbId prefix 검출용 (컬렉션별 정상 fbId prefix)
+    // cooking record가 cooking_pending_ 시작 fbId 가지면 잘못됨 (saveCkEnd 옛 버그 잔여)
+    const wrongPrefix = {
+      cooking: 'cooking_pending_',
+      packing: 'packing_pending_',
+    };
     
     await Promise.all(cols.map(async lKey => {
       const fbCol = colMap[lKey] || lKey;
@@ -671,11 +699,30 @@ async function loadFromServer(date) {
       // ★ DB 결과가 0건이어도 로컬 동기화 (다른 디바이스 삭제 반영)
       // pending(fbId 없는 새 record)은 보존 (Firebase 저장 응답 대기중)
       const pending = (L[lKey]||[]).filter(r => !r.fbId && String(r.date||'').slice(0,10) === date);
-      L[lKey] = [
+      const merged = [
         ...(L[lKey]||[]).filter(x => String(x.date||'').slice(0,10) !== date),
         ...recs,
         ...pending
       ];
+      // ★ 잘못된 fbId 자동 정리 (saveCkEnd 옛 버그 잔여물 청소)
+      const badPrefix = wrongPrefix[lKey];
+      if(badPrefix){
+        merged.forEach(r => {
+          if(r.fbId && String(r.fbId).startsWith(badPrefix)){
+            console.warn(`[loadFromServer] ${lKey} record의 잘못된 fbId 정리:`, r.fbId);
+            r.fbId = null;
+          }
+        });
+      }
+      // ★ id 기준 중복 제거 (DB record 우선)
+      const seen = new Set();
+      L[lKey] = merged.filter(r => {
+        const k = r.id || r.fbId;
+        if(!k) return true;
+        if(seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
     }));
     saveL();
     return true;
@@ -800,6 +847,17 @@ function isUserEditing() {
   // 포장: 설비 카드가 1개라도 펼쳐져 있으면 입력 중
   const pkRows = document.querySelectorAll('[id^="pkRow_"]');
   if(pkRows.length > 0) return true;
+  // v2 (전처리/파쇄): 입력 테이블의 input/select에 값이 들어있으면 입력 중
+  // (부위 select가 비어있지 않거나, text/number input이 비어있지 않으면)
+  const v2Selects = document.querySelectorAll('#pp2_tbody select, #sh2_tbody select');
+  if(Array.from(v2Selects).some(s => s.value && s.value !== '')) return true;
+  const v2TextInputs = document.querySelectorAll('#pp2_tbody input[type="text"], #sh2_tbody input[type="text"]');
+  if(Array.from(v2TextInputs).some(i => (i.value||'').trim() !== '')) return true;
+  const v2NumInputs = document.querySelectorAll('#pp2_tbody input[type="number"], #sh2_tbody input[type="number"]');
+  if(Array.from(v2NumInputs).some(i => (i.value||'').trim() !== '' && parseFloat(i.value) > 0)) return true;
+  // v2 인라인 수정 폼이 열려있으면 입력 중
+  const v2EditForms = document.querySelectorAll('[id^="pp2Ed_"],[id^="sh2Ed_"]');
+  if(v2EditForms.length > 0) return true;
   return false;
 }
 
@@ -813,9 +871,15 @@ async function fetchTodayFromServer() {
   if(isUserEditing()) return;   // 입력 중·패널 열림 → 스킵
   _isRefreshing = true;
   try {
-    await loadFromServer(tod());
+    const today = tod();
+    // 어제 날짜 (KST 로컬 컴포넌트로 안전하게)
+    const ydDate = new Date(today + 'T00:00:00');
+    ydDate.setDate(ydDate.getDate() - 1);
+    const yd = ydDate.getFullYear()+'-'+String(ydDate.getMonth()+1).padStart(2,'0')+'-'+String(ydDate.getDate()).padStart(2,'0');
+    await loadFromServer(today);
+    await loadFromServer(yd);          // ★ 전처리/파쇄가 어제 thawing/cooking 필요
     await loadOpenPacking();
-    await loadOpenCooking();  // ★ Phase 2-A: cooking_pending도 매 30초 fresh
+    await loadOpenCooking();
     refreshCurrentTab_();
   } catch(e) {
     console.warn('자동갱신 오류:', e);
@@ -828,7 +892,8 @@ function refreshCurrentTab_() {
   if(MODE === 'i') {
     if(ITAB === 'barcode') renderBC();
     else if(ITAB === 'thawing') { renderThawWaiting(); renderThawList(); }
-    else if(ITAB === 'preprocess') { loadOpenThawingAndRender(); renderPL('preprocess'); }
+    else if(ITAB === 'preprocess') { if(typeof pp2Refresh==='function') pp2Refresh(); }
+    else if(ITAB === 'shredding') { if(typeof sh2Refresh==='function') sh2Refresh(); }
     else if(ITAB === 'outerpacking') loadOuterPacking();
     else renderPL(ITAB);
   }

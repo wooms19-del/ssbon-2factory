@@ -135,15 +135,6 @@ select.fc{cursor:pointer;padding-right:32px;background-image:url("data:image/svg
 .tlt{flex:1;height:26px;background:var(--g1);border-radius:4px;position:relative;overflow:hidden}
 .tlb{position:absolute;height:100%;border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;cursor:pointer;transition:filter .15s,transform .15s}
 .tlb:hover{filter:brightness(1.15);box-shadow:0 0 0 2px rgba(0,0,0,.18);z-index:2}
-.tlb.tlPinned{outline:2px solid #0f172a;outline-offset:2px;z-index:3}
-.tlSticker{position:absolute;top:-26px;background:#0f172a;color:#fff;font-size:10px;padding:3px 7px;border-radius:4px;white-space:nowrap;font-weight:500;pointer-events:none;z-index:5;transform:translateX(0)}
-.tlSticker::after{content:'';position:absolute;top:100%;left:8px;border:4px solid transparent;border-top-color:#0f172a}
-/* 통합 모드: 라벨 / 막대 / 우측요약 3-칼럼 */
-.tlrInt{display:grid;grid-template-columns:50px 1fr 130px;align-items:center;gap:8px;margin-bottom:6px}
-.tlSum{font-size:11px;color:var(--g5);padding-left:8px;border-left:1px solid rgba(15,23,42,0.06);font-variant-numeric:tabular-nums;line-height:1.35}
-.tlSumTime{color:var(--g7);font-weight:500}
-.tlSumMeta{font-size:10px;color:var(--g4);margin-top:2px}
-@media(max-width:560px){.tlrInt{grid-template-columns:42px 1fr 100px;gap:6px}.tlSum{font-size:10px;padding-left:6px}.tlSumMeta{font-size:9px}}
 
 /* 이력추적 */
 .trstep{display:flex;gap:12px;margin-bottom:12px}

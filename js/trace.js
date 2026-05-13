@@ -106,63 +106,44 @@ async function doTrace(){
   const ppIds = new Set(Object.values(ppByCage).map(r=>r.id));
   const pp = ppAll.filter(r=>ppIds.has(r.id));
 
-  // ⑤ 전처리 → 방혈
-  // thawing.date = 입고일(시작일), thawing.end = 풀린 날.
-  // 작업일 d 에 사용된 박스 = end 가 d 와 매칭되는 record 만.
-  // (date==d 만 보면 당일 입고됐지만 아직 안 풀린 박스도 매칭되어 잘못된 결과)
+  // ⑤ 전처리 → 방혈 (전처리 날짜 당일 그대로 조회 - 방혈=포장날짜 기본정보로 저장됨)
   const ppWagons = [...new Set(pp.flatMap(r=>(r.wagons||'').split(',').map(w=>w.trim()).filter(Boolean)))];
   const ppDates  = [...new Set(pp.map(r=>String(r.date||'').slice(0,10)))];
   let thAll = [];
   for(const d of (ppDates.length ? ppDates : [q])){
-    // 후보: 전날 입고 (date=d-1) + 당일 입고 (date=d) — 두 컬렉션 합집합
-    const candidates = [
-      ...(await fbGetByDate('thawing', addDays(d,-1))),
-      ...(await fbGetByDate('thawing', d))
-    ];
-    const matched = candidates.filter(r => {
-      // (a) cart 매칭 (전처리 wagons 와 일치)
-      const cartMatch = ppWagons.length===0 || ppWagons.some(w=>((r.cart||'').trim())===w);
-      if(!cartMatch) return false;
-      // (b) end 가 d 와 매칭 (= 작업일에 실제로 풀린 박스). 진행중 (end='') 제외.
-      const e = String(r.end||'');
-      if(!e) return false;
-      if(e.length>=10 && e.slice(0,10)===d) return true;          // datetime 'YYYY-MM-DD HH:MM'
-      if(e.length<=5 && String(r.date||'').slice(0,10)===d) return true; // 옛 'HH:MM' 형식
-      return false;
-    });
-    thAll.push(...matched);
+    // 당일 방혈 우선 매칭 (와건 재사용시 전날 배치 오염 방지)
+    const _sameTh = (await fbGetByDate('thawing', d)).filter(r=>ppWagons.length===0||ppWagons.some(w=>((r.cart||'').trim())===w));
+    if(_sameTh.length > 0){
+      // 당일 방혈이 있어도 다음날에 더 많은 일치 기록이 있으면 다음날 우선 (날짜 오입력 보정)
+      const _sameKg = r2(_sameTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
+      const _nextTh = ppWagons.length>0 ? (await fbGetByDate('thawing', addDays(d,1))).filter(r=>ppWagons.some(w=>((r.cart||'').trim())===w)) : [];
+      const _nextKg = r2(_nextTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
+      if(_nextTh.length && _nextKg > _sameKg*2){
+        thAll.push(..._nextTh); // 다음날 기록이 2배 이상이면 다음날 사용 (재입력 오류 보정)
+      } else {
+        thAll.push(..._sameTh);
+      }
+    } else {
+      // 당일 없으면 전날 방혈
+      const _prevTh = (await fbGetByDate('thawing', addDays(d,-1))).filter(r=>ppWagons.length===0||ppWagons.some(w=>((r.cart||'').trim())===w));
+      thAll.push(...(_prevTh.length > 0 ? _prevTh : await fbGetByDate('thawing', d)));
+    }
   }
   const thAllD = dedupeRec(thAll, r=>(r.cart||'')+'|'+r.type+'|'+String(r.date||'').slice(0,10)+'|'+r.totalKg); thAll.length=0; thAll.push(...thAllD);
   let th = thAll;
 
-  // ⑥ 바코드: 방혈 record 의 importCodes 와 importCode 매칭 (정확)
-  // 옛 동작 (날짜만 매칭) 은 다른 배치 박스가 섞일 수 있음 → importCode 우선
-  const _thImportCodes = new Set();
-  th.forEach(r => { (r.importCodes||[]).forEach(c => { if(c) _thImportCodes.add(c); }); });
+  // ⑥ 바코드: 해동 전날 스캔 우선, 전날 없으면 당일 (배치 혼입 방지)
+  const _thDates = new Set(th.map(r=>String(r.date||'').slice(0,10)));
+  const _prevDates = new Set([..._thDates].map(d=>addDays(d,-1)));
+  const _bcLoadDates = new Set([..._thDates, ..._prevDates]);
   let bc = [];
-  if(_thImportCodes.size > 0){
-    // 방혈 date + 전날 후보 (barcode 는 입고 시 스캔)
-    const _thDates = new Set(th.map(r=>String(r.date||'').slice(0,10)));
-    const _candidateDates = new Set();
-    _thDates.forEach(d=>{ _candidateDates.add(d); _candidateDates.add(addDays(d,-1)); });
-    const _allBc = [];
-    for(const d of [..._candidateDates]){
-      _allBc.push(...await fbGetByDate('barcode', d));
-    }
-    bc = _allBc.filter(r => _thImportCodes.has(r.importCode));
+  for(const d of [..._bcLoadDates]){
+    bc.push(...await fbGetByDate('barcode', d));
   }
-  // 폴백: importCode 매칭 0 (옛 thawing record 에 importCodes 없음) → 옛 날짜 매칭
-  if(!bc.length){
-    const _thDates = new Set(th.map(r=>String(r.date||'').slice(0,10)));
-    const _prevDates = new Set([..._thDates].map(d=>addDays(d,-1)));
-    const _bcLoadDates = new Set([..._thDates, ..._prevDates]);
-    for(const d of [..._bcLoadDates]){
-      bc.push(...await fbGetByDate('barcode', d));
-    }
-    const _prevBc = bc.filter(r=>_prevDates.has(String(r.date||'').slice(0,10)));
-    const _sameBc = bc.filter(r=>_thDates.has(String(r.date||'').slice(0,10)));
-    bc = _prevBc.length > 0 ? _prevBc : _sameBc;
-  }
+  // 전날 바코드가 있으면 전날만, 없으면 당일
+  const _prevBc = bc.filter(r=>_prevDates.has(String(r.date||'').slice(0,10)));
+  const _sameBc = bc.filter(r=>_thDates.has(String(r.date||'').slice(0,10)));
+  bc = _prevBc.length > 0 ? _prevBc : _sameBc;
   const bcMap = new Map();
   bc.forEach(r=>{ if(!bcMap.has(r.importCode)) bcMap.set(r.importCode, r); });
   bc = [...bcMap.values()];

@@ -209,13 +209,6 @@ async function runAIAnalysis() {
       }
     }
     
-    // 포장 없으면 생산 안 한 날 — packing.date 있는 날짜만 생산일로 본다
-    // (KPI/차트/AI 입력 모두 이 필터된 allData 기준)
-    const _pkDates = new Set(allData.packing.map(r => String(r.date||'').slice(0,10)));
-    ['thawing','preprocess','cooking','shredding','sauce','outerpacking','barcode'].forEach(c => {
-      if(allData[c]) allData[c] = allData[c].filter(r => _pkDates.has(String(r.date||'').slice(0,10)));
-    });
-    
     const computedKpis = _aiComputeKpis(allData);
     
     btnEl.textContent = 'AI 분석 중...';
@@ -545,17 +538,8 @@ function _renderAIReport(el, r, from, to, days, recCount, workDays) {
         ${defectReasons.length > 0 ? `
         <div>
           <h3 style="font-size:14px;font-weight:500;margin:0 0 10px;color:#0f172a">부적합 사유</h3>
-          <div style="display:flex;align-items:center;gap:14px">
-            <div style="position:relative;width:140px;height:140px;flex-shrink:0">
-              <canvas id="aiDefChart"></canvas>
-              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
-                <span style="font-size:18px;font-weight:500;color:#0f172a">${defectReasons.reduce((s,d)=>s+(parseInt(d.count)||0),0)}건</span>
-                <span style="font-size:11px;color:#64748b">합계</span>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;flex:1;min-width:0">
-              ${(()=>{const _palette=['#F09595','#FAC775','#B4B2A9','#7F77DD','#1D9E75'];const _tot=defectReasons.reduce((s,d)=>s+(parseInt(d.count)||0),0)||1;return defectReasons.map((d,i)=>`<div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:${_palette[i%_palette.length]};flex-shrink:0"></span><span style="color:#64748b;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.label||''}</span><span style="color:#0f172a;font-weight:500;flex-shrink:0">${d.count||0}건 ${Math.round((d.count||0)/_tot*100)}%</span></div>`).join('')})()}
-            </div>
+          <div style="position:relative;width:100%;height:200px">
+            <canvas id="aiDefChart"></canvas>
           </div>
         </div>
         ` : ''}
@@ -612,29 +596,12 @@ function _drawYieldChart(data) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 20 } },
       plugins: { legend: { display: false } },
       scales: {
         y: { ticks: { callback: v => v + '%', font: {size:11} }, grid: { color: 'rgba(0,0,0,0.05)' } },
         x: { ticks: { autoSkip: false, maxRotation: 45, font: {size:10} }, grid: { display: false } }
       }
-    },
-    plugins: [{
-      id: 'aiYieldLabel',
-      afterDatasetsDraw(chart){
-        const {ctx} = chart; ctx.save();
-        ctx.font = '500 11px sans-serif';
-        ctx.fillStyle = '#0f172a';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        chart.getDatasetMeta(0).data.forEach((bar, i) => {
-          const v = chart.data.datasets[0].data[i];
-          if(v == null) return;
-          ctx.fillText(Number(v).toFixed(1)+'%', bar.x, bar.y - 4);
-        });
-        ctx.restore();
-      }
-    }]
+    }
   });
 }
 
@@ -650,29 +617,12 @@ function _drawPartChart(data, colors) {
     options: {
       indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { right: 44 } },
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { callback: v => v + '%', font: {size:11} } },
         y: { ticks: { font: {size:12} }, grid: { display: false } }
       }
-    },
-    plugins: [{
-      id: 'aiPartLabel',
-      afterDatasetsDraw(chart){
-        const {ctx} = chart; ctx.save();
-        ctx.font = '500 11px sans-serif';
-        ctx.fillStyle = '#0f172a';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        chart.getDatasetMeta(0).data.forEach((bar, i) => {
-          const v = chart.data.datasets[0].data[i];
-          if(v == null) return;
-          ctx.fillText(Number(v).toFixed(1)+'%', bar.x + 6, bar.y);
-        });
-        ctx.restore();
-      }
-    }]
+    }
   });
 }
 
@@ -688,8 +638,10 @@ function _drawDefChart(data) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { enabled: false } },
-      cutout: '68%'
+      plugins: {
+        legend: { position: 'bottom', labels: { font: {size:11}, boxWidth: 10, padding: 8 } }
+      },
+      cutout: '60%'
     }
   });
 }

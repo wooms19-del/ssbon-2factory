@@ -162,7 +162,7 @@ async function onCkStartBtn(){
     const type = row.querySelector('.ck-row-type').value;
     const cage = row.querySelector('.ck-row-cage').value.trim();
     const workers = parseFloat(row.querySelector('.ck-row-workers').value)||0;
-    L.cooking_pending.push({ id:gid(), date:DDATE||tod(), tank, type, cage, workers, start:startTime, end:'', kg:0, wagonOut:'', note:'' });
+    L.cooking_pending.push({ id:gid(), date:tod(), tank, type, cage, workers, start:startTime, end:'', kg:0, wagonOut:'', note:'' });
     added++;
   });
 
@@ -366,17 +366,10 @@ async function saveCkEnd(id){
   }
 
   const fbId = await fbSave('cooking', completed);
-  if(fbId){
-    completed.fbId=fbId;
-    saveL();
-    // DB 의 fbId 필드도 새 docId 로 갱신 (안 하면 stale fbId 로 향후 update fail)
-    try { await fbUpdate('cooking', fbId, {fbId: fbId}); }
-    catch(e) { console.error('[cooking] fbId 동기화 실패:', e); }
-    toast(`${completed.tank} 종료 저장됨 ✓`);
-  }
+  if(fbId){ completed.fbId=fbId; saveL(); toast(`${completed.tank} 종료 저장됨 ✓`); }
   else { toast('저장 실패 - 로컬에만 저장됨','d'); }
 
   renderCkPending();
   renderPL('cooking');
-  renderShWagonList();
+  if(typeof sh2Render==='function') sh2Render();
 }

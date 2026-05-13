@@ -98,7 +98,7 @@ function showTab(mode,tab){
   } else if(tab==='preprocess'){
     const yd2=getYesterday_();
     Promise.all([loadOpenThawing(), loadFromServer(today), loadFromServer(yd2)])
-      .then(()=>{ updateThawInfo(); updPpWagon(); renderPL('preprocess'); });
+      .then(()=>{ if(typeof pp2Render==='function') pp2Render(); });
   } else if(tab==='cooking'){
     if(!L.cooking_pending) L.cooking_pending=[];
     // ★ loadOpenCooking 추가 (다른 디바이스 진행중 자숙 가시성)
@@ -110,9 +110,14 @@ function showTab(mode,tab){
     });
   } else if(tab==='shredding'){
     // ★ loadOpenPacking 추가 — shredding은 packing/packing_pending도 표시 (사용된 wagon 추적)
-    Promise.all([loadFromServer(today), loadOpenPacking()]).then(()=>{ renderShWagonList(); renderPL('shredding'); });
+    // ★ 어제 데이터도 필요 (어제 만든 자숙 와건이 오늘 파쇄 대기)
+    const yd3 = getYesterday_();
+    Promise.all([loadFromServer(today), loadFromServer(yd3), loadOpenPacking()]).then(()=>{ if(typeof sh2Render==='function') sh2Render(); });
   } else if(tab==='packing'){
     if(!L.packing_pending) L.packing_pending = [];
+    // ★ 탭 진입 시 수정 모드 상태 초기화 (잔재 방지)
+    if(typeof _pkEditingId !== 'undefined') _pkEditingId = null;
+    if(typeof _restorePkStartCardUI === 'function') _restorePkStartCardUI();
     Promise.all([loadFromServer(today), loadOpenPacking()]).then(()=>{
       renderPkWagonList();
       renderPL('packing');
@@ -143,10 +148,6 @@ function showTab(mode,tab){
   } else if(tab==='recipe'){
     updDD();
     renderRcList();
-  } else if(tab==='timetable'){
-    if(typeof ttInit === 'function') ttInit();
-  } else if(tab==='timetable_test'){
-    if(typeof tttInit === 'function') tttInit();
   }
 }
 
@@ -169,16 +170,27 @@ function init(){
   if(upDate) upDate.value = tod();
   const expDate = document.getElementById('exp_date');
   if(expDate) expDate.value = tod();
-  const n=new Date(), dys=['일','월','화','수','목','금','토'];
-  document.getElementById('hDate').textContent=`${n.getMonth()+1}/${n.getDate()}(${dys[n.getDay()]})`;
+  // 페이지 로드 시 저장된 _testDate 복원
+  const _saved = sessionStorage.getItem('_testDate');
+  if(_saved && /^\d{4}-\d{2}-\d{2}$/.test(_saved)){
+    window._testDate = _saved;
+    window.tod = ()=> window._testDate || new Date().toISOString().slice(0,10);
+    const d=new Date(_saved+'T00:00:00');
+    const dys2=['일','월','화','수','목','금','토'];
+    document.getElementById('hDate').textContent=`${d.getMonth()+1}/${d.getDate()}(${dys2[d.getDay()]}) ✏️`;
+  } else {
+    const n=new Date(), dys=['일','월','화','수','목','금','토'];
+    document.getElementById('hDate').textContent=`${n.getMonth()+1}/${n.getDate()}(${dys[n.getDay()]})`;
+  }
   // 날짜 클릭 시 날짜 변경 (테스트용)
-  // 날짜 클릭 시 변경
   document.getElementById('hDate').style.cursor='pointer';
   document.getElementById('hDate').title='클릭하여 날짜 변경';
   document.getElementById('hDate').onclick=()=>{
-    const val = prompt('날짜 입력 (예: 2026-04-13)', tod());
-    if(!val) return;
+    const val = prompt('날짜 입력 (예: 2026-04-13). 비우고 확인 시 오늘로 복귀.', tod());
+    if(val === null) return;
+    if(val === ''){ sessionStorage.removeItem('_testDate'); window._testDate = null; location.reload(); return; }
     if(!/^\d{4}-\d{2}-\d{2}$/.test(val)){ toast('날짜 형식 오류 (YYYY-MM-DD)','d'); return; }
+    sessionStorage.setItem('_testDate', val);
     const d=new Date(val+'T00:00:00');
     const dys2=['일','월','화','수','목','금','토'];
     document.getElementById('hDate').textContent=`${d.getMonth()+1}/${d.getDate()}(${dys2[d.getDay()]}) ✏️`;
@@ -186,7 +198,7 @@ function init(){
     window.tod = ()=> window._testDate || new Date().toISOString().slice(0,10);
     toast(`날짜 변경: ${val}`,'i');
     // 날짜 변경 후 어제+오늘 데이터 새로 로드
-    const yd = (()=>{const d=new Date(val+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+    const yd = (()=>{const d=new Date(val+'T00:00:00');d.setDate(d.getDate()-1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
     Promise.all([loadFromServer(val), loadFromServer(yd)]).then(()=>{
       showTab(MODE, MODE==='i'?ITAB:DTAB);
     });
@@ -198,10 +210,18 @@ function init(){
   renderThawList();
   loadSettings_();
   startAutoRefresh();
-  loadFromServer(tod()).then(()=>{
+  // ★ 페이지 시작 시 오늘+어제 둘 다 로드 (전처리/파쇄가 어제 thawing/cooking 필요)
+  const _today = tod();
+  const _ydDate = new Date(_today + 'T00:00:00');
+  _ydDate.setDate(_ydDate.getDate() - 1);
+  const _yd = _ydDate.getFullYear()+'-'+String(_ydDate.getMonth()+1).padStart(2,'0')+'-'+String(_ydDate.getDate()).padStart(2,'0');
+  Promise.all([loadFromServer(_today), loadFromServer(_yd)]).then(()=>{
     renderBC();
     renderThawWaiting();
     renderThawList();
+    // 현재 탭이 v2면 다시 렌더 (Firestore 로드 후)
+    if(MODE==='i' && ITAB==='preprocess' && typeof pp2Refresh==='function') pp2Refresh();
+    if(MODE==='i' && ITAB==='shredding' && typeof sh2Refresh==='function') sh2Refresh();
   });
 }
 function setModeAtt(){
