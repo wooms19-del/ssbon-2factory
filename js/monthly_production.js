@@ -1229,7 +1229,7 @@
       }
     }
 
-    var sum = _mpAggregate(calcRows);
+    var sum = _mpAggregate(calcRows.filter(function(r){ return !r.isSubTotal; }));
     // ★ 다운로드에서 사용 — 화면과 동일한 데이터/컬럼/모드
     _lastRendered = {
       calcRows: calcRows,
@@ -1237,7 +1237,29 @@
       sum: sum,
       groupMode: _mpGroupMode
     };
-    var prevRows = (_mpPrevData && _mpPrevData.rows) || [];
+    var prevRowsRaw = (_mpPrevData && _mpPrevData.rows) || [];
+
+    // ★ 전월 데이터에도 이번달과 동일한 필터/그룹 적용 (사과 vs 사과 비교)
+    var prevRows;
+    if(_mpGroupMode === 'product'){
+      prevRows = prevRowsRaw.slice();
+      if(_mpGroupFilter.size > 0){
+        prevRows = prevRows.filter(function(r){
+          return _mpGroupFilter.has(r.product);
+        });
+      }
+    } else if(_mpGroupMode === 'part'){
+      prevRows = prevRowsRaw.slice();
+      if(_mpGroupFilter.size > 0){
+        prevRows = prevRows.filter(function(r){
+          var key = r.type || (r.isNoMeat?'무육':'');
+          return _mpGroupFilter.has(key);
+        });
+      }
+    } else {
+      prevRows = prevRowsRaw;
+    }
+
     function _mapForAgg(r){
       var ppT=r.ppPersonHours||0, ckT=r.ckPersonHours||0, shT=r.shPersonHours||0, pkT=r.pkPersonHours||0;
       var meatKg = r.pkEa*(r.kgea||0);

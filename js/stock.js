@@ -70,8 +70,7 @@ async function renderStock(){
     _stockData.thawing = R[3] || [];
     _stockFetchedFrom = stockInFrom;  // 캐시 시작 기록
     _renderStockShell();
-    // ★ 미등록 GTIN 자동 검사 후 배너
-    _checkUnknownGtinsBanner();
+    // 미등록 GTIN 배너는 입력>해동기 화면에서만 처리 (바코드 스캔 위치)
   } catch(e){
     pg.innerHTML = '<div style="padding:20px;color:#c0392b">로드 오류: '+(e.message||e)+'</div>';
   } finally {
@@ -618,8 +617,9 @@ async function _submitGtinRegister(cnt){
     }
     alert(msg);
     _closeGtinModal();
-    // 페이지 갱신
-    if(typeof renderStock === 'function') renderStock();
+    // 페이지 갱신 - 현재 어느 화면이든 갱신
+    if(typeof renderStock === 'function' && document.getElementById('p-stock')) renderStock();
+    if(typeof renderBC === 'function' && document.getElementById('bcList')) renderBC();
   } catch(e){
     alert('등록 실패: ' + (e.message || e));
   }
