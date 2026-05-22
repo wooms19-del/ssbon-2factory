@@ -847,9 +847,10 @@ function attDownloadWeekly(){
         }
       }
 
-      // 행1 제목 + 서명
-      setRange(1,1,1,SS-1, yr+'년 '+mo+'월 출퇴근 기록부',{sz:16,bold:true,bl:med(),br:thin(),bt:med(),bb:thin()});
-      setRange(1,SS,3,LASTCOL,'서  명',{sz:13,bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
+      // 행1 제목 (전체폭 가로병합)
+      setRange(1,1,1,LASTCOL, yr+'년 '+mo+'월 출퇴근 기록부',{sz:16,bold:true,bl:med(),br:med(),bt:med(),bb:thin()});
+      // 서명 (2~3행, 날짜칸과 높이 맞춤)
+      setRange(2,SS,3,LASTCOL,'서  명',{sz:13,bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
 
       // 행2 성명(2~3행 세로병합)/날짜
       setRange(2,1,3,7,'성  명',{sz:13,bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:med()});
