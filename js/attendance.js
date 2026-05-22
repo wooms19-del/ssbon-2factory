@@ -953,17 +953,20 @@ function attDownloadWeekly(){
       if(/^xl\/worksheets\/sheet\d+\.xml$/.test(k)){
         var xml=_dec.decode(_z[k]);
         if(xml.indexOf('<sheetPr')<0) xml=xml.replace(/(<worksheet[^>]*>)/, '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
-        // pageMargins/pageSetup 주입
+        // 1) pageMargins/pageSetup 주입 (ignoredErrors 앞 또는 worksheet 끝)
         xml = xml.indexOf('<ignoredErrors')>=0 ? xml.replace('<ignoredErrors', _ps+'<ignoredErrors') : xml.replace('</worksheet>', _ps+'</worksheet>');
-        // rowBreaks 주입 (pageSetup 뒤, 스키마상 pageSetup 다음 위치)
-        if(_rb) xml = xml.replace('</worksheet>', _rb+'</worksheet>');
+        // 2) rowBreaks 주입 — CT_Worksheet 순서상 pageSetup 뒤, ignoredErrors 앞
+        if(_rb){
+          if(xml.indexOf('<ignoredErrors')>=0) xml=xml.replace('<ignoredErrors', _rb+'<ignoredErrors');
+          else xml=xml.replace('</worksheet>', _rb+'</worksheet>');
+        }
         _z[k]=_enc.encode(xml);
       }
       // workbook.xml: Print_Titles 정의 → 매 페이지 헤더(1~3행) 반복
       if(k==='xl/workbook.xml'){
         var wxml=_dec.decode(_z[k]);
         if(wxml.indexOf('_xlnm.Print_Titles')<0){
-          var dn='<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">\'출퇴근기록부\'!$1:$3</definedName></definedNames>';
+          var dn='<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">출퇴근기록부!$1:$3</definedName></definedNames>';
           wxml=wxml.replace('</sheets>', '</sheets>'+dn);
           _z[k]=_enc.encode(wxml);
         }
