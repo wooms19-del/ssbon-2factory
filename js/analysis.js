@@ -3292,14 +3292,11 @@ function renderPackingChart(dayEntries, opMap, ym) {
 
   if(!_allProds.length || dayTotals.every(v => !v)) return;
 
-  // 범례
+  // 범례 — 차트 자체(Chart.js)에 범례가 있으므로 위쪽 정적 범례는 숨김(중복 제거)
   const legendEl = document.getElementById('mo_packing_legend');
   if (legendEl) {
-    legendEl.innerHTML = Object.entries(prodColorMap).map(([name, color]) =>
-      `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:11px;color:var(--g5)">
-        <span style="width:9px;height:9px;border-radius:2px;background:${color};flex-shrink:0"></span>${name}
-      </span>`
-    ).join('');
+    legendEl.innerHTML = '';
+    legendEl.style.display = 'none';
   }
 
   // 제목 월 업데이트
