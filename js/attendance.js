@@ -805,7 +805,7 @@ function attDownloadWeekly(){
   var numDays=dates.length;
   var SS=DS+numDays*8;
   var LASTCOL=SS+2;
-  var LASTROW=4+_attEmps.length;
+  var LASTROW=3+_attEmps.length;
 
   try{
     var wb={SheetNames:['출퇴근기록부'],Sheets:{}};
@@ -859,42 +859,36 @@ function attDownloadWeekly(){
       }
     }
 
-    // ─ 행1 제목
+    // ─ 행1 제목 + 서명 헤더
     var yr=dates[0].getFullYear(), mo=dates[0].getMonth()+1;
     setRange(1,1,1,SS-1, yr+'년 '+mo+'월 출퇴근 기록부',
       {sz:13,bold:true,bl:med(),br:thin(),bt:med(),bb:thin()});
-    setRange(1,SS,1,LASTCOL,'담당 / 검토 / 승인',
+    setRange(1,SS,3,LASTCOL,'서  명',
       {bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
 
-    // ─ 행2 서명 공간
-    setRange(2,1,2,SS-1,'',{bl:med(),br:thin(),bt:thin(),bb:med()});
-    setRange(2,SS,2,LASTCOL,'',{bl:med(),br:med(),bt:thin(),bb:med()});
-
-    // ─ 행3 날짜
-    setRange(3,1,3,7,'성  명',{bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
+    // ─ 행2 성명/날짜
+    setRange(2,1,2,7,'성  명',{bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
     for(var d=0;d<numDays;d++){
       var base=DS+d*8;
       var dt=dates[d];
       var lb=(dt.getMonth()+1)+'/'+dt.getDate()+'('+dlabels[d]+')';
-      setRange(3,base,3,base+7,lb,{bold:true,fill:'DBE5F1',
+      setRange(2,base,2,base+7,lb,{bold:true,fill:'DBE5F1',
         bl:d==0?med():thin(),br:d==6?med():thin(),bt:med(),bb:thin()});
     }
-    setRange(3,SS,3,LASTCOL,'서  명',{bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
 
-    // ─ 행4 출근/퇴근
-    setRange(4,1,4,7,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
+    // ─ 행3 출근/퇴근
+    setRange(3,1,3,7,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
     for(var d=0;d<numDays;d++){
       var base=DS+d*8;
-      setRange(4,base,4,base+3,'출  근',{bold:true,fill:'DBE5F1',
+      setRange(3,base,3,base+3,'출  근',{bold:true,fill:'DBE5F1',
         bl:d==0?med():thin(),br:thin(),bt:thin(),bb:med()});
-      setRange(4,base+4,4,base+7,'퇴  근',{bold:true,fill:'DBE5F1',
+      setRange(3,base+4,3,base+7,'퇴  근',{bold:true,fill:'DBE5F1',
         bl:thin(),br:d==6?med():thin(),bt:thin(),bb:med()});
     }
-    setRange(4,SS,4,LASTCOL,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
 
     // ─ 직원 행
     for(var idx=0;idx<_attEmps.length;idx++){
-      var row=5+idx;
+      var row=4+idx;
       var name=_attEmps[idx].name;
       var isLast=idx==_attEmps.length-1;
       var bb=isLast?med():thin();
@@ -922,25 +916,53 @@ function attDownloadWeekly(){
     }
 
     // ─ 열 너비 / 행 높이
-    var cols=[{wch:4}];
-    for(var i=0;i<6;i++) cols.push({wch:3.5});
-    for(var i=0;i<numDays*8;i++) cols.push({wch:3.8});
-    for(var i=0;i<3;i++) cols.push({wch:6});
+    // ─ 열 너비 (비율만 지정 — 한 장 맞춤은 아래 fitToWidth가 자동 처리)
+    //   날짜 칸은 좁게, 서명란은 성명칸(6칸=21)의 1.5배로.
+    //   fitToWidth:1 이 인쇄 시 전체를 A4 가로 한 장 너비에 자동 축소하므로,
+    //   여기서는 칸들의 상대 비율만 맞추면 됨.
+    var NAME_W  = 3.5*6;        // 성명 6칸 합계 = 21
+    var SIGN_W  = NAME_W;       // 서명 = 성명칸과 동일 폭 = 21
+    var perSignCell = SIGN_W/3; // 서명 3칸 각각 = 7
+
+    var cols=[{wch:4}];                                    // 번호
+    for(var i=0;i<6;i++) cols.push({wch:3.5});            // 성명 6칸
+    for(var i=0;i<numDays*8;i++) cols.push({wch:2.75});    // 날짜 칸(좁게)
+    for(var i=0;i<3;i++) cols.push({wch:perSignCell});    // 서명 3칸
     ws['!cols']=cols;
 
-    var rows=[{hpt:28},{hpt:40},{hpt:22},{hpt:18}];
-    for(var i=0;i<_attEmps.length;i++) rows.push({hpt:19});
+    // 행 높이: A4 한 장에 가로·세로 모두 꽉 차도록 (페이지 비율에 콘텐츠 비율을 맞춤)
+    //   인쇄영역 비율(세로/가로 ≈ 552/813)에 맞추면 fitToPage가 균일 축소되어 양방향 꽉 참.
+    //   인원수와 무관 — 인원이 많으면 행이 얇아지고 적으면 두꺼워져 항상 한 장 바닥까지.
+    var _hdr=[20,16,14];                                 // 제목/날짜/출퇴근 (얇게)
+    var _hdrSum=_hdr[0]+_hdr[1]+_hdr[2];
+    var _totalWch=4+6*3.5+numDays*8*2.75+3*perSignCell;   // 전체 열 너비 합(wch)
+    var _natW=_totalWch*7.2;                            // 자연 폭(pt 근사)
+    var _targetH=_natW*(552/813);                        // 페이지 비율에 맞춘 총 높이(pt)
+    var _dataH=Math.max(14, Math.min(100, (_targetH-_hdrSum)/_attEmps.length));
+    var rows=[{hpt:_hdr[0]},{hpt:_hdr[1]},{hpt:_hdr[2]}];
+    for(var i=0;i<_attEmps.length;i++) rows.push({hpt:_dataH});
     ws['!rows']=rows;
 
     // ─ 셀 범위 설정
     ws['!ref']=addr(1,1)+':'+addr(LASTROW,LASTCOL);
 
-    // ─ 인쇄 설정
-    ws['!pageSetup']={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0};
-
     wb.Sheets['출퇴근기록부']=ws;
     var fname='출퇴근_'+yr+String(mo).padStart(2,'0')+'.xlsx';
-    XLSX.writeFile(wb,fname,{cellStyles:true});
+    // ─ 인쇄 설정: xlsx-js-style는 !pageSetup을 출력 안 하므로, 생성 후 sheet XML에 직접 주입
+    var _arr=XLSX.write(wb,{type:'array',bookType:'xlsx',cellStyles:true});
+    var _z=fflate.unzipSync(new Uint8Array(_arr));
+    var _dec=new TextDecoder(), _enc=new TextEncoder();
+    var _ps='<pageMargins left="0.2" right="0.2" top="0.3" bottom="0.3" header="0.1" footer="0.1"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="1"/>';
+    Object.keys(_z).forEach(function(k){
+      if(/^xl\/worksheets\/sheet\d+\.xml$/.test(k)){
+        var xml=_dec.decode(_z[k]);
+        if(xml.indexOf('<sheetPr')<0) xml=xml.replace(/(<worksheet[^>]*>)/, '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+        xml = xml.indexOf('<ignoredErrors')>=0 ? xml.replace('<ignoredErrors', _ps+'<ignoredErrors') : xml.replace('</worksheet>', _ps+'</worksheet>');
+        _z[k]=_enc.encode(xml);
+      }
+    });
+    var _blob=new Blob([fflate.zipSync(_z)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var _a=document.createElement('a');_a.href=URL.createObjectURL(_blob);_a.download=fname;document.body.appendChild(_a);_a.click();document.body.removeChild(_a);URL.revokeObjectURL(_a.href);
     toast('엑셀 다운로드 완료 ✓','s');
   }catch(e){
     alert('다운로드 실패: '+e.message);
