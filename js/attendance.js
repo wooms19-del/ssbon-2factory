@@ -912,51 +912,66 @@ function attDownloadWeekly(){
       for(var i=0;i<3;i++) cols.push({wch:perSignCell});
       ws['!cols']=cols;
 
-      // 행 높이 — 이 시트 인원수로 한 장 세로 꽉 채움
+      // 행 높이 — 한 페이지에 들어갈 인원(절반) 기준으로 잡아 각 페이지가 세로 꽉 차게
+      var _perPage = Math.ceil(emps.length/2);
       var _hdr=[24,20,16];
       var _hdrSum=_hdr[0]+_hdr[1]+_hdr[2];
       var _totalWch=4+6*3.5+numDays*8*2.75+3*perSignCell;
       var _natW=_totalWch*7.2;
       var _targetH=_natW*(552/813);
-      var _dataH=Math.max(20, Math.min(120, (_targetH-_hdrSum)/emps.length));
+      var _dataH=Math.max(20, Math.min(120, (_targetH-_hdrSum)/_perPage));
       var rows=[{hpt:_hdr[0]},{hpt:_hdr[1]},{hpt:_hdr[2]}];
       for(var i=0;i<emps.length;i++) rows.push({hpt:_dataH});
       ws['!rows']=rows;
+
+      // 페이지 나누기는 아래 인쇄설정 단계(fflate)에서 XML로 직접 주입
 
       ws['!ref']=addr(1,1)+':'+addr(LASTROW,LASTCOL);
       return ws;
     }
 
-    // 인원 절반으로 분할 → 2장
-    var half=Math.ceil(_attEmps.length/2);
-    var group1=_attEmps.slice(0,half);
-    var group2=_attEmps.slice(half);
-
+    // 한 탭에 전원 — 인쇄 시 페이지 나누기로 2장 분할 (rowBreaks)
     var wb={SheetNames:[],Sheets:{}};
-    wb.SheetNames.push('1장');
-    wb.Sheets['1장']=buildSheet(group1, 0);
-    if(group2.length){
-      wb.SheetNames.push('2장');
-      wb.Sheets['2장']=buildSheet(group2, half);
-    }
+    wb.SheetNames.push('출퇴근기록부');
+    wb.Sheets['출퇴근기록부']=buildSheet(_attEmps, 0);
 
     var fname='출퇴근_'+yr+String(mo).padStart(2,'0')+'.xlsx';
     // 인쇄설정: 시트마다 landscape + fitToWidth1 + fitToHeight1
     var _arr=XLSX.write(wb,{type:'array',bookType:'xlsx',cellStyles:true});
     var _z=fflate.unzipSync(new Uint8Array(_arr));
     var _dec=new TextDecoder(), _enc=new TextEncoder();
-    var _ps='<pageMargins left="0.2" right="0.2" top="0.3" bottom="0.3" header="0.1" footer="0.1"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="1"/>';
+    // fitToWidth만 1 (가로 한 장), fitToHeight 미지정 → 세로는 페이지 나누기(rowBreaks)대로 분할
+    var _ps='<pageMargins left="0.2" right="0.2" top="0.3" bottom="0.3" header="0.1" footer="0.1"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
+    // 절반 지점 행 뒤에서 페이지 나누기 (헤더3행 + 절반인원)
+    var _perPage=Math.ceil(_attEmps.length/2);
+    var _brkRow=3+_perPage;
+    var _lastColIdx=(DS+numDays*8+2)-1;
+    var _rb = _attEmps.length>_perPage
+      ? '<rowBreaks count="1" manualBreakCount="1"><brk id="'+_brkRow+'" max="'+_lastColIdx+'" man="1"/></rowBreaks>'
+      : '';
     Object.keys(_z).forEach(function(k){
       if(/^xl\/worksheets\/sheet\d+\.xml$/.test(k)){
         var xml=_dec.decode(_z[k]);
         if(xml.indexOf('<sheetPr')<0) xml=xml.replace(/(<worksheet[^>]*>)/, '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+        // pageMargins/pageSetup 주입
         xml = xml.indexOf('<ignoredErrors')>=0 ? xml.replace('<ignoredErrors', _ps+'<ignoredErrors') : xml.replace('</worksheet>', _ps+'</worksheet>');
+        // rowBreaks 주입 (pageSetup 뒤, 스키마상 pageSetup 다음 위치)
+        if(_rb) xml = xml.replace('</worksheet>', _rb+'</worksheet>');
         _z[k]=_enc.encode(xml);
+      }
+      // workbook.xml: Print_Titles 정의 → 매 페이지 헤더(1~3행) 반복
+      if(k==='xl/workbook.xml'){
+        var wxml=_dec.decode(_z[k]);
+        if(wxml.indexOf('_xlnm.Print_Titles')<0){
+          var dn='<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">\'출퇴근기록부\'!$1:$3</definedName></definedNames>';
+          wxml=wxml.replace('</sheets>', '</sheets>'+dn);
+          _z[k]=_enc.encode(wxml);
+        }
       }
     });
     var _blob=new Blob([fflate.zipSync(_z)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     var _a=document.createElement('a');_a.href=URL.createObjectURL(_blob);_a.download=fname;document.body.appendChild(_a);_a.click();document.body.removeChild(_a);URL.revokeObjectURL(_a.href);
-    toast('엑셀 다운로드 완료 ✓ (2장)','s');
+    toast('엑셀 다운로드 완료 ✓','s');
   }catch(e){
     alert('다운로드 실패: '+e.message);
   }
