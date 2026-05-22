@@ -3192,11 +3192,25 @@ function renderPackingChart(dayEntries, opMap, ym) {
     return m[2].toUpperCase()==='KG' ? parseFloat(m[1])*1000 : parseFloat(m[1]);
   }
 
-  const COLORS = ['#1D9E75','#378ADD','#EF9F27','#0EA5E9','#F472B6','#64748B'];
+  // 제품명 → 색상 고정 매핑 (신규 추가돼도 기존 색 안 바뀜)
+  const FIXED_COLOR_MAP = {
+    'FC 장조림 3KG':              '#0EA5E9',
+    '배추리담 장조림 180g':        '#F472B6',
+    '미니씩고기장조림 70g 5입':    '#EF9F27',
+    '미니씩고기장조림 70g 낱개':   '#64748B',
+    '시그니처 장조림 130g':        '#1D9E75',
+    '시그니처 장조림 130g 마트봉': '#A855F7',
+    '코스트코 장조림 170g':        '#378ADD',
+    '이런발 밤향':                 '#F97316',
+    '한발 밤향':                   '#06B6D4',
+  };
+  const FALLBACK_COLORS = ['#84CC16','#E11D48','#7C3AED','#0891B2','#D97706','#059669'];
   const prodColorMap = {};
-  let colorIdx = 0;
+  let _fallbackIdx = 0;
   function getColor(prod) {
-    if (!prodColorMap[prod]) prodColorMap[prod] = COLORS[colorIdx++ % COLORS.length];
+    if (!prodColorMap[prod]) {
+      prodColorMap[prod] = FIXED_COLOR_MAP[prod] || FALLBACK_COLORS[_fallbackIdx++ % FALLBACK_COLORS.length];
+    }
     return prodColorMap[prod];
   }
 
