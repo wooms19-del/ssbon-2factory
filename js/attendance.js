@@ -851,8 +851,8 @@ function attDownloadWeekly(){
       setRange(1,1,1,SS-1, yr+'년 '+mo+'월 출퇴근 기록부',{sz:16,bold:true,bl:med(),br:thin(),bt:med(),bb:thin()});
       setRange(1,SS,3,LASTCOL,'서  명',{sz:13,bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
 
-      // 행2 성명/날짜
-      setRange(2,1,2,7,'성  명',{sz:13,bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:thin()});
+      // 행2 성명(2~3행 세로병합)/날짜
+      setRange(2,1,3,7,'성  명',{sz:13,bold:true,fill:'DBE5F1',bl:med(),br:med(),bt:med(),bb:med()});
       for(var d=0;d<numDays;d++){
         var base=DS+d*8;
         var dt=dates[d];
@@ -860,8 +860,7 @@ function attDownloadWeekly(){
         setRange(2,base,2,base+7,lb,{sz:12,bold:true,fill:'DBE5F1',bl:d==0?med():thin(),br:d==numDays-1?med():thin(),bt:med(),bb:thin()});
       }
 
-      // 행3 출근/퇴근
-      setRange(3,1,3,7,'',{fill:'DBE5F1',bl:med(),br:med(),bt:thin(),bb:med()});
+      // 행3 출근/퇴근 (성명칸은 위에서 2~3행 병합 처리됨)
       for(var d=0;d<numDays;d++){
         var base=DS+d*8;
         setRange(3,base,3,base+3,'출 근',{sz:11,bold:true,fill:'DBE5F1',bl:d==0?med():thin(),br:thin(),bt:thin(),bb:med()});
