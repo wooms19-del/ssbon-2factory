@@ -579,9 +579,21 @@ async function _openGtinRegisterModal(){
   if(typeof findUnknownGtins !== 'function'){
     alert('GTIN 관리 기능 미로드'); return;
   }
+  // 1) 이미 등록된 GTIN인데 부적합으로 남은 건 먼저 재판정해서 정상화
+  //    (스캔 당시 gtinMap 미로드로 부적합 저장된 케이스 — 등록 불필요, 정정만 하면 됨)
+  if(typeof rejudgeBarcodes === 'function'){
+    try{
+      var rj = await rejudgeBarcodes();
+      if(rj && rj.fixed){
+        if(typeof renderStock === 'function' && document.getElementById('p-stock')) renderStock();
+        if(typeof renderBC === 'function' && document.getElementById('bcList')) renderBC();
+      }
+    }catch(e){ console.warn('[정리] 재판정 실패', e); }
+  }
+  // 2) 그래도 남은 진짜 미등록 GTIN만 등록 모달로
   var unknown = await findUnknownGtins();
   if(!unknown.length){
-    alert('미등록 GTIN이 없습니다.'); return;
+    alert('정리 완료 — 등록이 필요한 새 GTIN은 없습니다.'); return;
   }
   // 모달 생성
   var modal = document.createElement('div');
