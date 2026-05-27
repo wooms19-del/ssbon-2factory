@@ -770,7 +770,11 @@ function _calcWorkHoursByTime(inTime, outTime, tags){
   }
   var inM=_toMin(inTime), outM=_toMin(outTime);
   if(inM===null||outM===null||outM<=inM) return 0;
-  var hours=(outM-inM)/60 - 1; // 점심 1시간 제외
+  // 점심(12:00~13:00)과 실제 근무시간이 겹치는 만큼만 차감.
+  // (점심 전에 퇴근하면 점심을 빼지 않음 — 예: 09:00~11:00 = 2시간)
+  var lunchStart=12*60, lunchEnd=13*60;
+  var overlap=Math.max(0, Math.min(outM,lunchEnd)-Math.max(inM,lunchStart))/60;
+  var hours=(outM-inM)/60 - overlap;
   if(tags.indexOf('half-am')>=0||tags.indexOf('half-pm')>=0) hours-=4;
   if(tags.indexOf('quarter')>=0) hours-=2;
   return Math.max(0, hours);
