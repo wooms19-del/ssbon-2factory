@@ -75,7 +75,9 @@ async function _moFetchAttendance(from, to){
       Object.entries(records).forEach(([name, rec]) => {
         if(nonProdSet.has(name)) return;  // ★ QC 등 제외
         const tags = (rec && rec.tags) || [];
-        if(Array.isArray(tags) && tags.indexOf('checkin') !== -1) count++;
+        // checkin(출근) 또는 early(조출) 둘 다 '출근한 사람'으로 카운트.
+        // (다른 화면들도 ATT_NEEDS_IN = {checkin,early} 로 동일 취급)
+        if(Array.isArray(tags) && (tags.indexOf('checkin') !== -1 || tags.indexOf('early') !== -1)) count++;
       });
       if(count > 0) result[dates[i]] = count;
     });
