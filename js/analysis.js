@@ -2646,9 +2646,17 @@ function renderDailyFromLocal_(d){
 // 다른 팀(제조원가 등)이 읽기 전용으로 가져갈 수 있도록 계산 완료된 요약을 공유 컬렉션에 떨굼.
 // 과거 날짜 단순 조회 시 불필요한 쓰기를 막기 위해, 오늘 날짜일 때만 저장.
 async function _exportDailySummary(d, procRows, pkRecs){
-  if(d !== tod()) return;               // 오늘 데이터만 export (과거 조회 시 덮어쓰기 방지)
   if(typeof db === 'undefined' || !db) return;
   if(!procRows || !procRows.length) return;
+
+  const isToday = (d === tod());
+  // 과거 날짜는 이미 저장돼 있으면 건드리지 않음 (오늘은 항상 최신으로 갱신)
+  if(!isToday){
+    try {
+      const existing = await db.collection('daily_summary').doc(d).get();
+      if(existing.exists) return;   // 이미 있으면 덮어쓰지 않음
+    } catch(e){ /* 조회 실패 시 그냥 저장 진행 */ }
+  }
 
   const processes = procRows.map(p => {
     const origYield = p.origKg>0 ? +(p.out/p.origKg*100).toFixed(1) : null;  // 원육수율
