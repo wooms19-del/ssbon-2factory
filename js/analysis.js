@@ -2592,6 +2592,10 @@ function renderDailyFromLocal_(d){
     let productivity = '-';
     if(p.name==='포장' && p.mh>0 && p.ea>0) {
       productivity = r2(p.ea/p.mh).toLocaleString()+' EA/인시';
+      // 설비 capa 참고용 — 단순 실측 분당 산출(EA ÷ 작업시간분)
+      if(p.h>0){
+        productivity += '<br><span style="font-size:11px;color:var(--g5)">'+r2(p.ea/(p.h*60)).toLocaleString()+' EA/분</span>';
+      }
     } else if((p.name==='전처리' || p.name==='자숙') && p.mh>0 && p.in>0) {
       productivity = r2(p.in/p.mh).toFixed(1)+' kg/인시';
     } else if(p.name==='파쇄' && p.mh>0 && p.out>0) {
