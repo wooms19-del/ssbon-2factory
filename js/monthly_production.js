@@ -890,9 +890,13 @@
             r.shPersonHours = _r2(shItem.personHours);
             r.shWorkers = shItem.hours>0 ? r1(shItem.personHours/shItem.hours) : 0;
             r._grpMeatKg = grpMeatKg;
-            // ★ 생산성 포장/전체 병합 표시용 — 첫 행에 그룹 포장 인시 합 세팅
-            // (자기 행 pkPersonHours만 쓰면 시그니처만의 시간으로 나뉘어 과대 표시됨)
-            r.pkPersonHours = _r2(grpPkPH);
+            // ★ 생산성은 그룹 합 인시(_grpPkPH)로 계산, 표시용 pkPersonHours는 자기 행 값 유지
+            // (옛: r.pkPersonHours=grpPkPH로 덮어 같은 type 다제품 인시가 이중 계상됨)
+            r._grpRmTotal = rmTotal;
+            r._grpPpPH = ppItem.personHours;
+            r._grpCkPH = ckItem.personHours;
+            r._grpShPH = shItem.personHours;
+            r._grpPkPH = grpPkPH;
           } else {
             __PART_KEYS.forEach(function(k){ r[k] = 0; });
           }
