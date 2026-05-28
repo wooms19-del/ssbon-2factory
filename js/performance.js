@@ -34,10 +34,8 @@ function setModePerf(){
 }
 window.setModePerf = setModePerf;
 
-// ── inner 폭 원복 (다른 탭으로 빠져나갈 때) ────────────────────
+// ── 탭 빠져나갈 때 자동 갱신 타이머 정리 ──────────────────────
 function _perfRestoreInner(){
-  var inner = document.querySelector('.main .inner') || document.querySelector('.inner');
-  if(inner){ inner.style.maxWidth=''; inner.style.padding=''; }
   if(_perfTimer){ clearInterval(_perfTimer); _perfTimer=null; }
 }
 
@@ -93,11 +91,9 @@ function _perfRenderShell(){
   var ym=_perfYm||_perfTodayYm();
   var y=ym.slice(0,4), mIdx=parseInt(ym.slice(5))-1;
   var lbl=y+'년 '+_perfMonths()[mIdx];
-  // 부모 .inner의 max-width 제거 (실적관리 활성 시) - 한페이지 꽉 차게
-  var inner = document.querySelector('.main .inner') || document.querySelector('.inner');
-  if(inner){ inner.style.maxWidth='none'; inner.style.padding='4px 6px'; }
   pg.innerHTML =
     '<style>'+
+      '#p-performance{width:100vw;max-width:100vw;margin-left:calc(-50vw + 50%);padding:4px 6px;box-sizing:border-box}'+
       '#p-performance .pf-card{padding:8px;background:var(--c);border:var(--br);border-radius:6px;margin-bottom:6px}'+
       '#p-performance table.perf-tbl{width:100%;border-collapse:collapse;font-size:.85rem;table-layout:auto}'+
       '#p-performance table.perf-tbl thead th{background:#1F4E79;color:#fff;font-weight:600;text-align:center;padding:6px 4px;border:1px solid #999;white-space:nowrap;position:sticky;top:0;z-index:2;line-height:1.25}'+
