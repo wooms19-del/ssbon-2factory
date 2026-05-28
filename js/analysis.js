@@ -2180,7 +2180,7 @@ function renderDailyFromLocal_(d){
   const totalEA=pk.reduce((s,r)=>s+(parseFloat(r.ea)||0),0);
   const totalMH=r2(sumMH(pp)+sumMH(ck)+sumMH(sh)+sumMH(pk));
   const defect=pk.reduce((s,r)=>s+(parseFloat(r.defect)||0),0);
-  const defRate=totalEA>0?r2(defect/totalEA*100):0;
+  const defRate=(totalEA+defect)>0?r2(defect/(totalEA+defect)*100):0;
   // 원육수율 = 완제품 원료육(포장EA×원료육kgEA) / 원육투입
   const pkRawKg = r2(pk.reduce((s,r)=>{
     const p=L.products.find(x=>x.name===r.product);
@@ -2628,8 +2628,8 @@ function renderDailyFromLocal_(d){
         <td style="text-align:center;font-weight:600">${v.ea.toLocaleString()}</td>
         <td style="text-align:center">${v.pouch.toLocaleString()}</td>
         <td style="text-align:center">${v.defect.toLocaleString()}</td>
-        <td style="text-align:center;font-weight:600;color:${v.ea>0&&r2(v.defect/v.ea*100)<2?'var(--s)':'var(--d)'}">
-          ${v.ea>0?r2(v.defect/v.ea*100).toFixed(2)+'%':'-'}
+        <td style="text-align:center;font-weight:600;color:${(v.ea+v.defect)>0&&r2(v.defect/(v.ea+v.defect)*100)<2?'var(--s)':'var(--d)'}">
+          ${(v.ea+v.defect)>0?r2(v.defect/(v.ea+v.defect)*100).toFixed(2)+'%':'-'}
         </td>
       </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--g4)">데이터 없음</td></tr>';
   }
@@ -3121,7 +3121,7 @@ async function renderTrend(){
     const rm=rmData[activeDates.indexOf(ds)];
     return rm>0?r2((ppW+shW)/rm*100):null;
   });
-  const defData  = activeDates.map(ds=>{ const ea=pkRecs.filter(r=>r.date===ds).reduce((s,r)=>s+(parseFloat(r.ea)||0),0); const def=pkRecs.filter(r=>r.date===ds).reduce((s,r)=>s+(parseFloat(r.defect)||0),0); return ea>0?r2(def/ea*100):null; });
+  const defData  = activeDates.map(ds=>{ const ea=pkRecs.filter(r=>r.date===ds).reduce((s,r)=>s+(parseFloat(r.ea)||0),0); const def=pkRecs.filter(r=>r.date===ds).reduce((s,r)=>s+(parseFloat(r.defect)||0),0); return (ea+def)>0?r2(def/(ea+def)*100):null; });
   const mhEaData = activeDates.map((ds,i)=>{ const mh=sumMH([...ppRecs,...ckRecs,...shRecs,...pkRecs].filter(r=>r.date===ds)); return mh>0?r2(eaData[i]/mh):null; });
 
   // 이달 평균 / 전달 평균 (원육)

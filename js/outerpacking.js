@@ -290,7 +290,7 @@ function opCalc(i, innerEa) {
 
   // 불량률
   if(rateEl){
-    const rate = innerEa > 0 ? (defp/innerEa*100).toFixed(2) : '0.00';
+    const rate = (innerEa+defp) > 0 ? (defp/(innerEa+defp)*100).toFixed(2) : '0.00';
     rateEl.textContent = rate+'%';
     rateEl.style.color = parseFloat(rate)>0 ? 'var(--d)' : '';
   }
@@ -519,7 +519,7 @@ async function saveOpEdit(fbId, i) {
     note:          g('oe_note_'+i).value||'',
   };
   // defectRate 재계산
-  fields.defectRate = fields.innerEa > 0 ? parseFloat((fields.productDefect/fields.innerEa*100).toFixed(2)) : 0;
+  fields.defectRate = (fields.innerEa+fields.productDefect) > 0 ? parseFloat((fields.productDefect/(fields.innerEa+fields.productDefect)*100).toFixed(2)) : 0;
   try {
     const fsFields = {};
     Object.entries(fields).forEach(([k,v]) => {
