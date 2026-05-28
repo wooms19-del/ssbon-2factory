@@ -2060,6 +2060,11 @@ function getThByPartByPP_(ppRecs, allThawing, packDate) {
 
 async function renderDaily(){
   document.getElementById('dLbl').textContent=dateWithDay(DDATE);
+  // ★ products(메추리알 등 noMeat 플래그)가 아직 로드 안 됐으면 먼저 로드 — 무원육 제품에 원육 공정이 잘못 붙는 버그 방지
+  const _hasNoMeatFlag = (L.products||[]).some(p=>p.noMeat);
+  if(!_hasNoMeatFlag && typeof loadSettings_==='function'){
+    try { await loadSettings_(); } catch(e){ console.warn('[renderDaily] settings 로드 실패', e); }
+  }
   const prevD=(()=>{const [y,m,dd]=DDATE.split('-').map(Number);const dt=new Date(y,m-1,dd-1);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;})();
   const nextD=addDays(DDATE,1);
   // nextD도 로드 → 방혈 재입력이 다음날로 저장된 경우 반영
