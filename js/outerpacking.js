@@ -463,9 +463,9 @@ function renderOpDone(list) {
         </div>
         ${note !== '-' ? `<div style="margin-top:8px;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--g5)">📝 ${note}</div>` : ''}
         <div style="margin-top:10px;text-align:right">
-          <button class="btn bo bsm" onclick="toggleOpEdit(${i})" style="font-size:12px;padding:4px 12px">✏️ 수정</button>
+          <button class="btn bo bsm" onclick="event.stopPropagation();toggleOpEdit(${i})" style="font-size:12px;padding:4px 12px">✏️ 수정</button>
         </div>
-        <div id="op_edit_${i}" style="display:none;margin-top:10px;padding:12px;background:var(--g1);border-radius:8px">
+        <div id="op_edit_${i}" style="display:none;margin-top:10px;padding:12px;background:var(--g1);border-radius:8px" onclick="event.stopPropagation()">
           <div style="font-size:12px;font-weight:600;color:var(--g6);margin-bottom:10px">기록 수정</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
             <div><label style="font-size:11px;color:var(--g5)">내포장 생산 EA</label><br><input class="fc" type="number" id="oe_inner_${i}" value="${item.innerEa||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
