@@ -1241,7 +1241,7 @@
       }
     }
 
-    var sum = _mpAggregate(calcRows.filter(function(r){ return !r.isSubTotal && r._isMainRow !== false; }));
+    var sum = _mpAggregate(calcRows.filter(function(r){ return !r.isSubTotal; }));
     // ★ 다운로드에서 사용 — 화면과 동일한 데이터/컬럼/모드
     _lastRendered = {
       calcRows: calcRows,
