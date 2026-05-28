@@ -965,16 +965,17 @@
       sum[k] = arr.length ? arr.reduce(function(a,b){return a+b;},0)/arr.length : 0;
     });
     // ★ 수율은 단순평균이 아니라 합계 분자/분모로 재계산 (퍼센트 평균은 틀림)
+    //   ★ 개별 그룹행과 동일한 반올림 경로(_r2(...*100)/100)로 통일 — 합계/개별 표시값 일치
     //   원료육수율(원물 대비 누적)
-    sum.yieldRmPp = sum.rmKg ? sum.ppKg/sum.rmKg : 0;
-    sum.yieldRmCk = sum.rmKg ? sum.ckKg/sum.rmKg : 0;
-    sum.yieldRmSh = sum.rmKg ? sum.shKg/sum.rmKg : 0;
-    sum.yieldRmPk = sum.rmKg ? sum.meatKg/sum.rmKg : 0;
+    sum.yieldRmPp = sum.rmKg ? _r2(sum.ppKg/sum.rmKg*100)/100 : 0;
+    sum.yieldRmCk = sum.rmKg ? _r2(sum.ckKg/sum.rmKg*100)/100 : 0;
+    sum.yieldRmSh = sum.rmKg ? _r2(sum.shKg/sum.rmKg*100)/100 : 0;
+    sum.yieldRmPk = sum.rmKg ? _r2(sum.meatKg/sum.rmKg*100)/100 : 0;
     //   공정수율(직전 단계 대비)
-    sum.yieldPp = sum.rmKg ? sum.ppKg/sum.rmKg : 0;
-    sum.yieldCk = sum.ppKg ? sum.ckKg/sum.ppKg : 0;
-    sum.yieldSh = sum.ckKg ? sum.shKg/sum.ckKg : 0;
-    sum.yieldPk = sum.shKg ? sum.meatKg/sum.shKg : 0;
+    sum.yieldPp = sum.rmKg ? _r2(sum.ppKg/sum.rmKg*100)/100 : 0;
+    sum.yieldCk = sum.ppKg ? _r2(sum.ckKg/sum.ppKg*100)/100 : 0;
+    sum.yieldSh = sum.ckKg ? _r2(sum.shKg/sum.ckKg*100)/100 : 0;
+    sum.yieldPk = sum.shKg ? _r2(sum.meatKg/sum.shKg*100)/100 : 0;
     return sum;
   }
 
