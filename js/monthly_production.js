@@ -943,8 +943,8 @@
       sum.shPersonHours += r.shPersonHours||0;
       sum.pkEa += r.pkEa||0; sum.pkHours += r.pkHours||0; sum.pkWorkers += r.pkWorkers||0;
       sum.pkPersonHours += r.pkPersonHours||0;
-      sum.meatKg += (r.pkEa||0) * (r.kgea||0);
-      sum.prodKg += (r.pkEa||0) * (r.kgTot||0);
+      sum.meatKg += (r.meatKg != null && r.meatKg !== 0) ? r.meatKg : (r.pkEa||0) * (r.kgea||0);
+      sum.prodKg += (r.prodKg != null && r.prodKg !== 0) ? r.prodKg : (r.pkEa||0) * (r.kgTot||0);
       sum.pouchUsed += r.pouchUsed||0;
       sum.sauceKgUsed += r.sauceKgUsed||0;
       sum.subKgUsed += r.subKgUsed||0;
