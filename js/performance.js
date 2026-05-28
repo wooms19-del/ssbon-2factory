@@ -413,14 +413,24 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       var src = (t==='_') ? _dataAll(dt) : _dataByType(dt, t);
       // 부위 명시했으나 그 부위 데이터 0이면 → 그날 전체 fallback
       if(t!=='_' && src.rmKg===0 && src.ppKg===0) src = _dataAll(dt);
-      // ★ eaDisp 기준 분배 (월단위 화면과 동일)
-      var totalMeat = group.reduce(function(s,p){return s + p.eaDisp * (_prodKgea(p.product)||0.05);}, 0);
+      // ★ noMeat(메추리알 등)는 원육 공정 흐름 밖 — 공정 kg 분배에서 제외(0)
+      function _isNoMeat(name){
+        var p = (typeof L!=='undefined' && L && L.products) ? L.products.find(function(x){return x.name===name;}) : null;
+        return !!(p && p.noMeat);
+      }
+      // ★ eaDisp 기준 분배 (월단위 화면과 동일) — noMeat 제품은 분모/분자에서 제외
+      var totalMeat = group.reduce(function(s,p){return s + (_isNoMeat(p.product)?0:p.eaDisp * (_prodKgea(p.product)||0.05));}, 0);
       group.forEach(function(p){
+        if(_isNoMeat(p.product)){
+          allocMap[dt+'|'+p.product] = {rmKg:0, ppKg:0, ckKg:0, shKg:0};
+          return;
+        }
         var kgea = _prodKgea(p.product);
         var ratio;
-        if(group.length===1) ratio = 1;
+        var meatCount = group.filter(function(g){return !_isNoMeat(g.product);}).length;
+        if(meatCount===1) ratio = 1;
         else if(totalMeat>0) ratio = (p.eaDisp * (kgea||0.05)) / totalMeat;
-        else ratio = 1/group.length;
+        else ratio = 1/Math.max(meatCount,1);
         allocMap[dt+'|'+p.product] = {
           rmKg: src.rmKg * ratio,
           ppKg: src.ppKg * ratio,
