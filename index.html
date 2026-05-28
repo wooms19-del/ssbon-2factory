@@ -39,6 +39,15 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <link rel="stylesheet" href="css/style.css?v=1778806800">
+<style>
+/* ★ 핵심 레이아웃 안전장치 — style.css 로드 전/실패 시에도 풀사이즈로 퍼지지 않게 폭 고정 */
+html,body{height:100%;overflow:hidden;margin:0}
+body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5}
+.main{flex:1;overflow-y:auto;padding:1rem}
+.inner{max-width:1080px;margin:0 auto}
+.pg{display:none}.pg.on{display:block}
+.hd{height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+</style>
 </head>
 <body>
 
