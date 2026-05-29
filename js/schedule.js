@@ -61,13 +61,50 @@ function renderSchedule(){
     }).join('')+'</div></div>'
     +'<div id="sch_body" style="padding:14px"></div>';
 
-  firebase.firestore().collection('schedules').doc(docId).get().then(function(doc){
-    var data=doc.exists?doc.data():{days:{},summary:{}};
+  // ★ 실적 매칭용: schedules + packing + thawing 동시 fetch
+  var ym = _schYear + '-' + String(_schMonth+1).padStart(2,'0');
+  var fs = firebase.firestore();
+  Promise.all([
+    fs.collection('schedules').doc(docId).get(),
+    fs.collection('packing').where('date','>=',ym+'-01').where('date','<=',ym+'-31').get(),
+    fs.collection('thawing').where('end','>=',ym+'-01').where('end','<=',ym+'-31').get()
+  ]).then(function(rs){
+    var data = rs[0].exists ? rs[0].data() : {days:{},summary:{}};
+    // 실적 맵 구성: actMap[date][product] = {ea, rawMeat}
+    var actMap = {};
+    rs[1].forEach(function(d){
+      var r=d.data(), dt=String(r.date||'').slice(0,10), p=r.product||'';
+      if(!dt||!p) return;
+      if(!actMap[dt]) actMap[dt]={};
+      if(!actMap[dt][p]) actMap[dt][p]={ea:0,rawMeat:0};
+      actMap[dt][p].ea += Number(r.ea)||0;
+    });
+    // thawing rawMeat — end 날짜 기준으로 그날의 type별 totalKg 합 (제품 매칭은 type으로 못해서 날짜 총합만 사용)
+    var thByDate = {};
+    rs[2].forEach(function(d){
+      var r=d.data(), e=String(r.end||'').slice(0,10);
+      if(!e || e.length<10) return;
+      thByDate[e] = (thByDate[e]||0) + (Number(r.totalKg)||0);
+    });
+    // 그날 제품이 1개면 rawMeat 전체 할당, 여러개면 비례 분배는 복잡하니 그날 총합을 첫 제품에 표시 (단순화)
+    Object.keys(actMap).forEach(function(dt){
+      var prods = Object.keys(actMap[dt]);
+      if(prods.length===1) actMap[dt][prods[0]].rawMeat = thByDate[dt]||0;
+      // 여러 제품인 경우 EA 비중으로 분배
+      else if(prods.length>1){
+        var totEa = prods.reduce(function(s,p){return s+actMap[dt][p].ea;},0);
+        if(totEa>0 && thByDate[dt]){
+          prods.forEach(function(p){
+            actMap[dt][p].rawMeat = thByDate[dt] * (actMap[dt][p].ea/totEa);
+          });
+        }
+      }
+    });
     if(_schTab==='input') _renderInput(data.days||{});
-    else _renderView(data.days||{});
+    else _renderView(data.days||{}, actMap);
   }).catch(function(){
     if(_schTab==='input')_renderInput({});
-    else _renderView({});
+    else _renderView({}, {});
   });
 }
 
@@ -221,7 +258,8 @@ function schSaveAll(){
 }
 
 // ── 일정 현황 탭 ──────────────────────────────────────────────
-function _renderView(days){
+function _renderView(days, actMap){
+  actMap = actMap || {};
   var el=document.getElementById('sch_body');if(!el)return;
   // 합산 (items 배열 + 구버전 객체 모두 처리)
   var totals={};
@@ -242,11 +280,20 @@ function _renderView(days){
     +'<div style="width:210px;min-width:190px" id="sch_sum_wrap"></div>'
     +'</div>';
 
-  _renderCal(days);
+  _renderCal(days, actMap);
   _renderSumPanel(totalItems);
 }
 
-function _renderCal(days){
+function _renderCal(days, actMap){
+  actMap = actMap || {};
+  // 표시 헬퍼: 숫자/문자열 안전 변환
+  function _fmtNum(v){
+    if(v==null||v==='') return '';
+    if(typeof v==='number') return v.toLocaleString();
+    // 문자열에서 숫자만 추출 (예: "3,500ea" → 3500)
+    var n = parseFloat(String(v).replace(/[^0-9.]/g,''));
+    return isNaN(n) ? String(v) : n.toLocaleString();
+  }
   var el=document.getElementById('sch_cal_wrap');if(!el)return;
   var today=new Date();
   var firstDay=new Date(_schYear,_schMonth,1).getDay();
@@ -276,8 +323,18 @@ function _renderCal(days){
         html+='<div style="font-size:12px;font-weight:'+(isT?700:500)+';color:'+dc+';'+(isT?'width:22px;height:22px;background:#1a56db;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:2px;':'')+'">'+date+'</div>';
         rec.items.forEach(function(it){
           if(it.product) html+='<div style="font-size:10px;padding:1px 4px;background:#eff6ff;color:#1a56db;border-radius:3px;margin-top:1px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+it.product+'</div>';
-          if(it.packQty) html+='<div style="font-size:10px;color:var(--g5);margin-top:1px">📦 '+Number(it.packQty).toLocaleString()+'ea</div>';
-          if(it.rawMeat) html+='<div style="font-size:10px;color:var(--g5)">🥩 '+it.rawMeat+'kg</div>';
+          // ★ 실적 매칭: actMap[날짜][제품]
+          var act = (actMap[ds] && actMap[ds][it.product]) || null;
+          if(it.rawMeat){
+            var s = '🥩 '+_fmtNum(it.rawMeat)+'kg';
+            if(act && act.rawMeat>0) s += ' <span style="color:#1a56db">('+_fmtNum(Math.round(act.rawMeat))+')</span>';
+            html+='<div style="font-size:10px;color:var(--g5);margin-top:1px">'+s+'</div>';
+          }
+          if(it.packQty){
+            var s = '📦 '+_fmtNum(it.packQty)+'ea';
+            if(act && act.ea>0) s += ' <span style="color:#1a56db">('+_fmtNum(act.ea)+')</span>';
+            html+='<div style="font-size:10px;color:var(--g5)">'+s+'</div>';
+          }
         });
         if(rec.note) html+='<div style="font-size:10px;color:var(--g4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+rec.note+'</div>';
         html+='</td>';
