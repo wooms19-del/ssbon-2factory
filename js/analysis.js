@@ -2609,7 +2609,7 @@ function renderDailyFromLocal_(d){
       <td style="text-align:center;color:var(--g6);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.type||'-'}">${p.type||'-'}</td>
       <td style="text-align:center">${p.in>0?p.in.toFixed(2):'-'}${p.boxes?'<br><span style="font-size:11px;color:var(--g5)">'+p.boxes+'박스</span>':''}</td>
       <td style="text-align:center;font-weight:600">${p.noMeat?'-':p.out.toFixed(2)}</td>
-      <td style="text-align:center;color:var(--d);font-size:12px">${p.waste>0?p.waste.toFixed(2)+'kg':'-'}</td>
+      <td style="text-align:center;color:var(--d);font-size:12px">${p.waste>0?p.waste.toFixed(2)+'kg'+(p.in>0?' ('+(p.waste/p.in*100).toFixed(1)+'%)':''):'-'}</td>
       <td style="text-align:center;font-weight:600">${p.noMeat?'-':(oYld!==null?oYld.toFixed(1)+'%':'-')}</td>
       <td style="text-align:center;font-weight:600">${p.noMeat?'-':(pYld!==null?pYld.toFixed(1)+'%':'-')}</td>
       <td style="text-align:center">${p.h.toFixed(1)}h</td>
