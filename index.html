@@ -10,6 +10,8 @@ body{display:flex;flex-direction:column;background:#f0f2f5}
 .inner{max-width:1080px;margin:0 auto}
 .pg{display:none}.pg.on{display:block}
 .hd{height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+/* ★ 실적관리 페이지들은 풀폭 — .inner의 1080px 제한 해제, 음수마진으로 뷰포트 전체 */
+#p-performance,#p-monthly-prod,#p-stock{width:100vw;max-width:100vw;margin-left:calc(-50vw + 50%);padding:4px 6px;box-sizing:border-box}
 </style>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="mobile-web-app-capable" content="yes">
@@ -56,6 +58,8 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
 .inner{max-width:1080px;margin:0 auto}
 .pg{display:none}.pg.on{display:block}
 .hd{height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+/* ★ 실적관리 페이지들 풀폭 (두 인라인에 동일하게) */
+#p-performance,#p-monthly-prod,#p-stock{width:100vw;max-width:100vw;margin-left:calc(-50vw + 50%);padding:4px 6px;box-sizing:border-box}
 </style>
 </head>
 <body>
