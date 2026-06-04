@@ -37,8 +37,10 @@ async function loadOuterPacking() {
 
   const pending = [], done = [];
   Object.keys(pkMap).sort((a,b)=>b.localeCompare(a)).forEach(key => {
-    if(opDoneMap[key]) done.push({...pkMap[key], ...opDoneMap[key]});
-    else pending.push(pkMap[key]);
+    const op = opDoneMap[key];
+    // ★ _timeOnly = 작업시간 기록만 있는 임시 문서 → 아직 미완료 (workLogs만 카드에 전달)
+    if(op && !op._timeOnly) done.push({...pkMap[key], ...op});
+    else pending.push({...pkMap[key], workLogs: (op||{}).workLogs||[]});
   });
 
   renderOpPending(pending);
@@ -127,6 +129,35 @@ function renderOpPending(list) {
             <div style="font-size:15px;font-weight:500" id="op_srem_${i}">${item.ea.toLocaleString()}</div>
           </div>
         </div>
+
+        <!-- 작업 시간 기록 -->
+        ${(() => {
+          const wl = item.workLogs||[];
+          const wlSum = wl.reduce((s,w)=>s+dur(w.start,w.end)*(parseFloat(w.workers)||0),0);
+          const wlRows = wl.map((w,j)=>`
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+              <span style="color:var(--g5);min-width:96px">${w.start} ~ ${w.end}</span>
+              <span>${w.workers}명</span>
+              <span style="margin-left:auto;color:var(--g5)">${r2(dur(w.start,w.end)*(parseFloat(w.workers)||0)).toFixed(2)}인시</span>
+              <span style="color:#1d4ed8;cursor:pointer;padding:0 4px;font-size:12px" onclick="opTimeEdit(${i},${j},'${w.start}','${w.end}',${parseFloat(w.workers)||0})">수정</span>
+              <span style="color:var(--g4);cursor:pointer;padding:0 4px" onclick="opTimeDel(${i},'${item.date}','${item.product}',${j})">✕</span>
+            </div>`).join('');
+          return `
+        <div style="background:var(--bg);border:0.5px solid var(--g2);border-radius:6px;padding:10px 12px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:500;color:var(--g5);margin-bottom:8px">작업 시간 기록</div>
+          ${wlRows || '<div style="font-size:12px;color:var(--g4);padding:2px 0">기록 없음</div>'}
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap">
+            <input class="fc" type="time" id="op_ts_${i}" style="padding:5px 6px">
+            <span style="font-size:12px;color:var(--g5)">~</span>
+            <input class="fc" type="time" id="op_te_${i}" style="padding:5px 6px">
+            <input class="fc" type="number" id="op_tw_${i}" placeholder="인원" style="width:58px;text-align:right;padding:5px 8px">
+            <span style="font-size:12px;color:var(--g5)">명</span>
+            <input type="hidden" id="op_tidx_${i}" value="-1">
+            <button class="btn bs" id="op_tsave_${i}" style="margin-left:auto;padding:6px 14px" onclick="opTimeSave(${i},'${item.date}','${item.product}')">저장</button>
+          </div>
+          ${wl.length ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;font-size:12px;font-weight:500">합계 ${r2(wlSum).toFixed(2)}인시</div>` : ''}
+        </div>`;
+        })()}
 
         <!-- 완제품 입력 -->
         <div style="font-size:11px;font-weight:500;color:var(--g5);margin-bottom:8px">완제품</div>
@@ -334,6 +365,54 @@ function opCalc(i, innerEa) {
   }
 }
 
+// ─ 외포장 작업시간 기록 (생산성용) ─
+function opDocId(date, product){ return 'op_'+date+'_'+String(product).replace(/[\s\W]/g,'_').slice(0,20); }
+
+async function opTimeSave(i, date, product){
+  const start = (document.getElementById('op_ts_'+i)||{}).value||'';
+  const end   = (document.getElementById('op_te_'+i)||{}).value||'';
+  const n = parseInt((document.getElementById('op_tw_'+i)||{}).value)||0;
+  const idx = parseInt((document.getElementById('op_tidx_'+i)||{}).value);
+  if(!start || !end){ toast('시작/종료 시간을 입력하세요','d'); return; }
+  if(!n){ toast('인원을 입력하세요','d'); return; }
+  try{
+    const ref = db.collection('outerpacking').doc(opDocId(date, product));
+    const snap = await ref.get();
+    const logs = (snap.exists && snap.data().workLogs) || [];
+    const rec = { start, end, workers:n };
+    if(idx >= 0 && idx < logs.length) logs[idx] = rec;  // 수정
+    else logs.push(rec);                                 // 신규
+    if(snap.exists){ await ref.update({ workLogs: logs }); }
+    else { await ref.set({ date, product, workLogs: logs, _timeOnly:true, _createdAt: firebase.firestore.FieldValue.serverTimestamp() }); }
+    fbClearCache('outerpacking');
+    toast(idx>=0 ? '작업 기록 수정됨' : '작업 기록 저장됨');
+    loadOuterPacking();
+  }catch(e){ console.error('[opTimeSave]',e); toast('시간 기록 실패','d'); }
+}
+
+function opTimeEdit(i, idx, start, end, workers){
+  const ts=document.getElementById('op_ts_'+i), te=document.getElementById('op_te_'+i),
+        tw=document.getElementById('op_tw_'+i), ti=document.getElementById('op_tidx_'+i),
+        bt=document.getElementById('op_tsave_'+i);
+  if(ts) ts.value=start; if(te) te.value=end; if(tw) tw.value=workers;
+  if(ti) ti.value=idx;
+  if(bt) bt.textContent='수정 저장';
+}
+
+async function opTimeDel(i, date, product, idx){
+  if(!confirm('이 작업 기록을 삭제할까요?')) return;
+  try{
+    const ref = db.collection('outerpacking').doc(opDocId(date, product));
+    const snap = await ref.get();
+    if(!snap.exists) return;
+    const logs = snap.data().workLogs||[];
+    logs.splice(idx,1);
+    await ref.update({ workLogs: logs });
+    fbClearCache('outerpacking');
+    loadOuterPacking();
+  }catch(e){ console.error('[opTimeDel]',e); toast('삭제 실패','d'); }
+}
+
 async function completeOuterPacking(i, date, product, innerEa) {
   const boxes   = parseInt(document.getElementById('op_boxes_'+i).value)||0;
   const partial = parseInt(document.getElementById('op_partial_'+i) ? document.getElementById('op_partial_'+i).value : 0)||0;
@@ -380,7 +459,12 @@ async function completeOuterPacking(i, date, product, innerEa) {
     savedAt: new Date().toISOString()
   };
 
-  const docId = 'op_'+date+'_'+product.replace(/[\s\W]/g,'_').slice(0,20);
+  const docId = opDocId(date, product);
+  // ★ 시간 기록 보존: fbSave는 통째 set이라 기존 workLogs를 rec에 합쳐서 저장
+  try{
+    const ex = await db.collection('outerpacking').doc(docId).get();
+    if(ex.exists && ex.data().workLogs) rec.workLogs = ex.data().workLogs;
+  }catch(e){ console.warn('[외포장] workLogs 보존 실패', e); }
   const ok = await fbSave('outerpacking', rec, docId);
   if(ok){
     // ─ testRun 자동 전파: 외포장 testRun=true → 같은 날짜+제품의 packing record도 testRun=true ─
