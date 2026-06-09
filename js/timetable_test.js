@@ -1889,6 +1889,7 @@ function ttmGetScenario() {
     order: document.getElementById('ttt-order')?.value || 'fc-first',
     joinTime: document.getElementById('ttt-join')?.value || '09:00',
     earlyWorkers: parseInt(document.getElementById('ttt-early')?.value) || 7,
+    crushLines: parseInt(document.getElementById('ttt-crush-lines')?.value) || 1,
     fp: { kg: fpKg, info: fpInfo, yPre: fpYpre, yCook: fpYcook, yCrush: fpYcrush, pPre: fpPpre, pCrush: fpPcrush },
     fc: { kg: fcKg, kgPerEa: TTT_PACK_KG_PER_POUCH, eaPerCart: 96, packEaMin: 3.9, yPre: fcYpre, yCook: fcYcook, yCrush: fcYcrush, pPre: fcPpre, pCrush: fcPcrush },
   };
@@ -2006,7 +2007,8 @@ function ttmSimulate(scen, workers) {
   // FC 파쇄: 탱크별로 순차 처리 (앞 탱크 자숙 끝나면 바로 그 탱크분 파쇄 시작)
   // 단, FP 파쇄가 끝나야 라인 사용 가능 (파쇄 라인 1개 공유)
   const fcCrushes = [];
-  let fcCrushLineEnd = fpCrush.e; // 파쇄 라인 가용 시각
+  // 파쇄 라인 2대면 FC는 독립 라인(FP 안 기다리고 자기 자숙 끝나는 대로 시작), 1대면 FP와 공유
+  let fcCrushLineEnd = (scen.crushLines >= 2) ? 0 : fpCrush.e; // 파쇄 라인 가용 시각
   for (let i = 0; i < fcCook.length; i++) {
     const tankEnd = fcCook[i].e;
     const tankKg = fcTankKgs[i] * (fcYcrush / 100); // 이 탱크분 파쇄 산출량
