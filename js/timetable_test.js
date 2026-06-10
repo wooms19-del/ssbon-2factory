@@ -2233,23 +2233,20 @@ function ttmRenderTimeline(scen, workers, sim) {
     yCursor += ROW_H;
   });
 
-  // FP 내포장
-  bars += label(yCursor, '내포장');
-  bars += bar(yCursor, sim.fp.pack.s, sim.fp.pack.e, '#9B59B6',
-    `${workers.packFp*(workers.packLinesFp||1)}명·${workers.packLinesFp||1}대 · ${sim.fp.ea.toLocaleString()}EA`,
-    `${sim.fp.ea.toLocaleString()}EA`,
-    `${fpName} 내포장`,
-    [`시각: ${fmt(sim.fp.pack.s)}~${fmt(sim.fp.pack.e)}`, `인원: ${workers.packFp*(workers.packLinesFp||1)}명(${workers.packLinesFp||1}대×${workers.packFp}명) + 이송2`, `산출: ${sim.fp.ea.toLocaleString()}EA`]);
-  yCursor += ROW_H;
-
-  // FC 내포장
-  bars += label(yCursor, '내포장 1');
-  bars += bar(yCursor, sim.fc.pack.s, sim.fc.pack.e, '#534AB7',
-    `${workers.packFc*(workers.packLinesFc||1)}명·${workers.packLinesFc||1}대 · ${sim.fc.ea.toLocaleString()}EA`,
-    `${sim.fc.ea.toLocaleString()}EA`,
-    `FC 내포장`,
-    [`시각: ${fmt(sim.fc.pack.s)}~${fmt(sim.fc.pack.e)}`, `인원: ${workers.packFc*(workers.packLinesFc||1)}명(${workers.packLinesFc||1}대×${workers.packFc}명) + 이송2`, `산출: ${sim.fc.ea.toLocaleString()}EA`]);
-  yCursor += ROW_H;
+  // 내포장 (포장기 대수만큼 라인 분리 — 각 대가 병렬, 레토르트처럼 줄 나눔)
+  const _fpLn = workers.packLinesFp||1, _fcLn = workers.packLinesFc||1;
+  const _packRows = [];
+  for (let i=0;i<_fpLn;i++) _packRows.push({s:sim.fp.pack.s,e:sim.fp.pack.e,color:'#9B59B6',nm:fpName,wk:workers.packFp,ea:Math.round(sim.fp.ea/_fpLn)});
+  for (let i=0;i<_fcLn;i++) _packRows.push({s:sim.fc.pack.s,e:sim.fc.pack.e,color:'#534AB7',nm:'FC',wk:workers.packFc,ea:Math.round(sim.fc.ea/_fcLn)});
+  _packRows.forEach((p, i) => {
+    bars += label(yCursor, i===0 ? '내포장' : `내포장 ${i+1}`);
+    bars += bar(yCursor, p.s, p.e, p.color,
+      `${p.wk}명 · ${p.ea.toLocaleString()}EA`,
+      `${p.ea.toLocaleString()}EA`,
+      `${p.nm} 내포장 (${i+1}호기)`,
+      [`시각: ${fmt(p.s)}~${fmt(p.e)}`, `포장기: ${i+1}호기`, `인원: ${p.wk}명 + 이송2`, `산출: ${p.ea.toLocaleString()}EA`]);
+    yCursor += ROW_H;
+  });
 
   // 레토르트
   [...sim.fp.retort.map(r=>({...r,isFp:true})), ...sim.fc.retort.map(r=>({...r,isFp:false}))].forEach((r, i) => {
