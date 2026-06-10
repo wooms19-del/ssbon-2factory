@@ -2022,23 +2022,26 @@ function ttmSimulate(scen, workers) {
   // FP 파쇄 (FP 자숙 끝나면)
   const fpCrush = { s: fpCook.e, e: fpCook.e + fpCrushMin };
 
-  // FC 파쇄: 탱크별로 순차 처리 (앞 탱크 자숙 끝나면 바로 그 탱크분 파쇄 시작)
-  // 단, FP 파쇄가 끝나야 라인 사용 가능 (파쇄 라인 1개 공유)
+  // FC 파쇄: 파쇄기 대수(crushLines)만큼 병렬. FP 파쇄가 라인 1대를 먼저 점유하고
+  // 끝나면 반납 → 그 라인 + 놀던 라인으로 FC 탱크들을 분산 처리(가장 빨리 비는 라인에 배정)
+  const nCrushLines = Math.max(1, scen.crushLines || 1);
+  const crushLineEnd = new Array(nCrushLines).fill(0);
+  crushLineEnd[0] = fpCrush.e; // 라인 0 = FP 파쇄가 먼저 쓰고 반납하는 시각
   const fcCrushes = [];
-  // 파쇄 라인 2대면 FC는 독립 라인(FP 안 기다리고 자기 자숙 끝나는 대로 시작), 1대면 FP와 공유
-  let fcCrushLineEnd = (scen.crushLines >= 2) ? 0 : fpCrush.e; // 파쇄 라인 가용 시각
   for (let i = 0; i < fcCook.length; i++) {
     const tankEnd = fcCook[i].e;
     const tankKg = fcTankKgs[i] * (fcYcrush / 100); // 이 탱크분 파쇄 산출량
     const tankCrushMin = Math.ceil(tankKg / (fcPcrush * workers.crushFc) * 60);
-    const crushStart = Math.max(tankEnd, fcCrushLineEnd);
+    // 가장 빨리 비는 파쇄 라인 선택
+    let li = 0;
+    for (let k = 1; k < nCrushLines; k++) if (crushLineEnd[k] < crushLineEnd[li]) li = k;
+    const crushStart = Math.max(tankEnd, crushLineEnd[li]);
     const crushEnd = crushStart + tankCrushMin;
-    fcCrushes.push({ s: crushStart, e: crushEnd, tank: i + 1, kg: r2(tankKg) });
-    fcCrushLineEnd = crushEnd;
+    fcCrushes.push({ s: crushStart, e: crushEnd, tank: i + 1, kg: r2(tankKg), line: li + 1 });
+    crushLineEnd[li] = crushEnd;
   }
-  // FC 파쇄 전체 (호환용)
-  const fcCrushStart = fcCrushes[0].s;
-  const fcCrush = { s: fcCrushStart, e: fcCrushes[fcCrushes.length - 1].e };
+  // FC 파쇄 전체 (호환용) — 병렬이므로 min~max
+  const fcCrush = { s: Math.min(...fcCrushes.map(c => c.s)), e: Math.max(...fcCrushes.map(c => c.e)) };
   // FP 내포장 시작:
   // - 원육 400kg 이하: 파쇄 완전히 끝난 후
   // - 원육 400kg 초과: 파쇄 산출 200kg 누적 시점
