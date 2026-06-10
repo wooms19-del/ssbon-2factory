@@ -1017,7 +1017,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
           </label>
           <label style="display:flex;flex-direction:column;gap:3px">
             <span>제품</span>
-            <select id="ttt-meat2" onchange="tttRender()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
+            <select id="ttt-meat2" onchange="ttmApplyPackDefaults();tttRender()" style="height:30px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary)">
               <option value="sig">시그니처 130g (800EA/대차)</option>
               <option value="trader">트레이더스 460g (380EA/대차)</option>
               <option value="mini">미니 70g (700EA/대차)</option>
@@ -1117,8 +1117,11 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
               <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px;border:1px solid #ede9fe">
                 <div style="font-size:12px;font-weight:600;color:#7F77DD;margin-bottom:8px">🟣 내포장 (FP)</div>
                 <div style="display:flex;flex-direction:column;gap:8px">
-                  <label style="font-size:11px;color:var(--color-text-secondary)">인원
+                  <label style="font-size:11px;color:var(--color-text-secondary)">1대당 인원
                     <input type="number" id="ttt-fp-wk-pack" value="6" min="1" max="12" oninput="tttRender()" style="width:100%;height:28px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:5px">
+                  </label>
+                  <label style="font-size:11px;color:var(--color-text-secondary)">포장기 대수
+                    <input type="number" id="ttt-fp-pk-lines" value="2" min="1" max="6" oninput="tttRender()" style="width:100%;height:28px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:5px">
                   </label>
                   <label style="font-size:11px;color:var(--color-text-secondary)">생산성 (EA/분)
                     <div style="display:flex;gap:4px;align-items:center">
@@ -1211,8 +1214,11 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
         <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px 12px">
           <div style="font-size:12px;font-weight:600;color:#7F77DD;margin-bottom:8px">🟣 내포장</div>
           <div style="display:flex;flex-direction:column;gap:8px">
-            <label style="font-size:11px;color:var(--color-text-secondary)">인원
-              <input type="number" id="ttt-wk-pack" value="6" min="1" max="12" oninput="tttRender()" style="width:100%;height:28px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:5px">
+            <label style="font-size:11px;color:var(--color-text-secondary)">1대당 인원
+              <input type="number" id="ttt-wk-pack" value="7" min="1" max="12" oninput="tttRender()" style="width:100%;height:28px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:5px">
+            </label>
+            <label style="font-size:11px;color:var(--color-text-secondary)">포장기 대수
+              <input type="number" id="ttt-fc-pk-lines" value="1" min="1" max="6" oninput="tttRender()" style="width:100%;height:28px;font-size:12px;padding:0 8px;border:0.5px solid var(--color-border-secondary);border-radius:5px">
             </label>
             <label style="font-size:11px;color:var(--color-text-secondary)">생산성 (EA/분)
               <div style="display:flex;gap:4px;align-items:center">
@@ -1638,6 +1644,6 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
 <script src="js/globals.js?v=1778599476"></script>
 <script src="js/stock.js?v=1780297616"></script>
 <script src="js/timetable.js?v=1778495630"></script>
-<script src="js/timetable_test.js?v=1778560912"></script>
+<script src="js/timetable_test.js?v=1778560913"></script>
 </body>
 </html>
