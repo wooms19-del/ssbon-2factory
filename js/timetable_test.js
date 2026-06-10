@@ -2487,11 +2487,73 @@ function ttmRenderWorkers(workers) {
 // ============================================================
 // 상부 보고서 형식
 // ============================================================
+// 말도 안 되는 입력 → 무엇이 병목이고, 인원 문제인지 설비 문제인지 진단
+function ttmDiagnose(scen, workers, sim) {
+  const clk = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(Math.round(m%60)).padStart(2,'0')}`;
+  const H = m => { m=Math.round(m); return m<60?`${m}분`:`${Math.floor(m/60)}시간${m%60?' '+(m%60)+'분':''}`; };
+  const items = [];
+  const endMin = sim.endMin, totalMin = endMin - scen.startMin;
+
+  // FC 자숙은 탱크별 배열
+  const fcCookArr = Array.isArray(sim.fc.cook) ? sim.fc.cook : [sim.fc.cook];
+  const fcCookS = Math.min(...fcCookArr.map(c=>c.s)), fcCookE = Math.max(...fcCookArr.map(c=>c.e));
+
+  // 공정 구간 (FP·FC 통합: 먼저 시작~늦게 끝)
+  const stages = [
+    {n:'전처리', s:Math.min(sim.fp.pre.s,sim.fc.pre.s),     e:Math.max(sim.fp.pre.e,sim.fc.pre.e),     kind:'인원'},
+    {n:'자숙',   s:Math.min(sim.fp.cook.s,fcCookS),          e:Math.max(sim.fp.cook.e,fcCookE),          kind:'설비'},
+    {n:'파쇄',   s:Math.min(sim.fp.crush.s,sim.fc.crush.s),  e:Math.max(sim.fp.crush.e,sim.fc.crush.e),  kind:'인원'},
+    {n:'내포장', s:Math.min(sim.fp.pack.s,sim.fc.pack.s),    e:Math.max(sim.fp.pack.e,sim.fc.pack.e),    kind:'인원'},
+  ];
+  const allRet = [...(sim.fp.retort||[]), ...(sim.fc.retort||[])];
+  if (allRet.length) stages.push({n:'레토르트', s:Math.min(...allRet.map(r=>r.s)), e:Math.max(...allRet.map(r=>r.e)), kind:'설비'});
+  stages.forEach(s=>s.dur=s.e-s.s);
+
+  // 1) 종료 시각
+  const lvlEnd = endMin>=24*60?'bad':endMin>=22*60?'warn':'ok';
+  items.push({lvl:lvlEnd, t:`전체 종료 <b>${clk(endMin)}</b> · 총 ${H(totalMin)}`
+    + (endMin>=24*60?' — 자정을 넘겨요. 하루에 끝내기 힘든 양입니다.'
+      : endMin>=22*60?' — 야간까지 이어집니다.'
+      : ' — 무리 없는 일정이에요.')});
+
+  // 2) 병목 = 가장 늦게 끝나는 공정
+  const last = stages.reduce((a,b)=>b.e>a.e?b:a);
+  if (last.kind==='설비') {
+    if (last.n==='자숙') {
+      items.push({lvl:'warn', t:`병목은 <b>자숙</b> (${clk(last.s)}~${clk(last.e)}, ${H(last.dur)}). 자숙은 탱크 수와 자숙시간(가압 150분·일반 240분)이 고정이라 <b>인원을 더 붙여도 빨라지지 않아요.</b> 줄이려면 가압 탱크 비중을 늘리거나 원육 투입을 나눠 받아야 합니다.`});
+    } else {
+      const rounds = Math.ceil(allRet.length/3);
+      items.push({lvl:'warn', t:`병목은 <b>레토르트</b> (${clk(last.s)}~${clk(last.e)}, ${H(last.dur)}). 3대로 ${allRet.length}회차를 ${rounds}바퀴 돌려요. <b>인원과 무관</b>하고, 생산량(EA)을 줄이거나 레토르트를 늘려야 빨라집니다.`});
+    }
+  } else {
+    items.push({lvl:'warn', t:`병목은 <b>${last.n}</b> (${clk(last.s)}~${clk(last.e)}, ${H(last.dur)}). 인원이나 ${last.n==='내포장'?'포장기 대수':'설비'}를 늘리면 줄어드는 공정이에요.`});
+  }
+
+  // 3) 인원으로 줄일 수 있는 공정 중 가장 긴 것 (병목과 다를 때 참고)
+  const manStages = stages.filter(s=>s.kind==='인원').sort((a,b)=>b.dur-a.dur);
+  if (manStages[0] && manStages[0].n!==last.n) {
+    items.push({lvl:'ok', t:`참고: 인원으로 단축 가능한 공정 중엔 <b>${manStages[0].n}</b>(${H(manStages[0].dur)})가 가장 길어요.`});
+  }
+
+  return items;
+}
+
 function ttmRenderReport(scen, workers, sim) {
   const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
   const dur = m => `${Math.floor(m/60)}시간 ${m%60}분`;
   const fpName = scen.fp.info.name;
   const totalMin = sim.endMin - scen.startMin;
+
+  // 진단 박스
+  const _diag = ttmDiagnose(scen, workers, sim);
+  const _dC = {bad:'#c0392b', warn:'#b9770e', ok:'#1e8449'};
+  const _dBg = {bad:'#fdecea', warn:'#fef5e7', ok:'#eafaf1'};
+  const _dIcon = {bad:'🔴', warn:'🟡', ok:'🟢'};
+  const diagHtml = `
+      <div style="border:0.5px solid var(--color-border-tertiary);border-radius:10px;padding:13px 15px;margin-bottom:14px;background:var(--color-background-primary)">
+        <div style="font-size:13.5px;font-weight:600;margin-bottom:9px">🔎 진단</div>
+        ${_diag.map(d=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 11px;border-radius:7px;margin-bottom:6px;background:${_dBg[d.lvl]}"><span style="font-size:11px;line-height:1.7">${_dIcon[d.lvl]}</span><span style="color:${_dC[d.lvl]};font-size:12px;line-height:1.65">${d.t}</span></div>`).join('')}
+      </div>`;
 
   const fpRetortStr = sim.fp.retort.map((r, i) => `회차${i+1} ${fmt(r.s)}~${fmt(r.e)} (${r.host}호, ${r.carts}대차, ${r.ea.toLocaleString()}EA)`).join('<br>      ');
   const fcRetortStr = sim.fc.retort.map((r, i) => `회차${i+1} ${fmt(r.s)}~${fmt(r.e)} (${r.host}호, ${r.carts}대차, ${r.ea.toLocaleString()}EA)`).join('<br>      ');
@@ -2499,6 +2561,7 @@ function ttmRenderReport(scen, workers, sim) {
   return `
     <div style="background:#f8f7f3;border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:18px 22px;margin-top:14px;font-size:12.5px;line-height:1.85">
       <div style="font-size:15px;font-weight:600;margin-bottom:12px;color:var(--color-text-primary)">📋 작업 계획 보고서</div>
+${diagHtml}
 
       <div style="font-weight:600;margin-top:10px;margin-bottom:4px;color:#185FA5">【작업 개요】</div>
       <div>• ${fpName}: ${scen.fp.kg}kg → 약 ${sim.fp.ea.toLocaleString()} EA 생산 (예상)</div>
