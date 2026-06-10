@@ -308,21 +308,47 @@ async function pp2ReloadThawing(){
   const yest = dy.getFullYear()+'-'+String(dy.getMonth()+1).padStart(2,'0')+'-'+String(dy.getDate()).padStart(2,'0');
   try {
     if(typeof fbGetByDate !== 'function') return;
-    const [a, b] = await Promise.all([fbGetByDate('thawing', today), fbGetByDate('thawing', yest)]);
+    const [a, b, pp] = await Promise.all([fbGetByDate('thawing', today), fbGetByDate('thawing', yest), fbGetByDate('preprocess', today)]);
     const fresh = [...(a||[]), ...(b||[])];
     // 오늘·어제 날짜 thawing은 서버 최신으로 교체, 그 외 날짜는 메모리 유지
     L.thawing = (L.thawing||[]).filter(t => {
       const d = String(t.date||'').slice(0,10);
       return d !== today && d !== yest;
     }).concat(fresh);
+    // 오늘 preprocess도 서버 최신화 — 라이브 차감 정확성(다른 기기/이전 저장 반영)
+    if(pp){
+      L.preprocess = (L.preprocess||[]).filter(p => String(p.date||'').slice(0,10) !== today).concat(pp);
+    }
     if(typeof saveL==='function') saveL();
   } catch(e){ console.warn('[pp2] 방혈 재조회 실패, 캐시 사용:', e && e.message); }
 }
 
-function pp2FifoDeduct(type, totalKg){
+// 오늘 각 방혈대차에서 이미 차감된 합 (preprocess 기록 = 그날 차감의 단일 진실)
+// remainKg(덮어쓰기·누락 가능) 대신 이걸로 라이브 잔량을 역산해 중복차감 원천 차단
+function pp2DeductedByCart(today, excludeId){
+  const m = {};
+  (L.preprocess||[]).forEach(p => {
+    if(String(p.date||'').slice(0,10) !== today) return;
+    if(excludeId && p.id === excludeId) return;  // 수정 시 자기 기존 차감 제외
+    (p.thawingTouches||[]).forEach(t => {
+      const k = t.thFbId || t.thId;
+      if(!k) return;
+      m[k] = (m[k]||0) + (parseFloat(t.deductKg)||0);
+    });
+  });
+  return m;
+}
+
+function pp2FifoDeduct(type, totalKg, excludeId){
   const today = (typeof tod==='function') ? tod() : new Date().toISOString().slice(0,10);
+  const ded = pp2DeductedByCart(today, excludeId);
+  // 라이브 잔량 = 방혈 총량 − 오늘 이미 차감된 합 (메모리 stale·다중기기 무관하게 정확)
+  const liveAvail = (th) => {
+    const k = th.fbId || th.id;
+    return Math.max(0, parseFloat(((parseFloat(th.totalKg)||0) - (ded[k]||0)).toFixed(2)));
+  };
   const candidates = (L.thawing||[])
-    .filter(t => pp2IsWorkingToday(t, today) && t.type === type && (parseFloat(t.remainKg)||0) > 0.01)
+    .filter(t => pp2IsWorkingToday(t, today) && t.type === type && liveAvail(t) > 0.01)
     .sort((a,b) => {
       const aT = a.start || a._id || a.id || '';
       const bT = b.start || b._id || b.id || '';
@@ -333,7 +359,7 @@ function pp2FifoDeduct(type, totalKg){
   let need = totalKg;
   for(const th of candidates){
     if(need <= 0.01) break;
-    const avail = parseFloat(th.remainKg) || 0;
+    const avail = liveAvail(th);
     const take = Math.min(avail, need);
     if(take > 0.01){
       touches.push({
@@ -598,9 +624,9 @@ async function pp2EditSave(id){
   await pp2RestoreTouches(rec);
   // ★ 복원 반영된 방혈 최신화 후 재차감 (중복 차감 방지)
   await pp2ReloadThawing();
-  // 2) 새 FIFO 차감
+  // 2) 새 FIFO 차감 (자기 기존 차감 제외하고 라이브 재계산)
   const totalDeduct = d.kg + d.waste;
-  const {touches, shortage} = pp2FifoDeduct(d.type, totalDeduct);
+  const {touches, shortage} = pp2FifoDeduct(d.type, totalDeduct, id);
   if(shortage > 0.01){
     if(!confirm(`${d.type} 잔량 ${shortage.toFixed(2)}kg 부족\n그대로 저장?`)){
       // 복원해 둔 것 다시 차감(원상복구) — 간단히 전체 새로고침으로 처리
