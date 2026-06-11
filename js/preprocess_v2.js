@@ -98,7 +98,8 @@ async function pp2Render(){
 
 function pp2RenderRemain(){
   const today = (typeof tod==='function') ? tod() : new Date().toISOString().slice(0,10);
-  const thList = (L.thawing||[]).filter(t => pp2IsWorkingToday(t, today) && (parseFloat(t.remainKg)||0) > 0.01);
+  const ded = pp2DeductedByCart(today);
+  const thList = (L.thawing||[]).filter(t => pp2IsWorkingToday(t, today) && pp2LiveRemain(t, today, ded) > 0.01);
   // ★ 입력 중(미저장)인 행의 (kg+waste)를 부위별로 빼기 (미리보기)
   const previewByType = {};
   const tbody = document.getElementById('pp2_tbody');
@@ -118,7 +119,7 @@ function pp2RenderRemain(){
   const remainByType = {};
   thList.forEach(t => {
     const ty = t.type || '?';
-    remainByType[ty] = (remainByType[ty]||0) + (parseFloat(t.remainKg)||0);
+    remainByType[ty] = (remainByType[ty]||0) + pp2LiveRemain(t, today, ded);
   });
   // 부위별 잔량 - 미리보기 차감
   const allTypes = new Set([...Object.keys(remainByType), ...Object.keys(previewByType)]);
@@ -156,9 +157,10 @@ function pp2AddRow(data){
   if(!tbody) return;
   // 부위 옵션: 오늘 thawing에 잔량 있는 부위만
   const today = (typeof tod==='function') ? tod() : new Date().toISOString().slice(0,10);
+  const ded = pp2DeductedByCart(today);
   const availTypes = [...new Set(
     (L.thawing||[])
-      .filter(t => pp2IsWorkingToday(t, today) && (parseFloat(t.remainKg)||0) > 0.01 && t.type)
+      .filter(t => pp2IsWorkingToday(t, today) && pp2LiveRemain(t, today, ded) > 0.01 && t.type)
       .map(t => t.type)
   )];
   // 수정 모드(data.type)에선 잔량 0이어도 그 부위는 포함
@@ -337,6 +339,13 @@ function pp2DeductedByCart(today, excludeId){
     });
   });
   return m;
+}
+
+// 라이브 잔량 = 방혈총량 − 오늘 차감기록합 (remainKg PATCH 누락/실패에 면역, thawingTouches가 단일 진실)
+function pp2LiveRemain(t, today, ded){
+  if(t._finishedDate) return 0;  // 전처리 종료(손실처리)된 대차는 잔량 없음
+  const k = t.fbId || t.id;
+  return Math.max(0, parseFloat(((parseFloat(t.totalKg)||0) - (ded[k]||0)).toFixed(2)));
 }
 
 function pp2FifoDeduct(type, totalKg, excludeId){
@@ -718,9 +727,10 @@ async function pp2RestoreTouches(rec){
 
 async function pp2FinishDay(){
   const today = (typeof tod==='function') ? tod() : new Date().toISOString().slice(0,10);
-  const remaining = (L.thawing||[]).filter(t => pp2IsWorkingToday(t, today) && (parseFloat(t.remainKg)||0) > 0.01);
+  const ded = pp2DeductedByCart(today);
+  const remaining = (L.thawing||[]).filter(t => pp2IsWorkingToday(t, today) && pp2LiveRemain(t, today, ded) > 0.01);
   if(!remaining.length){ toast('남은 잔량 없음','i'); return; }
-  const totalRem = remaining.reduce((s,t) => s + (parseFloat(t.remainKg)||0), 0);
+  const totalRem = remaining.reduce((s,t) => s + pp2LiveRemain(t, today, ded), 0);
   if(!confirm(
     `오늘 전처리 종료\n\n` +
     `남은 대차 ${remaining.length}건 · 합계 ${totalRem.toFixed(2)}kg\n` +
@@ -733,7 +743,7 @@ async function pp2FinishDay(){
   const _lastEnd = _ppToday.map(p => String(p.end).trim()).filter(Boolean).sort().pop() || (typeof nowHM==='function' ? nowHM() : '');
   const _finEnd = today + ' ' + _lastEnd;
   for(const th of remaining){
-    th._finishedRemainBackup = parseFloat(th.remainKg) || 0;
+    th._finishedRemainBackup = pp2LiveRemain(th, today, ded);
     th._finishedDate = today;
     th.remainKg = 0;
     const upd = { remainKg: 0, _finishedRemainBackup: th._finishedRemainBackup, _finishedDate: today };
