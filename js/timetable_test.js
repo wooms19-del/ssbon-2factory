@@ -1184,6 +1184,13 @@ function tttRender() {
       </div>`;
     return;
   }
+  // 단일 모드(동시작업 OFF): 구버전 단일 경로 건너뛰고 ttm(FC만)으로 바로 렌더
+  if (!dualMode) {
+    document.getElementById('ttt-result').innerHTML = '';
+    if (typeof ttmRender === 'function') ttmRender();
+    return;
+  }
+
   // ★ 3가지 자숙 탱크 분배 방식 자동 시뮬 → 사용자가 선택하거나 베스트 자동
   const tankSimA = tttSimulate(inp, 'A');
   const tankSimB = tttSimulate(inp, 'B');
