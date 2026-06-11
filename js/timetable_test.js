@@ -1822,11 +1822,9 @@ function tttRender() {
     </div>`;
   }
 
-  // dual 모드: ttmRender가 ttt-result를 채움 / 단일 모드: 위에서 이미 채움
-  if (dualMode) {
-    document.getElementById('ttt-result').innerHTML = '';
-    if (typeof ttmRender === 'function') ttmRender();
-  }
+  // 단일/dual 모두 ttmRender가 ttt-result를 채움 (단일이면 ttmSimulate가 FC만 반환)
+  document.getElementById('ttt-result').innerHTML = '';
+  if (typeof ttmRender === 'function') ttmRender();
 }
 
 // ============================================================
@@ -1907,6 +1905,7 @@ function ttmGetScenario() {
     joinTime: document.getElementById('ttt-join')?.value || '09:00',
     earlyWorkers: parseInt(document.getElementById('ttt-early')?.value) || 7,
     crushLines: parseInt(document.getElementById('ttt-crush-lines')?.value) || 1,
+    dual: tttIsDualMode(),
     fp: { kg: fpKg, info: fpInfo, yPre: fpYpre, yCook: fpYcook, yCrush: fpYcrush, pPre: fpPpre, pCrush: fpPcrush },
     fc: { kg: fcKg, kgPerEa: TTT_PACK_KG_PER_POUCH, eaPerCart: 96, packEaMin: 3.9, yPre: fcYpre, yCook: fcYcook, yCrush: fcYcrush, pPre: fcPpre, pCrush: fcPcrush },
   };
@@ -2125,10 +2124,23 @@ function ttmSimulate(scen, workers) {
   // 전체 종료 시각
   const endMin = Math.max(...retortBusy, fpPack.e, fcPack.e);
 
+  // 단일 모드(동시작업 OFF): FP 계산은 했지만 결과에서 제거 → FC만 표시
+  if (scen.dual === false) {
+    const z = { s: scen.startMin, e: scen.startMin };
+    const fcEnd = Math.max(fcPack.e, ...(fcRetort.length ? fcRetort.map(r => r.e) : [fcPack.e]));
+    return {
+      fp: { pre: z, cook: z, crush: z, pack: z, retort: [], kg: 0, ea: 0, packIn: 0 },
+      fc: { pre: fcPre, cook: fcCook, crush: fcCrush, crushes: fcCrushes, pack: fcPack, retort: fcRetort, kg: fcPreIn, ea: fcEa, packIn: fcPackIn, tanks: fcTankKgs },
+      endMin: fcEnd,
+      dual: false,
+    };
+  }
+
   return {
     fp: { pre: fpPre, cook: fpCook, crush: fpCrush, pack: fpPack, retort: fpRetort, kg: fpPreIn, ea: fpEa, packIn: fpPackIn },
     fc: { pre: fcPre, cook: fcCook, crush: fcCrush, crushes: fcCrushes, pack: fcPack, retort: fcRetort, kg: fcPreIn, ea: fcEa, packIn: fcPackIn, tanks: fcTankKgs },
     endMin,
+    dual: true,
   };
 }
 
@@ -2178,7 +2190,9 @@ function ttmRenderTimeline(scen, workers, sim) {
   let bars = '';
   let yCursor = 36;
 
+  const showFp = sim.fp.kg > 0;  // 단일 모드(동시작업 OFF)면 FP 행 숨김
   // FP 전처리
+  if (showFp) {
   bars += label(yCursor, '전처리');
   bars += bar(yCursor, sim.fp.pre.s, sim.fp.pre.e, '#7F77DD',
     `${workers.preFp}명 · ${scen.fp.kg}kg`,
@@ -2186,6 +2200,7 @@ function ttmRenderTimeline(scen, workers, sim) {
     `${fpName} 전처리`,
     [`시각: ${fmt(sim.fp.pre.s)}~${fmt(sim.fp.pre.e)}`, `인원: ${workers.preFp}명`, `원육: ${scen.fp.kg}kg`]);
   yCursor += ROW_H;
+  }
 
   // FC 전처리
   bars += label(yCursor, '전처리 1');
@@ -2197,6 +2212,7 @@ function ttmRenderTimeline(scen, workers, sim) {
   yCursor += ROW_H;
 
   // FP 자숙
+  if (showFp) {
   bars += label(yCursor, '자숙');
   bars += bar(yCursor, sim.fp.cook.s, sim.fp.cook.e, '#5DCAA5',
     `${fpName} · 가압`,
@@ -2204,6 +2220,7 @@ function ttmRenderTimeline(scen, workers, sim) {
     `${fpName} 자숙`,
     [`시각: ${fmt(sim.fp.cook.s)}~${fmt(sim.fp.cook.e)}`, `탱크: 가압 5호`, `자숙: 150분`]);
   yCursor += ROW_H;
+  }
 
   // FC 자숙 탱크별
   sim.fc.cook.forEach((c, i) => {
@@ -2217,6 +2234,7 @@ function ttmRenderTimeline(scen, workers, sim) {
   });
 
   // FP 파쇄
+  if (showFp) {
   bars += label(yCursor, '파쇄');
   bars += bar(yCursor, sim.fp.crush.s, sim.fp.crush.e, '#7F77DD',
     `${workers.crushFp}명`,
@@ -2224,6 +2242,7 @@ function ttmRenderTimeline(scen, workers, sim) {
     `${fpName} 파쇄`,
     [`시각: ${fmt(sim.fp.crush.s)}~${fmt(sim.fp.crush.e)}`, `인원: ${workers.crushFp}명`, `수율: ${workers.yCrushFp}%`, `생산성: ${workers.pCrushFp}kg/인시`]);
   yCursor += ROW_H;
+  }
 
   // FC 파쇄 탱크별
   (sim.fc.crushes || [sim.fc.crush]).forEach((c, i) => {
@@ -2239,7 +2258,7 @@ function ttmRenderTimeline(scen, workers, sim) {
   // 내포장 (포장기 대수만큼 라인 분리 — 각 대가 병렬, 레토르트처럼 줄 나눔)
   const _fpLn = workers.packLinesFp||1, _fcLn = workers.packLinesFc||1;
   const _packRows = [];
-  for (let i=0;i<_fpLn;i++) _packRows.push({s:sim.fp.pack.s,e:sim.fp.pack.e,color:'#9B59B6',nm:fpName,wk:workers.packFp,ea:Math.round(sim.fp.ea/_fpLn)});
+  if (showFp) for (let i=0;i<_fpLn;i++) _packRows.push({s:sim.fp.pack.s,e:sim.fp.pack.e,color:'#9B59B6',nm:fpName,wk:workers.packFp,ea:Math.round(sim.fp.ea/_fpLn)});
   for (let i=0;i<_fcLn;i++) _packRows.push({s:sim.fc.pack.s,e:sim.fc.pack.e,color:'#534AB7',nm:'FC',wk:workers.packFc,ea:Math.round(sim.fc.ea/_fcLn)});
   _packRows.forEach((p, i) => {
     bars += label(yCursor, i===0 ? '내포장' : `내포장 ${i+1}`);
