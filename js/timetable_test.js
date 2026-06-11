@@ -2620,7 +2620,7 @@ function ttmGetCurrentWorkers() {
   return {
     // FP: 화면 FP 카드에서
     preFp:    getN('ttt-fp-wk-pre',   def.preFp),
-    crushFp:  def.crushFp,  // 자동 계산
+    crushFp:  getN('ttt-fp-wk-crush', def.crushFp), // 입력 있으면 사용, 비우면 자동
     packFp:   getN('ttt-fp-wk-pack',  def.packFp),
     packLinesFp: getN('ttt-fp-pk-lines', def.packLinesFp),
     yPreFp:   getN('ttt-fp-y-pre',    def.yPreFp),
@@ -2630,7 +2630,7 @@ function ttmGetCurrentWorkers() {
     pPackFp:  getN('ttt-fp-p-pack',   def.pPackFp),
     // FC: 화면 FC 카드에서
     preFc:    getN('ttt-wk-pre',      def.preFc),
-    crushFc:  def.crushFc,  // 자동 계산
+    crushFc:  getN('ttt-wk-crush', def.crushFc), // 입력 있으면 사용, 비우면 자동
     packFc:   getN('ttt-wk-pack',     def.packFc),
     packLinesFc: getN('ttt-fc-pk-lines', def.packLinesFc),
     yPreFc:   getN('ttt-y-pre',       def.yPreFc),
