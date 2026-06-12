@@ -143,6 +143,20 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
         style="display:block;width:85%;margin:12px auto 0;padding:10px 12px;border:2px solid var(--p);border-radius:8px;font-size:14px;text-align:center;background:#fff;color:var(--g8);outline:none;position:relative;z-index:10"
         placeholder="여기 클릭 후 스캔">
     </div>
+    <div style="margin-top:10px">
+      <button class="btn bo bsm" id="mnToggle" onclick="toggleManual()">📝 바코드 손상 시 수동 입력 ▾</button>
+      <div id="mnForm" style="display:none;margin-top:10px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:12px;color:#64748b;font-weight:600">원산지</label><select id="mnOrigin" style="padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;min-width:100px"></select></div>
+          <div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:12px;color:#64748b;font-weight:600">원육 종류</label><select id="mnPart" onchange="mnPartChange()" style="padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;min-width:120px"></select></div>
+          <input id="mnPartCustom" placeholder="직접 입력" style="display:none;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;width:110px">
+          <div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:12px;color:#64748b;font-weight:600">중량(kg)</label><input id="mnKg" type="number" step="0.01" placeholder="0" style="padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;width:90px"></div>
+          <div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:12px;color:#64748b;font-weight:600">소비기한</label><input id="mnExp" type="date" style="padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px"></div>
+          <button class="btn bp bsm" onclick="saveManual()" style="height:38px">💾 저장</button>
+        </div>
+        <div id="mnAl" style="margin-top:8px;min-height:18px"></div>
+      </div>
+    </div>
     <div id="bcAl"></div>
     <div class="kg3">
       <div class="kc inf"><div class="klb">총 스캔</div><div class="kv" id="bcTot">0</div></div>
@@ -1621,7 +1635,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
 <script src="js/alt_calc.js?v=1779183534"></script>
 <script src="js/monthly_production.js?v=1780555388"></script>
 <script src="js/performance.js?v=1780285758"></script>
-<script src="js/barcode.js?v=1780876946"></script>
+<script src="js/barcode.js?v=1781225706"></script>
 <script src="js/thawing.js?v=1780876946"></script>
 <script src="js/preprocess_v2.js?v=1781145012"></script>
 <script src="js/process_save.js?v=1780983142"></script>

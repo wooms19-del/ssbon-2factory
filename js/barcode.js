@@ -79,6 +79,65 @@ function calcRfEnd(t){
 }
 
 // ============================================================
+// 수동 입력 (수입 바코드 손상 시) — 저장 눌러야 들어감, 여러 건 연속 가능
+// ============================================================
+function toggleManual(){
+  const f=document.getElementById('mnForm'), t=document.getElementById('mnToggle');
+  const open = f.style.display==='none';
+  f.style.display = open ? 'block':'none';
+  t.textContent = open ? '📝 바코드 손상 시 수동 입력 ▴' : '📝 바코드 손상 시 수동 입력 ▾';
+  if(open) fillManualOpts();
+}
+function fillManualOpts(){
+  const os=document.getElementById('mnOrigin');
+  if(os && !os.dataset.filled){
+    os.innerHTML='<option value="">선택</option>'+Object.values(OM).map(o=>`<option>${o}</option>`).join('');
+    os.dataset.filled='1';
+  }
+  const ps=document.getElementById('mnPart');
+  if(ps && !ps.dataset.filled){
+    const parts=[...new Set(Object.values(L.gtinMap||{}).filter(Boolean))];
+    const base=parts.length?parts:['홍두깨','설도','우둔'];
+    ps.innerHTML='<option value="">선택</option>'+base.map(p=>`<option>${p}</option>`).join('')+'<option value="__custom">기타(직접 입력)</option>';
+    ps.dataset.filled='1';
+  }
+}
+function mnPartChange(){
+  const cu=document.getElementById('mnPartCustom');
+  cu.style.display = document.getElementById('mnPart').value==='__custom' ? 'block':'none';
+}
+async function saveManual(){
+  const origin=document.getElementById('mnOrigin').value;
+  let part=document.getElementById('mnPart').value;
+  if(part==='__custom') part=document.getElementById('mnPartCustom').value.trim();
+  const kg=parseFloat(document.getElementById('mnKg').value);
+  const exp=document.getElementById('mnExp').value;
+  const al=document.getElementById('mnAl');
+  const bad=(m)=>{ al.innerHTML='<span style="color:#dc2626;font-size:13px">⚠️ '+m+'</span>'; };
+  if(!origin){ bad('원산지 입력 필요'); return; }
+  if(!part){ bad('원육 종류 입력 필요'); return; }
+  if(!kg || kg<=0){ bad('중량 입력 필요'); return; }
+  if(!exp){ bad('소비기한 입력 필요'); return; }
+
+  const today=tod(), st=nowHM();
+  const seq=L.barcodes.filter(b=>String(b.date||'').slice(0,10)===today && String(b.importCode||'').startsWith('MANUAL-')).length + 1;
+  const code='MANUAL-'+today.replace(/-/g,'')+'-'+String(seq).padStart(3,'0');
+  const rec={
+    id:gid(), date:today, rfStart:st, rfEnd:calcRfEnd(st),
+    importCode:code, traceCode:'', status:'적합',
+    part, origin, weightKg:parseFloat(kg.toFixed(2)),
+    packDate:'', expiryDate:exp, reason:'수동입력', manual:true
+  };
+  L.barcodes.push(rec); saveL(); renderBC();
+  al.innerHTML='<span style="color:#16a34a;font-size:13px">✅ 저장됨 — '+part+' / '+origin+' / '+kg+'kg ('+code+')</span>';
+  // 중량·소비기한만 비움 (원산지·종류는 같은 로트 연속입력 위해 유지)
+  document.getElementById('mnKg').value='';
+  document.getElementById('mnExp').value='';
+  document.getElementById('mnKg').focus();
+  fbSave('barcode', rec).then(fbId=>{ if(fbId){ rec.fbId=fbId; saveL(); } });
+}
+
+// ============================================================
 // 바코드 스캔
 // ============================================================
 function focusBC(){ document.getElementById('bcInput').focus(); }
@@ -273,7 +332,7 @@ async function renderBC(){
     <div class="bcitem ${b.status==='적합'?'gd':'bd'}">
       <span class="bcst ${b.status==='적합'?'sg':'sb'}">${b.status}</span>
       <div class="bcinfo">
-        <div class="bcm">${b.part||'-'} · ${b.origin||'-'} · ${b.weightKg||'-'}kg${b.sample?' <span style="background:#fef3c7;color:#92400e;font-size:11px;padding:1px 7px;border-radius:9px;font-weight:600">🧪 샘플 (무게 제외)</span>':''}</div>
+        <div class="bcm">${b.part||'-'} · ${b.origin||'-'} · ${b.weightKg||'-'}kg${b.manual?' <span style="background:#dbeafe;color:#1e40af;font-size:11px;padding:1px 7px;border-radius:9px;font-weight:600">📝 수동입력</span>':''}${b.sample?' <span style="background:#fef3c7;color:#92400e;font-size:11px;padding:1px 7px;border-radius:9px;font-weight:600">🧪 샘플 (무게 제외)</span>':''}</div>
         <div class="bcd">🕐 해동기 ${b.rfStart?b.rfStart.slice(0,5):'-'} → 종료 ${b.rfEnd||'-'}${b.status==='부적합'?' · '+b.reason:' · 소비기한 '+(b.expiryDate||'-')}</div>
       </div>
       <button class="bcdel" style="margin-right:4px;font-size:11px;width:auto;padding:0 8px;border-radius:10px;${b.sample?'background:#92400e;color:#fff':''}" title="샘플 지정/해제 — 박스수에는 포함, 무게에서는 제외" onclick="toggleSampleBC('${b.id}','${b.fbId||''}')">${b.sample?'샘플해제':'샘플'}</button>
