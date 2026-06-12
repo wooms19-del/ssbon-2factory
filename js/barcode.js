@@ -171,7 +171,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       if(v) procBC(v);
     }
   });
-  document.getElementById('mscroll').addEventListener('click', ()=>{
+  document.getElementById('mscroll').addEventListener('click', (e)=>{
+    if(e.target.closest('#mnForm')) return;
     if(MODE==='i'&&ITAB==='barcode') focusBC();
   });
 });
