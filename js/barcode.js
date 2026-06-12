@@ -91,7 +91,7 @@ function toggleManual(){
 function fillManualOpts(){
   const os=document.getElementById('mnOrigin');
   if(os && !os.dataset.filled){
-    os.innerHTML='<option value="">선택</option>'+Object.values(OM).map(o=>`<option>${o}</option>`).join('');
+    os.innerHTML='<option value="">선택</option><option>호주</option><option>뉴질랜드</option>';
     os.dataset.filled='1';
   }
   const ps=document.getElementById('mnPart');
