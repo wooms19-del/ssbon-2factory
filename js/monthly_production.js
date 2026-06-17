@@ -87,7 +87,7 @@
     var pnav=document.getElementById('pnav');
     if(pnav){
       pnav.querySelectorAll('.ti').forEach(function(t,i){
-        t.classList.toggle('on', (i===0&&name==='daily') || (i===1&&name==='monthly') || (i===2&&name==='stock'));
+        t.classList.toggle('on', (i===0&&name==='daily') || (i===1&&name==='monthly') || (i===2&&name==='stock') || (i===3&&name==='inedible'));
       });
     }
     // ★ 다른 모드(일정표/출퇴근 등) 페이지가 켜져 있을 수 있으니 모든 .pg 먼저 끄기
@@ -97,7 +97,7 @@
     var stPg   = document.getElementById('p-stock');
     // ★ 월단위생산량은 36컬럼이라 부모 inner 1080px 제한을 풀어 넓게 표시
     var _innerEl = moPg ? moPg.closest('.inner') : null;
-    if(_innerEl) _innerEl.style.maxWidth = (name==='monthly') ? 'none' : '';
+    if(_innerEl) _innerEl.style.maxWidth = (name==='monthly'||name==='inedible') ? 'none' : '';
     // 선택된 거 켜기
     if(name==='daily'){
       if(perfPg) perfPg.classList.add('on');
@@ -109,6 +109,10 @@
     } else if(name==='stock'){
       if(stPg) stPg.classList.add('on');
       if(typeof renderStock === 'function') renderStock();
+    } else if(name==='inedible'){
+      var ipPg = document.getElementById('p-inedible');
+      if(ipPg) ipPg.classList.add('on');
+      if(typeof renderInedibleProd === 'function') renderInedibleProd();
     }
     var ms=document.getElementById('mscroll'); if(ms) ms.scrollTop=0;
   }
