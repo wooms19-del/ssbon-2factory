@@ -15,6 +15,14 @@ const TT_FIXED = {
   retortPerCycle: 384, // 1회차 처리량 (96 × 4대차)
 };
 
+// 자숙 탱크 운영 (부위별): FC(홍두깨)=비가압 일반탱크 / 비-FC(설도·우둔)=가압탱크
+const TT_COOK = {
+  fcHours: 4,        // FC(홍두깨) 비가압 자숙 (h)
+  nonFcHours: 2.5,   // 비-FC 가압 자숙 (h) — 와건 30분은 wagonMin로 별도 가산
+  normalTanks: 4,    // 일반탱크 (비가압, FC)
+  pressureTanks: 2,  // 가압탱크 (비-FC)
+};
+
 // 자숙 수율 기본값 (자동 분석 실패/데이터 없음 시 사용) — cooking 컬렉션에서 type별로 계산
 const TT_COOK_YIELD_DEFAULT = {
   '홍두깨': 56.8,
@@ -547,25 +555,57 @@ function ttSimulate(inp, tankMode) {
     tankKgs = Array(cookCycles).fill(cookIn / cookCycles);
   }
 
-  // 각 탱크 투입 시각 = 그 탱크의 cumulative 자숙 투입량 도달 시점
-  const tankInTimes = [];
+  // ── 자숙 시간·탱크 (부위별) ──
+  // 탱크 6대 = 가압 2 + 상압 4 (한 풀). FC(홍두깨)=전부 상압 4h.
+  // 비-FC(설도·우둔)=가압 2대 우선 2.5h, 가압이 다 차면 상압으로 넘겨 4h. 와건 30분은 공통 가산.
+  const nonFC = (inp.meatType !== '홍두깨');
+  const PRESS_N = TT_COOK.pressureTanks, NORM_N = TT_COOK.normalTanks, TANK_TOTAL = PRESS_N + NORM_N;
+  const tankIsPress = Array(TANK_TOTAL).fill(false);
+  for (let t = 0; t < PRESS_N; t++) tankIsPress[t] = true;
+  const tankHoursOf = (isPress) => (nonFC && isPress) ? TT_COOK.nonFcHours : TT_COOK.fcHours;
+
+  // (1) 각 회차의 '전처리 공급 준비' 시각 (그 분량이 전처리에서 나오는 시점)
+  const prepReadyTimes = [];
   let cumOut = 0;  // 자숙 투입 누적 (= 전처리 산출 누적)
   for (let i = 0; i < cookCycles; i++) {
     cumOut += tankKgs[i];
-    // 전처리 누적 투입 = 자숙 투입 누적 / yPre%
-    const targetInKg = cumOut / (inp.yPre / 100);
-    let tankInMin;
+    const targetInKg = cumOut / (inp.yPre / 100);  // 전처리 누적 투입 = 자숙 투입 누적 / yPre%
+    let t;
     if (targetInKg <= phase1Kg) {
-      tankInMin = startMin + Math.round(targetInKg / (inp.pPre * inp.earlyWorkers) * 60);
+      t = startMin + Math.round(targetInKg / (inp.pPre * inp.earlyWorkers) * 60);
     } else {
       const extraKg = targetInKg - phase1Kg;
-      tankInMin = joinMin + Math.round(extraKg / (inp.pPre * inp.wkPre) * 60);
+      t = joinMin + Math.round(extraKg / (inp.pPre * inp.wkPre) * 60);
     }
-    if (i === cookCycles - 1 && tankInMin > preEndMin) tankInMin = preEndMin;
-    tankInTimes.push(tankInMin);
+    if (i === cookCycles - 1 && t > preEndMin) t = preEndMin;
+    prepReadyTimes.push(t);
   }
-  const tankOutTimes = tankInTimes.map(t => t + TT_FIXED.cookHours * 60);
+
+  // (2) 탱크 6대 풀 배정: 가장 빨리 투입 가능한 탱크에, 동률이면 가압 우선
+  //     (가압 2대 다 차면 자연히 상압으로 넘어감 → 그 회차는 4h)
+  const tankFree = Array(TANK_TOTAL).fill(-1e9);
+  const tankInTimes = [], tankOutTimes = [], tankHoursArr = [], tankPressArr = [];
+  for (let i = 0; i < cookCycles; i++) {
+    let best = 0, bestLoad = Math.max(prepReadyTimes[i], tankFree[0]);
+    for (let t = 1; t < TANK_TOTAL; t++) {
+      const load = Math.max(prepReadyTimes[i], tankFree[t]);
+      if (load < bestLoad - 1e-6) { best = t; bestLoad = load; }
+      else if (Math.abs(load - bestLoad) <= 1e-6 && tankIsPress[t] && !tankIsPress[best]) best = t; // 동률 → 가압 우선
+    }
+    const h = tankHoursOf(tankIsPress[best]);
+    tankInTimes.push(bestLoad);
+    const out = bestLoad + h * 60;
+    tankOutTimes.push(out);
+    tankHoursArr.push(h);
+    tankPressArr.push(tankIsPress[best]);
+    tankFree[best] = out;   // 이 탱크는 cook 끝나면 다음 회차 가능
+  }
   const wagonEndTimes = tankOutTimes.map(t => t + TT_FIXED.wagonMin);
+  const pressCycles = tankHoursArr.filter(h => h === TT_COOK.nonFcHours).length;
+  const normCycles = cookCycles - pressCycles;
+  const cookHoursUsed = nonFC ? TT_COOK.nonFcHours : TT_COOK.fcHours;  // 대표 표시값
+  const numTanks = TANK_TOTAL;
+  const isPressure = nonFC;
 
   // 파쇄: 자숙 1호 와건 종료부터 시작
   // 종료는 두 조건 중 늦은 쪽:
@@ -784,6 +824,9 @@ function ttSimulate(inp, tankMode) {
     startMin, preEndMin, joinMin,
     phase1Min, phase1Kg,
     tankInTimes, tankOutTimes, wagonEndTimes,
+    cookHoursUsed, numTanks, isPressure,
+    pressCycles, normCycles,
+    tankHoursArr,
     tankCrushTimes,
     crushStartMin, crushEndMin,
     crushSelfEndMin, lastTankCrushEndMin, lastTankOutKg,
@@ -1459,9 +1502,9 @@ function ttRender() {
       p:'자숙',
       i:Math.round(sim.cookIn), o:Math.round(sim.cookOut),
       yEdit: `<span style="font-size:11px;color:var(--color-text-secondary)">${sim.cookYield.toFixed(1)}% (고정)</span>`,
-      prodEdit: `<span style="font-size:10px;color:var(--color-text-tertiary)">4h × ${sim.tankInTimes.length}탱크 (고정)</span>`,
-      h:`${TT_FIXED.cookHours*sim.tankInTimes.length}h (병렬)`, w:'2명',
-      formula:`탱크당 ${TT_FIXED.tankKg}kg × ${sim.cookYield}% = ${Math.round(TT_FIXED.tankKg*sim.cookYield/100)}kg/탱크`,
+      prodEdit: `<span style="font-size:10px;color:var(--color-text-tertiary)">${sim.isPressure ? ('가압 2.5h+30분 ×'+sim.pressCycles+'회' + (sim.normCycles>0 ? ' · 상압 4h+30분 ×'+sim.normCycles+'회' : '')) : '비가압 4h'} · 탱크 6대(가압2/상압4)</span>`,
+      h:`${sim.isPressure ? (sim.normCycles>0 ? '가압'+sim.pressCycles+'·상압'+sim.normCycles+'회' : '가압 2.5h+0.5h') : '비가압 4h'} · ${sim.tankInTimes.length}회차`, w:'2명',
+      formula:`탱크당 ${TT_FIXED.tankKg}kg × ${sim.cookYield}% = ${Math.round(TT_FIXED.tankKg*sim.cookYield/100)}kg/탱크 · ${sim.isPressure ? '가압 2대 우선, 넘치면 상압' : '상압 6대'}`,
     },
     {
       p:'파쇄',
@@ -1552,14 +1595,14 @@ function ttRender() {
         <!-- 자숙 -->
         <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:4px solid #0F6E56;border-radius:8px;padding:10px 12px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:0.5px dashed var(--color-border-tertiary)">
-            <div><strong style="color:#0F6E56;font-size:12px">자숙 (${sim.tankInTimes.length}탱크 병렬)</strong>
+            <div><strong style="color:#0F6E56;font-size:12px">자숙 (${sim.tankInTimes.length}회차${sim.isPressure ? ', 가압 우선' : ''})</strong>
             <span style="font-size:10.5px;color:var(--color-text-secondary);margin-left:6px">${ttFmt(sim.tankInTimes[0])}~${ttFmt(sim.wagonEndTimes[sim.wagonEndTimes.length-1])} · 2명</span></div>
             <div style="font-size:10px;color:var(--color-text-tertiary)">${Math.round(sim.cookIn).toLocaleString()} → ${Math.round(sim.cookOut).toLocaleString()}kg</div>
           </div>
           <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.6;font-family:monospace">
-            🔢 ${Math.round(sim.cookIn)} ÷ ${TT_FIXED.tankKg} = ${(sim.cookIn/TT_FIXED.tankKg).toFixed(2)} → ${sim.tankInTimes.length}탱크<br>
-            ⏱ 4h + 와건 30분 (고정) · 수율 ${sim.cookYield}% (고정)<br>
-            ${sim.tankInTimes.map((t, i) => `└ ${i+1}호 ${ttFmt(t)} → 와건 ${ttFmt(sim.wagonEndTimes[i])}`).join('<br>')}
+            🔢 ${Math.round(sim.cookIn)} ÷ ${TT_FIXED.tankKg} = ${(sim.cookIn/TT_FIXED.tankKg).toFixed(2)} → ${sim.tankInTimes.length}회차<br>
+            ⏱ ${sim.isPressure ? '가압 2.5h(2대 우선) / 넘치면 상압 4h' : '상압 4h'} + 와건 30분 · 수율 ${sim.cookYield}% (고정)<br>
+            ${sim.tankInTimes.map((t, i) => `└ ${i+1}회차 ${ttFmt(t)} → 와건 ${ttFmt(sim.wagonEndTimes[i])} <span style="color:var(--color-text-tertiary)">(${(sim.tankHoursArr&&sim.tankHoursArr[i])===2.5 ? '가압 2.5h' : '상압 4h'})</span>`).join('<br>')}
           </div>
         </div>
 
