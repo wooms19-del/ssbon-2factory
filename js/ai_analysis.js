@@ -586,6 +586,8 @@ function _renderAIReport(el, r, from, to, days, recCount, workDays) {
       </div>
       ` : ''}
       
+      <div id="aiMonthlyWrap"></div>
+      
       ${dailyYields.length > 0 ? `
       <div style="margin-bottom:24px">
         <h2 style="font-size:16px;font-weight:500;margin:0 0 12px;color:#0f172a">일별 수율 추이</h2>
@@ -645,6 +647,7 @@ function _renderAIReport(el, r, from, to, days, recCount, workDays) {
     if(dailyYields.length > 0) _drawYieldChart(dailyYields);
     if(partYields.length > 0) _drawPartChart(partYields, partColors);
     if(defectReasons.length > 0) _drawDefChart(defectReasons);
+    if(typeof _aiLoadMonthlyTrend === 'function') _aiLoadMonthlyTrend();
   });
 }
 
@@ -661,14 +664,34 @@ function _drawYieldChart(data) {
   const ctx = document.getElementById('aiYieldChart');
   if(!ctx) return;
   const colors = data.map(d => d.isAnomaly ? '#F09595' : '#378ADD');
+  const _valLbl = {
+    id: 'aiYieldValLbl',
+    afterDatasetsDraw(chart){
+      const c = chart.ctx;
+      const meta = chart.getDatasetMeta(0);
+      meta.data.forEach((bar,i)=>{
+        const v = chart.data.datasets[0].data[i];
+        if(v==null) return;
+        c.save();
+        c.fillStyle = '#334155';
+        c.font = '600 10px -apple-system,sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'bottom';
+        c.fillText(Math.round(v)+'%', bar.x, bar.y - 2);
+        c.restore();
+      });
+    }
+  };
   new Chart(ctx, {
     type: 'bar',
     data: {
       labels: data.map(d => d.date),
       datasets: [{ data: data.map(d => d.value), backgroundColor: colors, borderRadius: 2 }]
     },
+    plugins: [_valLbl],
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 16 } },
       plugins: { legend: { display: false } },
       scales: {
         y: { ticks: { callback: v => v + '%', font: {size:11} }, grid: { color: 'rgba(0,0,0,0.05)' } },
@@ -681,15 +704,35 @@ function _drawYieldChart(data) {
 function _drawPartChart(data, colors) {
   const ctx = document.getElementById('aiPartChart');
   if(!ctx) return;
+  const _valLbl = {
+    id: 'aiPartValLbl',
+    afterDatasetsDraw(chart){
+      const c = chart.ctx;
+      const meta = chart.getDatasetMeta(0);
+      meta.data.forEach((bar,i)=>{
+        const v = chart.data.datasets[0].data[i];
+        if(v==null) return;
+        c.save();
+        c.fillStyle = '#334155';
+        c.font = '600 11px -apple-system,sans-serif';
+        c.textAlign = 'left';
+        c.textBaseline = 'middle';
+        c.fillText(v.toFixed(1)+'%', bar.x + 5, bar.y);
+        c.restore();
+      });
+    }
+  };
   new Chart(ctx, {
     type: 'bar',
     data: {
       labels: data.map(d => d.part),
       datasets: [{ data: data.map(d => d.value), backgroundColor: colors.slice(0, data.length), borderRadius: 2 }]
     },
+    plugins: [_valLbl],
     options: {
       indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 36 } },
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { callback: v => v + '%', font: {size:11} } },
@@ -703,12 +746,38 @@ function _drawDefChart(data) {
   const ctx = document.getElementById('aiDefChart');
   if(!ctx) return;
   const colors = ['#F09595','#FAC775','#B4B2A9','#7F77DD','#1D9E75'];
+  const _valLbl = {
+    id: 'aiDefValLbl',
+    afterDatasetsDraw(chart){
+      const c = chart.ctx;
+      const meta = chart.getDatasetMeta(0);
+      const total = chart.data.datasets[0].data.reduce((s,v)=>s+(+v||0),0) || 1;
+      meta.data.forEach((arc,i)=>{
+        const v = chart.data.datasets[0].data[i];
+        if(!v) return;
+        if((v/total) < 0.04) return;   // 너무 작은 조각은 생략
+        const p = arc.getProps(['startAngle','endAngle','innerRadius','outerRadius','x','y'], true);
+        const ang = (p.startAngle + p.endAngle) / 2;
+        const r = (p.innerRadius + p.outerRadius) / 2;
+        const x = p.x + Math.cos(ang) * r;
+        const y = p.y + Math.sin(ang) * r;
+        c.save();
+        c.fillStyle = '#fff';
+        c.font = '700 12px -apple-system,sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText(String(v), x, y);
+        c.restore();
+      });
+    }
+  };
   new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: data.map(d => d.label),
       datasets: [{ data: data.map(d => d.count), backgroundColor: colors.slice(0, data.length), borderWidth: 0 }]
     },
+    plugins: [_valLbl],
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
@@ -719,8 +788,278 @@ function _drawDefChart(data) {
   });
 }
 
-// ============================================================
-// 💬 챗봇 기능 (Firestore 대화 이력 저장)
+// ── 월별 추이 (최근 여러 달 평균 수율 + 포장 불량률) ──────────────
+async function _aiLoadMonthlyTrend(){
+  const wrap = document.getElementById('aiMonthlyWrap');
+  if(!wrap) return;
+  try {
+    if(typeof fbGetRange !== 'function'){ wrap.innerHTML=''; return; }
+    const today = (typeof tod === 'function') ? tod() : new Date().toISOString().slice(0,10);
+    // 최근 6개월 (이번 달 포함)
+    const tym = today.slice(0,7).split('-').map(Number);
+    let fy = tym[0], fm = tym[1] - 5;
+    while(fm <= 0){ fm += 12; fy--; }
+    const from = fy + '-' + String(fm).padStart(2,'0') + '-01';
+    const [th, pk, pp, ck, sh] = await Promise.all([
+      fbGetRange('thawing', from, today).catch(()=>[]),
+      fbGetRange('packing', from, today).catch(()=>[]),
+      fbGetRange('preprocess', from, today).catch(()=>[]),
+      fbGetRange('cooking', from, today).catch(()=>[]),
+      fbGetRange('shredding', from, today).catch(()=>[])
+    ]);
+    const products = (typeof L !== 'undefined' && L && Array.isArray(L.products)) ? L.products : [];
+    const kgEaOf = pname => { const p = products.find(x => x.name === pname); return p ? (parseFloat(p.kgea)||0) : 0; };
+    const mo = {};
+    const prodM = {};   // {ym: {product: {ea, defect}}}  — 제품별 불량 집중 분석용
+    const _slot = ym => (mo[ym] = mo[ym] || {rmKg:0, pkRawKg:0, ea:0, defect:0, ppKg:0, ckKg:0, shKg:0, days:{}});
+    (th||[]).forEach(r => { const d = String(r.date||'').slice(0,10); const ym = d.slice(0,7); if(ym){ const m = _slot(ym); m.rmKg += parseFloat(r.totalKg)||0; m.days[d] = 1; } });
+    (pp||[]).forEach(r => { const ym = String(r.date||'').slice(0,7); if(ym) _slot(ym).ppKg += parseFloat(r.kg)||0; });
+    (ck||[]).forEach(r => { const ym = String(r.date||'').slice(0,7); if(ym) _slot(ym).ckKg += parseFloat(r.kg)||0; });
+    (sh||[]).forEach(r => { const ym = String(r.date||'').slice(0,7); if(ym) _slot(ym).shKg += parseFloat(r.kg)||0; });
+    (pk||[]).forEach(r => {
+      const d = String(r.date||'').slice(0,10); const ym = d.slice(0,7); if(!ym) return;
+      const m = _slot(ym); const ea = parseFloat(r.ea)||0; const def = parseInt(r.defect)||0;
+      m.pkRawKg += ea * kgEaOf(r.product); m.ea += ea; m.defect += def; m.days[d] = 1;
+      const pn = r.product || '기타';
+      const ps = ((prodM[ym] = prodM[ym] || {})[pn] = (prodM[ym][pn] || {ea:0, defect:0}));
+      ps.ea += ea; ps.defect += def;
+    });
+    // 생산일수 3일 이상인 달만 (1~2일짜리 blip 제외 → 추이 왜곡 방지)
+    const months = Object.keys(mo).filter(ym => Object.keys(mo[ym].days).length >= 3).sort();
+    if(months.length < 2){ wrap.innerHTML=''; return; }   // 비교할 달이 2개월 미만이면 생략
+    const curYm = today.slice(0,7);
+    const rows = months.map(ym => ({
+      _ym: ym,
+      label: ym.slice(2).replace('-','.') + (ym === curYm ? ' (진행중)' : ''),   // 26.05 / 26.06 (진행중)
+      yield: mo[ym].rmKg > 0 ? r2(mo[ym].pkRawKg / mo[ym].rmKg * 100) : 0,
+      defect: mo[ym].ea > 0 ? r2(mo[ym].defect / mo[ym].ea * 100) : 0
+    }));
+    wrap.innerHTML =
+        '<div style="margin-bottom:24px">'
+      + '<h2 style="font-size:16px;font-weight:500;margin:0 0 12px;color:#0f172a">월별 추이</h2>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px;font-size:12px;color:#64748b">'
+      + '<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#378ADD"></span>평균 수율(%)</span>'
+      + '<span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:3px;border-radius:2px;background:#E11D48"></span>포장 불량률(%)</span>'
+      + '</div>'
+      + '<div style="position:relative;width:100%;height:240px"><canvas id="aiMonthlyChart"></canvas></div>'
+      + '</div>'
+      + _aiBuildReport(rows, mo, prodM, curYm);
+    _drawMonthlyTrendChart(rows);
+  } catch(e){ console.warn('[AI] 월별 추이 실패', e); wrap.innerHTML=''; }
+}
+
+function _aiBuildReport(rows, mo, prodM, curYm){
+  if(!rows || rows.length < 2) return '';
+  const L = rows[rows.length-1], P = rows[rows.length-2];
+  const ymL = L._ym, ymP = P._ym, mL = mo[ymL], mP = mo[ymP];
+  const y = ymL.slice(0,4), M = parseInt(ymL.slice(5),10), Mp = parseInt(ymP.slice(5),10);
+  const inProg = ymL === curYm;
+  const dateStr = (typeof tod==='function' ? tod() : new Date().toISOString().slice(0,10));
+  const nf = n => Math.round(n).toLocaleString('ko-KR');
+  const f1 = n => (Math.round(n*10)/10).toLocaleString('ko-KR');
+  const daysL = Object.keys(mL.days).length, daysP = Object.keys(mP.days).length;
+
+  const yldL = mL.rmKg>0? r2(mL.pkRawKg/mL.rmKg*100):0, yldP = mP.rmKg>0? r2(mP.pkRawKg/mP.rmKg*100):0;
+  const defL = mL.ea>0? r2(mL.defect/mL.ea*100):0, defP = mP.ea>0? r2(mP.defect/mP.ea*100):0;
+  const ppyL = mL.rmKg>0? r2(mL.ppKg/mL.rmKg*100):0, ppyP = mP.rmKg>0? r2(mP.ppKg/mP.rmKg*100):0;
+  const ckyL = mL.rmKg>0? r2(mL.ckKg/mL.rmKg*100):0, ckyP = mP.rmKg>0? r2(mP.ckKg/mP.rmKg*100):0;
+  const shyL = mL.rmKg>0? r2(mL.shKg/mL.rmKg*100):0, shyP = mP.rmKg>0? r2(mP.shKg/mP.rmKg*100):0;
+
+  const dcell = (cur,prev,goodDir,dec,suf) => {
+    const d = r2(cur-prev);
+    const num = dec ? (Math.round(d*Math.pow(10,dec))/Math.pow(10,dec)).toLocaleString('ko-KR') : nf(d);
+    let cls=''; if(goodDir!==0 && Math.abs(d)>1e-9) cls = ((d>0)===(goodDir>0)) ? 'up' : 'down';
+    return '<td class="'+cls+'">'+(Math.abs(d)<1e-9?'—':((d>0?'+':'')+num+(suf||'')))+'</td>';
+  };
+  const row = (label, cur, prev, dc) => '<tr><td class="l">'+label+'</td><td>'+cur+'</td><td>'+prev+'</td>'+dc+'</tr>';
+
+  const yVerdict = (yldL-yldP)>=0.5 ? '<b class="up">개선</b>되고 있습니다' : (yldL-yldP)<=-0.5 ? '<b class="down">하락</b>했습니다 — 원인 점검 필요' : '전월과 비슷합니다';
+  const dVerdict = (defL-defP)<=-0.2 ? '<b class="up">감소·안정</b>' : (defL-defP)>=0.2 ? '<b class="down">증가</b>' : '비슷한 수준';
+  const inedibleL = r2(100-ppyL), inedibleP = r2(100-ppyP);
+  const ppVerdict = (ppyL-ppyP)<=-1 ? ' 전처리 비가식부가 '+f1(inedibleP)+'% → '+f1(inedibleL)+'%로 늘었습니다 — 원물 품질·손질 상태 점검이 필요합니다.' : (ppyL-ppyP)>=1 ? ' 전처리 비가식부가 줄어 개선됐습니다.' : '';
+
+  const pm = prodM[ymL]||{};
+  const plist = Object.keys(pm).map(p=>({p:p,ea:pm[p].ea,def:pm[p].defect,rate:pm[p].ea>0?r2(pm[p].defect/pm[p].ea*100):0})).filter(x=>x.ea>0).sort((a,b)=>b.rate-a.rate);
+  const prodRows = plist.map(x=>{
+    const cls = x.rate>=3?'down':(x.rate>=2?'':'up');
+    const badge = x.rate>=3?'⚠️ 높음':(x.rate>=2?'🟡 주의':'✅ 양호');
+    return '<tr><td class="l">'+x.p+'</td><td>'+nf(x.ea)+'</td><td>'+nf(x.def)+'</td><td class="'+cls+'">'+x.rate+'%</td><td>'+badge+'</td></tr>';
+  }).join('');
+
+  const css = '<style>'
+    +'.airpt{font-size:13px;color:#0f172a;line-height:1.6;margin-top:14px;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;background:#fff}'
+    +'.airpt .rhd{border-bottom:2px solid #1F4E79;padding-bottom:10px;margin-bottom:6px}'
+    +'.airpt .rhd h2{font-size:18px;font-weight:700;margin:0;color:#0f172a}'
+    +'.airpt .rhd p{font-size:12px;color:#64748b;margin:3px 0 0}'
+    +'.airpt h3.sec{font-size:14px;font-weight:700;color:#1F4E79;margin:18px 0 7px}'
+    +'.airpt table{width:100%;border-collapse:collapse;margin:4px 0 2px;font-size:12.5px}'
+    +'.airpt th{background:#f1f5f9;border:1px solid #cbd5e1;padding:6px 8px;font-weight:600;white-space:nowrap}'
+    +'.airpt td{border:1px solid #e2e8f0;padding:6px 8px;text-align:center}'
+    +'.airpt td.l{text-align:left;font-weight:600}'
+    +'.airpt .up{color:#15803d;font-weight:700}.airpt .down{color:#dc2626;font-weight:700}'
+    +'.airpt .box{background:#f0f7ff;border:1px solid #cfe0f5;border-radius:8px;padding:10px 13px;margin:8px 0;font-size:12.5px}'
+    +'.airpt .ftr{border-top:1px solid #e2e8f0;margin-top:18px;padding-top:10px;display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;flex-wrap:wrap;gap:6px}'
+    +'</style>';
+
+  let h = css + '<div class="airpt">';
+  h += '<div class="rhd"><h2>📄 생산 실적 월간 보고서</h2><p>순수본 2공장 · '+y+'년 '+M+'월 실적 기준 (전월 '+Mp+'월 대비)'+(inProg?' · '+M+'월 진행중':'')+' · 작성일 '+dateStr+'</p></div>';
+
+  h += '<h3 class="sec">1. 보고 개요</h3>';
+  h += '<table style="width:auto"><tbody>'
+    + '<tr><td class="l">보고 기간</td><td class="l">'+y+'년 '+M+'월 (전월 '+Mp+'월 대비)</td></tr>'
+    + '<tr><td class="l">생산일수</td><td class="l">당월 '+daysL+'일 / 전월 '+daysP+'일</td></tr>'
+    + '<tr><td class="l">데이터 기준</td><td class="l">스마트팩토리 실적 (방혈·전처리·자숙·파쇄·포장)</td></tr>'
+    + '</tbody></table>';
+
+  h += '<h3 class="sec">2. 생산 실적 요약 (당월 vs 전월)</h3>';
+  h += '<table><thead><tr><th class="l">항목</th><th>당월('+M+'월)</th><th>전월('+Mp+'월)</th><th>증감</th></tr></thead><tbody>';
+  h += row('원육 투입 (kg)', nf(mL.rmKg), nf(mP.rmKg), dcell(mL.rmKg,mP.rmKg,0,0,''));
+  h += row('완제품 원육 (kg)', nf(mL.pkRawKg), nf(mP.pkRawKg), dcell(mL.pkRawKg,mP.pkRawKg,0,0,''));
+  h += row('원육수율 (%)', yldL+'%', yldP+'%', dcell(yldL,yldP,1,2,'%p'));
+  h += row('생산수량 (EA)', nf(mL.ea), nf(mP.ea), dcell(mL.ea,mP.ea,0,0,''));
+  h += row('포장 불량률 (%)', defL+'%', defP+'%', dcell(defL,defP,-1,2,'%p'));
+  h += '</tbody></table>';
+  h += '<div class="box">▶ 당월 원육수율 <b>'+yldL+'%</b> — 전월 대비 '+yVerdict+'. 포장 불량률은 '+dVerdict+' ('+defP+'% → '+defL+'%).</div>';
+
+  h += '<h3 class="sec">3. 공정 수율 분석 (원육 투입 대비 누적)</h3>';
+  h += '<table><thead><tr><th class="l">공정</th><th>당월 산출(kg)</th><th>당월 수율</th><th>전월 수율</th><th>증감</th></tr></thead><tbody>';
+  h += '<tr><td class="l">전처리</td><td>'+nf(mL.ppKg)+'</td><td>'+ppyL+'%</td><td>'+ppyP+'%</td>'+dcell(ppyL,ppyP,1,2,'%p')+'</tr>';
+  h += '<tr><td class="l">자숙</td><td>'+nf(mL.ckKg)+'</td><td>'+ckyL+'%</td><td>'+ckyP+'%</td>'+dcell(ckyL,ckyP,1,2,'%p')+'</tr>';
+  h += '<tr><td class="l">파쇄</td><td>'+nf(mL.shKg)+'</td><td>'+shyL+'%</td><td>'+shyP+'%</td>'+dcell(shyL,shyP,1,2,'%p')+'</tr>';
+  h += '</tbody></table>';
+  h += '<div class="box">▶ 전처리 누적수율 <b>'+ppyL+'%</b> (비가식부 '+f1(inedibleL)+'%).'+ppVerdict+'</div>';
+
+  h += '<h3 class="sec">4. 품질(불량) 분석 — 제품별 ('+M+'월)</h3>';
+  h += '<table><thead><tr><th class="l">제품</th><th>생산 EA</th><th>불량</th><th>불량률</th><th>평가</th></tr></thead><tbody>'+(prodRows||'<tr><td colspan="5">데이터 없음</td></tr>')+'</tbody></table>';
+
+  h += '<h3 class="sec">5. 종합 의견 및 향후 과제</h3>';
+  h += _aiMonthlyComment(rows, prodM, curYm);
+
+  h += '<div class="ftr"><span>순수본 2공장 운영팀</span><span>작성일 '+dateStr+'</span><span>본 자료는 내부 관리용입니다.</span></div>';
+  h += '</div>';
+  return h;
+}
+
+function _aiMonthlyComment(rows, prodM, curYm){
+  if(!rows || rows.length < 2) return '';
+  const ml = r => parseInt(r._ym.slice(5),10) + '월';
+  const sp = (v,d) => (v>0?'+':'') + (+v).toFixed(d) + '%p';
+  const first = rows[0], last = rows[rows.length-1], prev = rows[rows.length-2];
+  const inProg = last._ym === curYm;
+  const dYo = r2(last.yield - first.yield), dYr = r2(last.yield - prev.yield);
+  const dDo = r2(last.defect - first.defect), dDr = r2(last.defect - prev.defect);
+  const recent = rows.slice(-3);
+
+  // ── 현황 시퀀스 ──
+  const ySeq = recent.map(r => ml(r)+' '+r.yield+'%').join(' → ');
+  const dSeq = recent.map(r => ml(r)+' '+r.defect+'%').join(' → ');
+  const yTrend = dYo>=0.5 ? '회복·상승세' : dYo<=-0.5 ? '하락세' : '대체로 보합';
+  const dTrend = dDo<=-0.2 ? '안정세' : dDo>=0.2 ? '상승세' : '보합';
+
+  // ── 제품별 불량률 (최근 달) — '유독 높은 라인'을 잡는다 (건수 아님: 물량 많으면 건수만 큼) ──
+  const pm = prodM[last._ym] || {};
+  const plist = Object.keys(pm).map(p => ({ p:p, ea:pm[p].ea, def:pm[p].defect, rate: pm[p].ea>0 ? r2(pm[p].defect/pm[p].ea*100) : 0 })).filter(x => x.ea>0);
+  const cmp = plist.filter(x => x.ea >= 500);   // 물량 충분한 제품만 비교(소량 노이즈 제외)
+  let worst=null, othersRate=0, worstMult=0;
+  if(cmp.length>=2){
+    cmp.sort((a,b)=>b.rate-a.rate);
+    worst = cmp[0];
+    const others = cmp.slice(1), oEa = others.reduce((s,x)=>s+x.ea,0), oDef = others.reduce((s,x)=>s+x.def,0);
+    othersRate = oEa>0 ? r2(oDef/oEa*100) : 0;
+    worstMult = othersRate>0 ? r2(worst.rate/othersRate) : 0;
+  }
+  const badProd = !!(worst && othersRate>0 && worst.rate>=3 && worst.rate >= othersRate*1.5);
+
+  // ── 짚어볼 점 / 액션 ──
+  const focus=[], actions=[];
+  if(badProd){
+    focus.push(ml(last)+' 제품별 불량률 — <b>'+worst.p+' '+worst.rate+'%</b>로 유독 높습니다 (나머지 제품 평균 '+othersRate+'%, 약 '+worstMult+'배). 불량 '+worst.def+'건.');
+    actions.push('<b>'+worst.p+'</b> 포장 라인 집중 점검 — 불량률이 다른 제품의 '+worstMult+'배. 실링·마킹·충진부터 확인');
+  }
+  if(dDr>=0.2){
+    focus.push('최근 '+ml(prev)+'('+prev.defect+'%) → '+ml(last)+'('+last.defect+'%) 전체 불량률이 '+sp(dDr,2)+' 다시 올랐습니다.');
+    actions.push(ml(last)+' 불량률 반등 — '+(inProg?'월말까지 ':'')+'실링 상태·작업자 교대 점검');
+  } else if(dDo<=-0.2){
+    focus.push('전체 불량률은 '+ml(first)+' '+first.defect+'% → '+ml(last)+' '+last.defect+'%로 '+sp(dDo,2)+' 안정됐습니다.');
+  }
+  if(dYr<=-0.5){
+    focus.push(ml(last)+' 수율이 전월比 '+sp(dYr,1)+' 떨어졌습니다 — 세부 원인은 데이터로 단정 못 합니다. 비가식부·생산성 화면에서 부위별·공정별 손실 확인이 필요합니다.');
+    actions.push('수율 하락 추적: 비가식부·생산성 탭에서 전처리/자숙/파쇄 손실 부위 확인');
+  } else if(dYo>=0.5){
+    focus.push('수율은 '+ml(first)+' '+first.yield+'% → '+ml(last)+' '+last.yield+'%로 '+sp(dYo,1)+' 개선됐습니다'+(dYr<=-0.3?' (다만 '+ml(prev)+'→'+ml(last)+'은 다소 주춤)':'')+'.');
+  }
+  if(!actions.length) actions.push('현 추세 유지 — 다음 달 수율·불량률이 이 수준을 지키는지 확인');
+
+  // ── 결론 한 줄 ──
+  let concl;
+  if(badProd) concl = '불량률이 <b>'+worst.p+'</b>에서 유독 높습니다('+worst.rate+'%). 이 라인부터 잡아야 전체가 내려갑니다.';
+  else if(dDr>=0.2) concl = '불량률이 다시 고개를 들고 있어 포장 실링 공정 점검이 우선입니다.';
+  else if(dYo>=0.5 && dDo<=-0.2) concl = '수율↑·불량률↓ 둘 다 개선 흐름 — 이번 달 진행분이 이대로 유지되는지만 보면 됩니다.';
+  else if(dYo<=-0.5) concl = '수율이 떨어지는 추세 — 공정별 손실 부위부터 확인해야 합니다.';
+  else concl = '큰 이상 신호는 없습니다. 현 수준 유지 여부를 다음 달에 확인하면 됩니다.';
+
+  // ── HTML ──
+  const sec = (label,color) => '<p style="font-size:12px;font-weight:700;color:'+color+';margin:10px 0 3px;letter-spacing:.02em">'+label+'</p>';
+  const line = s => '<p style="font-size:13px;color:#0f172a;margin:2px 0;line-height:1.65">· '+s+'</p>';
+  let h = '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:15px 17px;margin-top:12px">';
+  h += '<p style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0">🧑‍🏭 생산관리자 코멘트</p>';
+  h += sec('현황','#475569');
+  h += line('수율: '+ySeq+'  <span style="color:#64748b">('+yTrend+')</span>');
+  h += line('불량률: '+dSeq+'  <span style="color:#64748b">('+dTrend+')</span>');
+  h += sec('짚어볼 점','#b45309');
+  if(focus.length) focus.forEach(s => h += line(s)); else h += line('특별히 두드러진 신호는 없습니다.');
+  h += sec('이렇게 하시죠','#1d4ed8');
+  actions.forEach((s,i) => h += line('<b>'+(i+1)+'.</b> '+s));
+  h += '<div style="margin-top:11px;padding:9px 12px;background:#0f172a;border-radius:7px"><p style="font-size:13px;color:#fff;margin:0;line-height:1.55"><b>결론</b> &nbsp;'+concl+'</p></div>';
+  if(inProg) h += '<p style="font-size:11px;color:#94a3b8;margin:9px 0 0">※ '+ml(last)+'은 진행중이라 월말까지 수치가 달라질 수 있습니다. 원인은 데이터로 짚이는 것만 적었고, 단정 못 하는 건 확인 화면을 안내했습니다.</p>';
+  else h += '<p style="font-size:11px;color:#94a3b8;margin:9px 0 0">※ 원인은 데이터로 짚이는 것만 적었고, 단정 못 하는 건 확인 화면을 안내했습니다.</p>';
+  h += '</div>';
+  return h;
+}
+
+function _drawMonthlyTrendChart(rows){
+  const ctx = document.getElementById('aiMonthlyChart');
+  if(!ctx) return;
+  const _lbl = {
+    id: 'aiMoTrendLbl',
+    afterDatasetsDraw(chart){
+      const c = chart.ctx;
+      const bm = chart.getDatasetMeta(0);   // bar: 수율
+      bm.data.forEach((bar,i)=>{
+        const v = chart.data.datasets[0].data[i]; if(v==null) return;
+        c.save(); c.fillStyle='#1e40af'; c.font='600 11px -apple-system,sans-serif';
+        c.textAlign='center'; c.textBaseline='bottom'; c.fillText(v.toFixed(1)+'%', bar.x, bar.y - 3); c.restore();
+      });
+      const lm = chart.getDatasetMeta(1);   // line: 불량률
+      lm.data.forEach((pt,i)=>{
+        const v = chart.data.datasets[1].data[i]; if(v==null) return;
+        c.save(); c.fillStyle='#be123c'; c.font='600 10px -apple-system,sans-serif';
+        c.textAlign='center'; c.textBaseline='bottom'; c.fillText(v.toFixed(2)+'%', pt.x, pt.y - 7); c.restore();
+      });
+    }
+  };
+  new Chart(ctx, {
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [
+        { type:'bar', label:'평균 수율(%)', data: rows.map(r => r.yield), backgroundColor:'#378ADD', borderRadius:3, yAxisID:'y', order:2 },
+        { type:'line', label:'포장 불량률(%)', data: rows.map(r => r.defect), borderColor:'#E11D48', backgroundColor:'#E11D48', borderWidth:2, pointRadius:3, pointBackgroundColor:'#E11D48', tension:0.3, yAxisID:'y1', order:1 }
+      ]
+    },
+    plugins: [_lbl],
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      plugins: { legend: { display: false } },
+      scales: {
+        y:  { position:'left',  beginAtZero:true, ticks:{ callback:v=>v+'%', font:{size:11} }, grid:{ color:'rgba(0,0,0,0.05)' } },
+        y1: { position:'right', beginAtZero:true, ticks:{ callback:v=>v+'%', font:{size:11} }, grid:{ display:false } },
+        x:  { ticks:{ font:{size:12} }, grid:{ display:false } }
+      }
+    }
+  });
+}
+
 // ============================================================
 
 const _CHAT_COL = '_ai_chat';  // Firestore 컬렉션
