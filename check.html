@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>잔량 검증</title>
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;margin:0;padding:20px;background:#f8fafc;color:#0f172a}
+  .wrap{max-width:520px;margin:0 auto}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#64748b;font-size:13px;margin-bottom:16px}
+  .big{background:#fff;border:2px solid #16a34a;border-radius:14px;padding:18px;text-align:center;margin-bottom:14px}
+  .big .label{font-size:13px;color:#64748b}
+  .big .val{font-size:34px;font-weight:800;color:#16a34a;margin-top:4px}
+  .chip{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;margin:4px 4px 0 0;font-size:13px}
+  .box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:12px}
+  .box h2{font-size:14px;margin:0 0 8px}
+  .row{font-size:13px;padding:3px 0;border-bottom:1px solid #f1f5f9}
+  .muted{color:#94a3b8}
+  .err{color:#dc2626}
+  .ts{font-size:11px;color:#cbd5e1;text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔍 자숙 완료 와건 잔량 — 실시간 검증</h1>
+  <div class="sub">이 페이지는 지금 이 순간 DB를 직접 읽어 올바른 계산을 돌립니다. (메인 앱과 무관한 독립 페이지)</div>
+  <div id="out"><div class="muted">DB 읽는 중…</div></div>
+  <div class="ts" id="ts"></div>
+</div>
+<script>
+const API_KEY="AIzaSyA0Y6VK8EOahDE607LEWtyG9-U8YP3yqDE";
+const PROJ="ssbon-factory";
+function gv(f){
+  if(f==null)return null;
+  if('stringValue'in f)return f.stringValue;
+  if('doubleValue'in f)return Number(f.doubleValue);
+  if('integerValue'in f)return Number(f.integerValue);
+  if('booleanValue'in f)return f.booleanValue;
+  if('mapValue'in f){const o={};const ff=(f.mapValue.fields)||{};for(const k in ff)o[k]=gv(ff[k]);return o;}
+  if('arrayValue'in f)return((f.arrayValue.values)||[]).map(gv);
+  return null;
+}
+async function fetchColl(coll){
+  let docs=[],tok=null;
+  do{
+    let url=`https://firestore.googleapis.com/v1/projects/${PROJ}/databases/(default)/documents/${coll}?key=${API_KEY}&pageSize=300`;
+    if(tok)url+=`&pageToken=${tok}`;
+    const r=await fetch(url,{cache:"no-store"});
+    const d=await r.json();
+    (d.documents||[]).forEach(doc=>{
+      const o={fbId:doc.name.split('/').pop()};
+      const ff=doc.fields||{};for(const k in ff)o[k]=gv(ff[k]);
+      docs.push(o);
+    });
+    tok=d.nextPageToken;
+  }while(tok);
+  return docs;
+}
+// 라이브 배포된 sh2GetWagonAvail 과 동일 로직
+function calcAvail(L,today){
+  const ckList=(L.cooking||[]).filter(c=>c.date===today&&c.end);
+  const avail={};
+  ckList.forEach(c=>{
+    if(!c.wagonDist)return;
+    Object.entries(c.wagonDist).forEach(([w,kg])=>{
+      avail[`${c.id}|${w}`]={wagon:w,type:c.type,kg:parseFloat(kg)||0,ckEnd:c.end,used:0};
+    });
+  });
+  (L.shredding||[]).filter(r=>r.date===today).forEach(s=>{
+    if(Array.isArray(s._shTouches)&&s._shTouches.length){
+      s._shTouches.forEach(t=>{
+        const key=`${t.ckId}|${t.wagon}`;
+        if(avail[key]){avail[key].used+=parseFloat(t.deductKg)||0;return;}
+        const k=Object.keys(avail).find(k=>avail[k].wagon===String(t.wagon));
+        if(k)avail[k].used+=parseFloat(t.deductKg)||0;
+      });
+    }else if(s.wagonInDist){
+      Object.entries(s.wagonInDist).forEach(([w,kg])=>{
+        const k=Object.keys(avail).find(k=>avail[k].wagon===w);
+        if(k)avail[k].used+=parseFloat(kg)||0;
+      });
+    }
+  });
+  const res=[];
+  Object.entries(avail).forEach(([key,v])=>{const remain=v.kg-v.used;if(remain>0.01)res.push({...v,remain});});
+  res.sort((a,b)=>(a.ckEnd||'').localeCompare(b.ckEnd||''));
+  return res;
+}
+(async()=>{
+  const out=document.getElementById('out');
+  try{
+    const today=new Date().toISOString().slice(0,10); // 기기 날짜
+    const [cooking,shredding]=await Promise.all([fetchColl('cooking'),fetchColl('shredding')]);
+    const L={cooking,shredding};
+    const avail=calcAvail(L,today);
+    const byType={};
+    avail.forEach(a=>{byType[a.type]=(byType[a.type]||0)+a.remain;});
+    const ckN=cooking.filter(c=>c.date===today).length;
+    const shN=shredding.filter(s=>s.date===today).length;
+    let html='';
+    const types=Object.keys(byType);
+    if(!types.length){
+      html='<div class="big"><div class="label">남은 잔량</div><div class="val">0 kg</div></div>';
+    }else{
+      types.forEach(t=>{
+        html+=`<div class="big"><div class="label">${t} 잔량 (정상값)</div><div class="val">${byType[t].toFixed(2)} kg</div></div>`;
+      });
+    }
+    html+='<div class="box"><h2>와건별 잔량</h2>';
+    if(avail.length){avail.forEach(a=>{html+=`<span class="chip">와건${a.wagon} (${a.type}) ${a.remain.toFixed(2)}kg</span>`;});}
+    else{html+='<span class="muted">남은 와건 없음</span>';}
+    html+='</div>';
+    html+=`<div class="box"><h2>검증 정보</h2>
+      <div class="row">기준 날짜(기기): <b>${today}</b></div>
+      <div class="row">오늘 자숙 회차: <b>${ckN}건</b></div>
+      <div class="row">오늘 파쇄 기록: <b>${shN}건</b></div>
+      <div class="row muted">이 값이 메인 화면과 다르면, 메인 화면이 옛 프로그램을 돌리는 것입니다.</div>
+      </div>`;
+    out.innerHTML=html;
+    document.getElementById('ts').textContent='읽은 시각 '+new Date().toLocaleString('ko-KR');
+  }catch(e){
+    out.innerHTML='<div class="box err">읽기 실패: '+(e&&e.message||e)+'</div>';
+  }
+})();
+</script>
+</body>
+</html>
