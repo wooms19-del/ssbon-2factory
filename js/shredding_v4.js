@@ -757,6 +757,7 @@ function sh2RenderTodayList(){
       const kgwN = parseFloat(r.kgWashed)||0;
       const y1 = kgInN > 0 ? (kgN / kgInN * 100).toFixed(1) : '-';
       const y2 = kgInN > 0 ? (kgwN / kgInN * 100).toFixed(1) : '-';
+      const inc = (kgwN > 0 && kgN > 0) ? ((kgwN - kgN) / kgN * 100).toFixed(2) : null;
       return `
       <div id="sh2RecCard_${r.id}" style="border:1px solid var(--g2);border-radius:8px;padding:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -770,7 +771,7 @@ function sh2RenderTodayList(){
           </div>
         </div>
         <div style="font-size:12px;color:var(--g6)">
-          투입 ${kgInN.toFixed(2)}kg → 산출(세척전) ${kgN.toFixed(2)}kg (수율 ${y1}%)${kgwN > 0 ? ` · 세척후 ${kgwN.toFixed(2)}kg (수율 ${y2}%)` : ''} · 비가식부 ${(parseFloat(r.waste)||0).toFixed(2)}kg · 인원 ${r.workers||0}명
+          투입 ${kgInN.toFixed(2)}kg → 산출(세척전) ${kgN.toFixed(2)}kg (수율 ${y1}%)${kgwN > 0 ? ` · 세척후 ${kgwN.toFixed(2)}kg (수율 ${y2}%)${inc !== null ? ` · <span style="color:#1d4ed8;font-weight:700">세척 증가율 +${inc}%</span>` : ''}` : ''} · 비가식부 ${(parseFloat(r.waste)||0).toFixed(2)}kg · 인원 ${r.workers||0}명
         </div>
       </div>
     `;
