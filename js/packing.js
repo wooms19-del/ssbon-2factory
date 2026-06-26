@@ -9,6 +9,16 @@ var _pkRowIdx = 0;
 // → 파쇄에서 산출된 와건 - 포장에서 사용된 양 = 잔량
 // ============================================================
 
+// ★ 포장으로 넘기는 산출 무게: 세척후(kgWashed) 입력됐으면 세척후, 없으면 세척전(kg). wagonOutDist/cartOutDist는 세척전 기준 저장이라 비율로 스케일
+function pkEffOut(sh){
+  const kg = parseFloat(sh.kg)||0;
+  const kgW = parseFloat(sh.kgWashed)||0;
+  const ratio = (kgW > 0 && kg > 0) ? (kgW / kg) : 1;
+  const effKg = (kgW > 0) ? kgW : kg;
+  const scale = (dist) => { const o = {}; if(dist) Object.entries(dist).forEach(([k,v]) => { o[k] = (parseFloat(v)||0) * ratio; }); return o; };
+  return { effKg, ratio, wagonOutDist: scale(sh.wagonOutDist), cartOutDist: scale(sh.cartOutDist) };
+}
+
 // ★ 파쇄 end 시간순으로 와건 목록 만들기 (공통 함수 - renderPkWagonList + addPkMachRow가 같은 순서 사용)
 function getPkWagonsInOrder(){
   const today = tod();
@@ -26,13 +36,14 @@ function getPkWagonsInOrder(){
   // 각 파쇄 record에서 와건 추출 (record의 end 시간 = 그 와건의 end 시간)
   const seen = new Set();
   shList.forEach(sh => {
+    const eff = pkEffOut(sh);
     let wagonList = [];
     if(sh.wagonOutDist){
-      wagonList = Object.entries(sh.wagonOutDist).map(([w, kg]) => ({w, kg: parseFloat(kg)||0}));
+      wagonList = Object.entries(eff.wagonOutDist).map(([w, kg]) => ({w, kg: parseFloat(kg)||0}));
     } else if(sh.wagonOut){
       const ws = (sh.wagonOut||'').split(',').map(x => x.trim()).filter(Boolean);
       if(ws.length){
-        const each = (parseFloat(sh.kg)||0) / ws.length;
+        const each = eff.effKg / ws.length;
         wagonList = ws.map(w => ({w, kg: each}));
       }
     }
@@ -138,21 +149,22 @@ function addPkMachRow(){
     const d = String(r.date||'').slice(0,10);
     return d===today && (r.wagonOut || r.cartOut) && r.end;
   }).forEach(sh=>{
+    const eff = pkEffOut(sh);
     if(sh.wagonOutDist){
-      Object.entries(sh.wagonOutDist).forEach(([w,kg])=>{
+      Object.entries(eff.wagonOutDist).forEach(([w,kg])=>{
         shWagonsMap[w] = (shWagonsMap[w]||0) + (parseFloat(kg)||0);
       });
     } else if(sh.wagonOut){
-      // 호환: wagonOutDist 없으면 sh.kg을 와건들에 균등 분배 (추정)
+      // 호환: wagonOutDist 없으면 산출무게를 와건들에 균등 분배 (추정)
       const ws = (sh.wagonOut||'').split(',').map(x=>x.trim()).filter(Boolean);
       if(ws.length){
-        const each = (parseFloat(sh.kg)||0)/ws.length;
+        const each = eff.effKg/ws.length;
         ws.forEach(w => { shWagonsMap[w] = (shWagonsMap[w]||0) + each; });
       }
     }
     // 카트는 cartOutDist만 인식 (균등 폴백 없음 - 신규 필드라)
     if(sh.cartOutDist){
-      Object.entries(sh.cartOutDist).forEach(([c,kg])=>{
+      Object.entries(eff.cartOutDist).forEach(([c,kg])=>{
         shCartsMap[c] = (shCartsMap[c]||0) + (parseFloat(kg)||0);
       });
     }
@@ -647,14 +659,15 @@ function pkGetWagonTotal(wNum, kind){
   // 없으면 직접 계산
   let total = 0;
   (L.shredding||[]).forEach(sh => {
+    const eff = pkEffOut(sh);
     if(kind === 'cart'){
-      if(sh.cartOutDist && sh.cartOutDist[wNum]) total += parseFloat(sh.cartOutDist[wNum])||0;
+      if(sh.cartOutDist && eff.cartOutDist[wNum]) total += parseFloat(eff.cartOutDist[wNum])||0;
       // 카트는 균등분배 폴백 없음
     } else {
-      if(sh.wagonOutDist && sh.wagonOutDist[wNum]) total += parseFloat(sh.wagonOutDist[wNum])||0;
+      if(sh.wagonOutDist && eff.wagonOutDist[wNum]) total += parseFloat(eff.wagonOutDist[wNum])||0;
       else if((sh.wagonOut||'').split(',').map(x=>x.trim()).includes(wNum)){
         const ws = (sh.wagonOut||'').split(',').map(x=>x.trim()).filter(Boolean);
-        total += (parseFloat(sh.kg)||0)/ws.length;
+        total += eff.effKg/ws.length;
       }
     }
   });
