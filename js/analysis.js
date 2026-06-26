@@ -2707,6 +2707,7 @@ function renderDailyFromLocal_(d){
       const _wr = (_sg && _sg.kgWashed>0 && _sg.kg>0) ? _sg.kgWashed/_sg.kg : null;
       if(_wr) pkOYldW = (p.out/p.origKg*100) * _wr;
     }
+    const pkYldRise = (pkOYldW!==null && oYld!==null) ? (pkOYldW - oYld) : null;
     const borderTop = showName && procRows.indexOf(p)>0 ? 'border-top:2px solid var(--g2);' : '';
     // 생산성: 공정별 측정 기준 (작업자가 통제하는 것 기준)
     //  - 전처리: 투입(p.in = rmKg, 작업자가 받은 양)
@@ -2738,7 +2739,7 @@ function renderDailyFromLocal_(d){
       <td style="text-align:center;font-weight:600">${p.noMeat?'-':(pYld!==null?pYld.toFixed(1)+'%':'-')}${hasW&&pYldW!==null?'<br><span style="font-size:11px;color:#1d4ed8">세척후 '+pYldW.toFixed(1)+'%</span>':''}</td>
       <td style="text-align:center">${p.h.toFixed(1)}h</td>
       <td style="text-align:center">${p.workers||'-'}명</td>
-      <td style="text-align:center;font-size:12px;color:var(--g6)">${productivity}${washInc!==null?'<br><span style="font-size:11px;color:#1d4ed8;font-weight:600">세척 증감률 +'+washInc.toFixed(1)+'%</span>':''}</td>
+      <td style="text-align:center;font-size:12px;color:var(--g6)">${productivity}${washInc!==null?'<br><span style="font-size:11px;color:#1d4ed8;font-weight:600">세척 증감률 +'+washInc.toFixed(1)+'%</span>':''}${pkYldRise!==null?'<br><span style="font-size:11px;color:#1d4ed8;font-weight:600">세척후 수율 +'+pkYldRise.toFixed(1)+'%P</span>':''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="10" style="text-align:center;padding:1rem;color:var(--g4)">데이터 없음</td></tr>';
 
