@@ -2492,8 +2492,9 @@ function renderDailyFromLocal_(d){
       }
     }
     if(!type) type = '미분류';
-    if(!shGroup[type]) shGroup[type] = {kg:0, mh:0, h:0, _recs:[]};
+    if(!shGroup[type]) shGroup[type] = {kg:0, kgWashed:0, mh:0, h:0, _recs:[]};
     shGroup[type].kg += parseFloat(r.kg)||0;
+    shGroup[type].kgWashed += parseFloat(r.kgWashed)||0;
     shGroup[type].mh += dur(r.start,r.end)*(parseFloat(r.workers)||0);
     shGroup[type].h += dur(r.start,r.end);
     shGroup[type]._recs.push(r);
@@ -2545,7 +2546,7 @@ function renderDailyFromLocal_(d){
       const shInKg = r2((ckGroup[t]?.kg) ?? ckKg);
       const shWaste = r2((shRecs_t).reduce((s,r)=>s+(parseFloat(r.waste)||0),0));
       const shWorkers = Math.round(shRecs_t.reduce((s,r)=>s+(parseFloat(r.workers)||0),0) / Math.max(shRecs_t.length,1));
-      procRows.push({name:'파쇄', type:t, origKg:shOrigKg, in:shInKg, out:r2(shGroup[t].kg), waste:shWaste, mh:r2(shGroup[t].mh), h:shH, workers:shWorkers});
+      procRows.push({name:'파쇄', type:t, origKg:shOrigKg, in:shInKg, out:r2(shGroup[t].kg), outWashed:r2(shGroup[t].kgWashed), waste:shWaste, mh:r2(shGroup[t].mh), h:shH, workers:shWorkers});
     }
   });
 
@@ -2694,6 +2695,9 @@ function renderDailyFromLocal_(d){
     if(showName) _prevName = p.name;
     const oYld = p.origKg>0 ? p.out/p.origKg*100 : null;
     const pYld = p.in>0 ? p.out/p.in*100 : null;
+    const hasW = (p.outWashed||0) > 0;
+    const oYldW = (hasW && p.origKg>0) ? p.outWashed/p.origKg*100 : null;
+    const pYldW = (hasW && p.in>0) ? p.outWashed/p.in*100 : null;
     const borderTop = showName && procRows.indexOf(p)>0 ? 'border-top:2px solid var(--g2);' : '';
     // 생산성: 공정별 측정 기준 (작업자가 통제하는 것 기준)
     //  - 전처리: 투입(p.in = rmKg, 작업자가 받은 양)
@@ -2719,10 +2723,10 @@ function renderDailyFromLocal_(d){
       <td style="text-align:left;font-weight:600">${showName?p.name:''}</td>
       <td style="text-align:center;color:var(--g6);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.type||'-'}">${p.type||'-'}</td>
       <td style="text-align:center">${p.in>0?p.in.toFixed(2):'-'}${p.boxes?'<br><span style="font-size:11px;color:var(--g5)">'+p.boxes+'박스</span>':''}</td>
-      <td style="text-align:center;font-weight:600">${p.noMeat?'-':p.out.toFixed(2)}</td>
+      <td style="text-align:center;font-weight:600">${p.noMeat?'-':p.out.toFixed(2)}${hasW?'<br><span style="font-size:11px;color:#1d4ed8;font-weight:600">세척후 '+p.outWashed.toFixed(2)+'</span>':''}</td>
       <td style="text-align:center;color:var(--d);font-size:12px">${p.waste>0?p.waste.toFixed(2)+'kg'+(p.in>0?' ('+(p.waste/p.in*100).toFixed(1)+'%)':''):'-'}</td>
-      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(oYld!==null?oYld.toFixed(1)+'%':'-')}</td>
-      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(pYld!==null?pYld.toFixed(1)+'%':'-')}</td>
+      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(oYld!==null?oYld.toFixed(1)+'%':'-')}${hasW&&oYldW!==null?'<br><span style="font-size:11px;color:#1d4ed8">세척후 '+oYldW.toFixed(1)+'%</span>':''}</td>
+      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(pYld!==null?pYld.toFixed(1)+'%':'-')}${hasW&&pYldW!==null?'<br><span style="font-size:11px;color:#1d4ed8">세척후 '+pYldW.toFixed(1)+'%</span>':''}</td>
       <td style="text-align:center">${p.h.toFixed(1)}h</td>
       <td style="text-align:center">${p.workers||'-'}명</td>
       <td style="text-align:center;font-size:12px;color:var(--g6)">${productivity}</td>
