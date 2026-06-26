@@ -2699,6 +2699,14 @@ function renderDailyFromLocal_(d){
     const oYldW = (hasW && p.origKg>0) ? p.outWashed/p.origKg*100 : null;
     const pYldW = (hasW && p.in>0) ? p.outWashed/p.in*100 : null;
     const washInc = (hasW && p.out>0) ? (p.outWashed - p.out)/p.out*100 : null;
+    // 포장: 세척후 원육수율 (= 포장산출 ÷ 실제 원육, 다른 공정과 같은 원육 기준). 현재 포장 원육이 세척후 비율만큼 부풀어 있어 그만큼 보정
+    let pkOYldW = null;
+    if(p.name==='포장' && !p.noMeat && p.origKg>0){
+      const _mt = String(p.type||'').split('·')[0].trim();
+      const _sg = shGroup[_mt];
+      const _wr = (_sg && _sg.kgWashed>0 && _sg.kg>0) ? _sg.kgWashed/_sg.kg : null;
+      if(_wr) pkOYldW = (p.out/p.origKg*100) * _wr;
+    }
     const borderTop = showName && procRows.indexOf(p)>0 ? 'border-top:2px solid var(--g2);' : '';
     // 생산성: 공정별 측정 기준 (작업자가 통제하는 것 기준)
     //  - 전처리: 투입(p.in = rmKg, 작업자가 받은 양)
@@ -2726,7 +2734,7 @@ function renderDailyFromLocal_(d){
       <td style="text-align:center">${p.in>0?p.in.toFixed(2):'-'}${p.boxes?'<br><span style="font-size:11px;color:var(--g5)">'+p.boxes+'박스</span>':''}</td>
       <td style="text-align:center;font-weight:600">${p.noMeat?'-':p.out.toFixed(2)}${hasW?'<br><span style="font-size:11px;color:#1d4ed8;font-weight:600">세척후 '+p.outWashed.toFixed(2)+'</span>':''}</td>
       <td style="text-align:center;color:var(--d);font-size:12px">${p.waste>0?p.waste.toFixed(2)+'kg'+(p.in>0?' ('+(p.waste/p.in*100).toFixed(1)+'%)':''):'-'}</td>
-      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(oYld!==null?oYld.toFixed(1)+'%':'-')}${hasW&&oYldW!==null?'<br><span style="font-size:11px;color:#1d4ed8">세척후 '+oYldW.toFixed(1)+'%</span>':''}</td>
+      <td style="text-align:center;font-weight:600">${p.noMeat?'-':(oYld!==null?oYld.toFixed(1)+'%':'-')}${hasW&&oYldW!==null?'<br><span style="font-size:11px;color:#1d4ed8">세척후 '+oYldW.toFixed(1)+'%</span>':''}${pkOYldW!==null?'<br><span style="font-size:11px;color:#1d4ed8">세척후 '+pkOYldW.toFixed(1)+'%</span>':''}</td>
       <td style="text-align:center;font-weight:600">${p.noMeat?'-':(pYld!==null?pYld.toFixed(1)+'%':'-')}${hasW&&pYldW!==null?'<br><span style="font-size:11px;color:#1d4ed8">세척후 '+pYldW.toFixed(1)+'%</span>':''}</td>
       <td style="text-align:center">${p.h.toFixed(1)}h</td>
       <td style="text-align:center">${p.workers||'-'}명</td>
