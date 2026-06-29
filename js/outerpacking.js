@@ -574,6 +574,22 @@ function renderOpDone(list) {
             return Object.entries(matDefects).map(([t,v])=>`<div><span style="color:var(--g5);font-size:12px">${t} 불량</span><br><b style="color:var(--w)">${v.toLocaleString()}</b></div>`).join('');
           })()}
         </div>
+        ${(()=>{
+          const wl=item.workLogs||[];
+          if(!wl.length) return '';
+          const rows=wl.map(w=>`
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0">
+              <span style="color:var(--g5);min-width:96px">${w.start} ~ ${w.end}</span>
+              <span>${w.workers}명</span>
+              <span style="margin-left:auto;color:var(--g5)">${r2(dur(w.start,w.end)*(parseFloat(w.workers)||0)).toFixed(2)}인시</span>
+            </div>`).join('');
+          const tot=wl.reduce((s,w)=>s+dur(w.start,w.end)*(parseFloat(w.workers)||0),0);
+          return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px dashed var(--g3)">
+            <div style="font-size:11px;font-weight:500;color:var(--g5);margin-bottom:4px">작업시간 기록</div>
+            ${rows}
+            <div style="display:flex;justify-content:flex-end;font-size:12px;font-weight:500;margin-top:2px">합계 ${r2(tot).toFixed(2)}인시</div>
+          </div>`;
+        })()}
         ${note !== '-' ? `<div style="margin-top:8px;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--g5)">📝 ${note}</div>` : ''}
         <div style="margin-top:10px;text-align:right">
           <button class="btn bo bsm" onclick="event.stopPropagation();toggleOpEdit(${i})" style="font-size:12px;padding:4px 12px">✏️ 수정</button>
