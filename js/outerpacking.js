@@ -592,6 +592,11 @@ function renderOpDone(list) {
             <div><label style="font-size:11px;color:var(--g5)">샘플</label><br><input class="fc" type="number" id="oe_sample_${i}" value="${item.sample||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
           </div>
           <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--g5)">비고</label><br><input class="fc" type="text" id="oe_note_${i}" value="${(item.note||'').replace(/"/g,'&quot;')}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
+          <div style="margin-bottom:10px;padding-top:8px;border-top:0.5px dashed var(--g3)">
+            <label style="font-size:11px;color:var(--g5)">작업시간 기록 <span style="color:var(--g4)">· 시작 ~ 종료 · 인원 (생산성 계산용)</span></label>
+            <div id="oe_wl_${i}" style="margin-top:6px">${(item.workLogs||[]).map(w=>_opWlRow(w.start,w.end,parseInt(w.workers)||'')).join('')}</div>
+            <button class="btn bo" onclick="opEditAddWl(${i})" style="font-size:11px;padding:3px 10px;margin-top:2px">+ 시간대 추가</button>
+          </div>
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" onclick="toggleOpEdit(${i})" style="font-size:12px;padding:4px 12px">취소</button>
             <button class="btn bp bsm" onclick="saveOpEdit('${item.fbId}',${i})" style="font-size:12px;padding:4px 12px">💾 저장</button>
@@ -616,6 +621,22 @@ function toggleOpEdit(i) {
   if(el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
+// 외포장 수정 폼: 작업시간 기록 행 한 줄 HTML
+function _opWlRow(s, e, w){
+  return `<div class="oe-wl-row" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+    <input class="fc oe-wl-s" type="text" inputmode="decimal" maxlength="5" value="${s||''}" placeholder="시작" style="width:70px;flex:none;text-align:center;padding:4px 6px">
+    <span style="color:var(--g4)">~</span>
+    <input class="fc oe-wl-e" type="text" inputmode="decimal" maxlength="5" value="${e||''}" placeholder="종료" style="width:70px;flex:none;text-align:center;padding:4px 6px">
+    <input class="fc oe-wl-w" type="number" value="${w||''}" placeholder="인원" style="width:56px;flex:none;text-align:right;padding:4px 6px">
+    <span style="font-size:11px;color:var(--g5)">명</span>
+    <span style="color:var(--g4);cursor:pointer;padding:0 6px;font-size:13px" onclick="this.closest('.oe-wl-row').remove()">✕</span>
+  </div>`;
+}
+function opEditAddWl(i){
+  const c = document.getElementById('oe_wl_'+i);
+  if(c) c.insertAdjacentHTML('beforeend', _opWlRow('','',''));
+}
+
 async function saveOpEdit(fbId, i) {
   if(!fbId){ toast('Firebase ID 없음','d'); return; }
   const g = id => document.getElementById(id);
@@ -633,6 +654,21 @@ async function saveOpEdit(fbId, i) {
   };
   // defectRate 재계산
   fields.defectRate = (fields.innerEa+fields.productDefect) > 0 ? parseFloat((fields.productDefect/(fields.innerEa+fields.productDefect)*100).toFixed(2)) : 0;
+  // 작업시간 기록(workLogs) 수집 — 시작/종료/인원이 모두 유효한 행만
+  const _normT = v => {
+    v = String(v||'').trim().replace(/[^\d:]/g,'');
+    if(/^\d{3,4}$/.test(v)) v = v.padStart(4,'0').slice(0,2)+':'+v.padStart(4,'0').slice(2);
+    if(/^\d{1,2}:\d{2}$/.test(v)){ const p=v.split(':'); if(+p[0]<24 && +p[1]<60) return p[0].padStart(2,'0')+':'+p[1]; }
+    return '';
+  };
+  const _wl = [];
+  document.querySelectorAll('#oe_wl_'+i+' .oe-wl-row').forEach(row => {
+    const s = _normT((row.querySelector('.oe-wl-s')||{}).value);
+    const e = _normT((row.querySelector('.oe-wl-e')||{}).value);
+    const w = parseInt((row.querySelector('.oe-wl-w')||{}).value)||0;
+    if(s && e && w>0) _wl.push({ start:s, end:e, workers:w });
+  });
+  fields.workLogs = _wl;
   try {
     const fsFields = {};
     Object.entries(fields).forEach(([k,v]) => {
