@@ -561,12 +561,15 @@
       var prod = r.product||'';
       if(!dt||!prod) return;
       var k = dt+'|'+prod;
-      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0, types:{}, pouch:0, sauceKg:0, subKg:0, subName:''};
+      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0, mins:[], types:{}, pouch:0, sauceKg:0, subKg:0, subName:''};
       byDP[k].ea += _num(r.ea);
       var h = _hoursFromSE(r.start, r.end);
       var w = _num(r.workers);
       byDP[k].hours += h;
       byDP[k].personHours += h*w;
+      // 실제 일한 시간(합집합) 계산용 — 각 기록의 시간 구간을 분 단위로 수집
+      var _sM=_t2m(r.start), _eM=_t2m(r.end); if(_eM<_sM) _eM+=1440;
+      if(_eM>_sM) byDP[k].mins.push([_sM,_eM]);
       byDP[k].pouch += _num(r.pouch);
       byDP[k].sauceKg += _num(r.sauceKg);
       byDP[k].subKg += _num(r.subKg);
@@ -577,6 +580,18 @@
     });
     Object.keys(byDP).forEach(function(k){
       var p = byDP[k];
+      // ★ 작업시간 = 실제 일한 시간(구간 합집합: 겹치면 1번만, 빈 시간 제외)
+      //   작업인원 = 인시 ÷ 실제 일한 시간 → 2대 동시면 합산 인원, 띄엄띄엄이면 그대로
+      //   (인시/생산성은 안 바뀜, 인원·시간 표시만 정확해짐)
+      var _iv = (p.mins||[]).slice().sort(function(a,b){ return a[0]-b[0]; });
+      var _u=0, _cs=null, _ce=null;
+      _iv.forEach(function(sg){
+        if(_ce===null){ _cs=sg[0]; _ce=sg[1]; }
+        else if(sg[0] <= _ce){ if(sg[1]>_ce) _ce=sg[1]; }
+        else { _u += _ce-_cs; _cs=sg[0]; _ce=sg[1]; }
+      });
+      if(_ce!==null) _u += _ce-_cs;
+      if(_u>0) p.hours = _u/60;
       p.workers = p.hours>0 ? p.personHours/p.hours : 0;
       var oe = opMap[k] || 0;
       p.eaDisp = oe>0 ? oe : p.ea;
