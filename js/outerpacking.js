@@ -584,13 +584,11 @@ function renderOpDone(list) {
               <span style="margin-left:auto;color:var(--g5)">${r2(dur(w.start,w.end)*(parseFloat(w.workers)||0)).toFixed(2)}인시</span>
             </div>`).join('');
           const tot=wl.reduce((s,w)=>s+dur(w.start,w.end)*(parseFloat(w.workers)||0),0);
-          const totH=wl.reduce((s,w)=>s+dur(w.start,w.end),0);
           return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px dashed var(--g3)">
             <div style="font-size:11px;font-weight:500;color:var(--g5);margin-bottom:4px">작업시간 기록</div>
             ${rows}
-            <div style="display:flex;justify-content:flex-end;gap:14px;font-size:12px;margin-top:2px">
-              <span style="color:var(--g5)">총 시간 <b style="color:var(--g6)">${r2(totH).toFixed(2)}시간</b></span>
-              <span style="font-weight:500">합계 ${r2(tot).toFixed(2)}인시</span>
+            <div style="display:flex;justify-content:flex-end;font-size:12px;font-weight:600;margin-top:2px">
+              총 시간 ${r2(tot).toFixed(2)}시간 <span style="color:var(--g4);font-weight:400;margin-left:4px">(인원×시간 합)</span>
             </div>
           </div>`;
         })()}
