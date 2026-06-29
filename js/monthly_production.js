@@ -465,11 +465,19 @@
     // 외포장 EA + 박스 맵
     var opMap = {};
     var opBoxMap = {};
+    var opPHMap = {};    // 외포장 인시 (Σ 시간×인원)
+    var opHoursMap = {}; // 외포장 작업시간 합
     opReal.forEach(function(r){
       var k = String(r.date||'').slice(0,10)+'|'+(r.product||'');
       opMap[k] = (opMap[k]||0) + opEa(r);
       // 박스 사용량 = outerBoxes (정상) + boxDefect (불량 박스도 사용한 거)
       opBoxMap[k] = (opBoxMap[k]||0) + (parseInt(r.outerBoxes,10)||0) + (parseInt(r.boxDefect,10)||0);
+      // 작업시간 기록(workLogs) → 인시·작업시간
+      var wl = Array.isArray(r.workLogs) ? r.workLogs : [];
+      wl.forEach(function(w){
+        var h = (_t2m(w.end) - _t2m(w.start)) / 60;
+        if(h > 0){ opHoursMap[k] = (opHoursMap[k]||0) + h; opPHMap[k] = (opPHMap[k]||0) + h*(parseFloat(w.workers)||0); }
+      });
     });
 
     // 부위(type) 추출 헬퍼
@@ -731,6 +739,10 @@
           shKg: _r2(alloc.shKg), shHours: _r2(alloc.shHours), shWorkers: r1(alloc.shWorkers), shPersonHours: _r2(alloc.shPersonHours),
           pkEa: p.eaDisp, pkEaSrc: p.eaSrc, pkEaInner: p.ea,
           pkHours: _r2(p.hours), pkWorkers: r1(p.workers), pkPersonHours: _r2(p.personHours),
+          opEa: opMap[dt+'|'+p.product]||0,
+          opHours: _r2(opHoursMap[dt+'|'+p.product]||0),
+          opWorkers: opHoursMap[dt+'|'+p.product]>0 ? r1((opPHMap[dt+'|'+p.product]||0)/opHoursMap[dt+'|'+p.product]) : 0,
+          opPersonHours: _r2(opPHMap[dt+'|'+p.product]||0),
           kgea: kgea, kgTot: kgTot,
           type: p.type || (noMeat ? '무육' : ''),
           typeList: p.typeList || [],
@@ -801,7 +813,11 @@
           pouchUsed: Math.round((p.pouch||0) * ratio),
           sauceKgUsed: _r2((p.sauceKg||0) * ratio),
           subKgUsed: _r2((p.subKg||0) * ratio),
-          boxUsed: i===0 ? (opBoxMap[dt+'|'+p.product] || 0) : 0
+          boxUsed: i===0 ? (opBoxMap[dt+'|'+p.product] || 0) : 0,
+          opEa: i===0 ? (opMap[dt+'|'+p.product]||0) : 0,
+          opHours: i===0 ? _r2(opHoursMap[dt+'|'+p.product]||0) : 0,
+          opWorkers: (i===0 && opHoursMap[dt+'|'+p.product]>0) ? r1((opPHMap[dt+'|'+p.product]||0)/opHoursMap[dt+'|'+p.product]) : 0,
+          opPersonHours: i===0 ? _r2(opPHMap[dt+'|'+p.product]||0) : 0
         });
       });
     });
@@ -838,6 +854,7 @@
       }, 0);
       // 그룹 합산 포장 인시 (생산성 포장/전체 그룹 기준 계산용)
       var grpPkPH = grp.reduce(function(s,r){ return s + (r.pkPersonHours||0); }, 0);
+      var grpOpPH = grp.reduce(function(s,r){ return s + (r.opPersonHours||0); }, 0);
       grp.forEach(function(r, i){
         r._grpSize  = grp.length;
         r._grpFirst = (i===0);
@@ -875,6 +892,7 @@
             r._grpCkPH = ckItem.personHours;  // 그룹 자숙 인시 합
             r._grpShPH = shItem.personHours;  // 그룹 파쇄 인시 합
             r._grpPkPH = grpPkPH;             // 그룹 포장 인시 합 (제품들 합산)
+            r._grpOpPH = grpOpPH;             // 그룹 외포장 인시 합
             // ★ 공유 마커 (화면에서 같은 배경색 + 툴팁)
             r._sharedKey = r.date + '|' + (r.type||'');
             r._sharedTotal = rmTotal;
@@ -902,6 +920,7 @@
             r._grpCkPH = ckItem.personHours;
             r._grpShPH = shItem.personHours;
             r._grpPkPH = grpPkPH;
+            r._grpOpPH = grpOpPH;
           } else {
             __PART_KEYS.forEach(function(k){ r[k] = 0; });
           }
@@ -933,9 +952,11 @@
                ckKg:0,ckHours:0,ckWorkers:0,ckPersonHours:0,
                shKg:0,shHours:0,shWorkers:0,shPersonHours:0,
                pkEa:0,pkHours:0,pkWorkers:0,pkPersonHours:0,
+               opEa:0,opHours:0,opWorkers:0,opPersonHours:0,
                meatKg:0, prodKg:0,
                pouchUsed:0, sauceKgUsed:0, subKgUsed:0, boxUsed:0};
     var ratioKeys = ['prodPp','prodCk','prodSh','prodPk','prodAll',
+                     'prodOp',
                      'yieldRmPp','yieldRmCk','yieldRmSh','yieldRmPk',
                      'yieldPp','yieldCk','yieldSh','yieldPk'];
     var ratioBucket = {};
@@ -952,6 +973,8 @@
       sum.shPersonHours += r.shPersonHours||0;
       sum.pkEa += r.pkEa||0; sum.pkHours += r.pkHours||0; sum.pkWorkers += r.pkWorkers||0;
       sum.pkPersonHours += r.pkPersonHours||0;
+      sum.opEa += r.opEa||0; sum.opHours += r.opHours||0; sum.opWorkers += r.opWorkers||0;
+      sum.opPersonHours += r.opPersonHours||0;
       sum.meatKg += (r.meatKg != null && r.meatKg !== 0) ? r.meatKg : (r.pkEa||0) * (r.kgea||0);
       sum.prodKg += (r.prodKg != null && r.prodKg !== 0) ? r.prodKg : (r.pkEa||0) * (r.kgTot||0);
       sum.pouchUsed += r.pouchUsed||0;
@@ -969,6 +992,7 @@
     sum.ckTotal = sum.ckPersonHours;
     sum.shTotal = sum.shPersonHours;
     sum.pkTotal = sum.pkPersonHours;
+    sum.opTotal = sum.opPersonHours;
     ratioKeys.forEach(function(k){
       var arr = ratioBucket[k];
       sum[k] = arr.length ? arr.reduce(function(a,b){return a+b;},0)/arr.length : 0;
@@ -1027,6 +1051,10 @@
       ['pkHours',   'hours',   '내포장\n작업시간'],
       ['pkWorkers', 'workers', '내포장\n작업인원'],
       ['pkPersonHours','hours','내포장\n총작업(인시)'],
+      ['opEa',      'base',    '외포장\n(EA)'],
+      ['opHours',   'hours',   '외포장\n작업시간'],
+      ['opWorkers', 'workers', '외포장\n작업인원(평균)'],
+      ['opPersonHours','hours','외포장\n총작업(인시)'],
       ['meatKg',    'base',    '완제품 고기\n중량(KG)'],
       ['prodKg',    'base',    '완제품 중량\n(KG)'],
       ['pouchUsed', 'usage',   '파우치\n사용량(EA)'],
@@ -1037,6 +1065,7 @@
       ['prodCk',    'prod',    '생산성\n자숙'],
       ['prodSh',    'prod',    '생산성\n파쇄'],
       ['prodPk',    'prod',    '생산성\n포장'],
+      ['prodOp',    'prod',    '생산성\n외포장'],
       ['prodAll',   'prod',    '생산성\n전체'],
       ['yieldRmPp', 'yield',   '원료육수율\n전처리'],
       ['yieldRmCk', 'yield',   '원료육수율\n자숙'],
@@ -1059,6 +1088,7 @@
       var ckT = (r._grpCkPH !== undefined) ? r._grpCkPH : (r.ckPersonHours || 0);
       var shT = (r._grpShPH !== undefined) ? r._grpShPH : (r.shPersonHours || 0);
       var pkT = (r._grpPkPH !== undefined) ? r._grpPkPH : (r.pkPersonHours || 0);
+      var opT = (r._grpOpPH !== undefined) ? r._grpOpPH : (r.opPersonHours || 0);
       var rmForProd = (r._grpRmTotal !== undefined) ? r._grpRmTotal : (r.rmKg || 0);
       var meatKg = r.pkEa * (r.kgea||0);
       var prodKg = r.pkEa * (r.kgTot||0);
@@ -1071,6 +1101,7 @@
         prodCk: rmForProd&&ckT?_r2(rmForProd/ckT):0,
         prodSh: rmForProd&&shT?_r2(rmForProd/shT):0,
         prodPk: rmForProd&&pkT?_r2(rmForProd/pkT):0,
+        prodOp: rmForProd&&opT?_r2(rmForProd/opT):0,
         prodAll: rmForProd&&(ppT+ckT+shT+pkT)?_r2(rmForProd/(ppT+ckT+shT+pkT)):0,
         yieldRmPp: rm?_r2(r.ppKg/rm*100)/100:0,
         yieldRmCk: rm?_r2(r.ckKg/rm*100)/100:0,
@@ -1130,6 +1161,7 @@
           ckKg:0, ckHours:0, ckPersonHours:0,
           shKg:0, shHours:0, shPersonHours:0,
           pkEa:0, pkHours:0, pkPersonHours:0,
+          opEa:0, opHours:0, opPersonHours:0,
           meatKg:0, prodKg:0,
           pouchUsed:0, sauceKgUsed:0, subKgUsed:0, boxUsed:0,
           kgea: sumList[0] ? sumList[0].kgea : 0,
@@ -1142,6 +1174,7 @@
           sub.ckKg += r.ckKg||0; sub.ckHours += r.ckHours||0; sub.ckPersonHours += r.ckPersonHours||0;
           sub.shKg += r.shKg||0; sub.shHours += r.shHours||0; sub.shPersonHours += r.shPersonHours||0;
           sub.pkEa += r.pkEa||0; sub.pkHours += r.pkHours||0; sub.pkPersonHours += r.pkPersonHours||0;
+          sub.opEa += r.opEa||0; sub.opHours += r.opHours||0; sub.opPersonHours += r.opPersonHours||0;
           sub.meatKg += r.meatKg||0; sub.prodKg += r.prodKg||0;
           sub.pouchUsed += r.pouchUsed||0;
           sub.sauceKgUsed += r.sauceKgUsed||0;
@@ -1153,6 +1186,8 @@
         delete sub._workDays;
         var rm = sub.rmKg;
         var ppT = sub.ppPersonHours, ckT = sub.ckPersonHours, shT = sub.shPersonHours, pkT = sub.pkPersonHours;
+        var opT = sub.opPersonHours;
+        sub.opWorkers = sub.opHours>0 ? r1(sub.opPersonHours/sub.opHours) : 0;
         sub.rmKg = _r2(rm);
         sub.ppKg = _r2(sub.ppKg); sub.ckKg = _r2(sub.ckKg); sub.shKg = _r2(sub.shKg);
         sub.meatKg = _r2(sub.meatKg); sub.prodKg = _r2(sub.prodKg);
@@ -1160,6 +1195,7 @@
         sub.prodCk = rm&&ckT?_r2(rm/ckT):0;
         sub.prodSh = rm&&shT?_r2(rm/shT):0;
         sub.prodPk = rm&&pkT?_r2(rm/pkT):0;
+        sub.prodOp = rm&&opT?_r2(rm/opT):0;
         sub.prodAll = rm&&(ppT+ckT+shT+pkT)?_r2(rm/(ppT+ckT+shT+pkT)):0;
         sub.yieldRmPp = rm?_r2(sub.ppKg/rm*100)/100:0;
         sub.yieldRmCk = rm?_r2(sub.ckKg/rm*100)/100:0;
@@ -1196,6 +1232,7 @@
             ckKg:0, ckHours:0, ckPersonHours:0,
             shKg:0, shHours:0, shPersonHours:0,
             pkEa:0, pkHours:0, pkPersonHours:0,
+            opEa:0, opHours:0, opPersonHours:0,
             meatKg:0, prodKg:0,
             pouchUsed:0, sauceKgUsed:0, subKgUsed:0, boxUsed:0,
             kgea: r.kgea, kgTot: r.kgTot,
@@ -1209,6 +1246,7 @@
         g.ckKg += r.ckKg||0; g.ckHours += r.ckHours||0; g.ckPersonHours += r.ckPersonHours||0;
         g.shKg += r.shKg||0; g.shHours += r.shHours||0; g.shPersonHours += r.shPersonHours||0;
         g.pkEa += r.pkEa||0; g.pkHours += r.pkHours||0; g.pkPersonHours += r.pkPersonHours||0;
+        g.opEa += r.opEa||0; g.opHours += r.opHours||0; g.opPersonHours += r.opPersonHours||0;
         g.meatKg += r.meatKg||0; g.prodKg += r.prodKg||0;
         g.pouchUsed += r.pouchUsed||0;
         g.sauceKgUsed += r.sauceKgUsed||0;
@@ -1221,6 +1259,8 @@
         var g = grouped[k];
         var rm = g.rmKg;
         var ppT = g.ppPersonHours, ckT = g.ckPersonHours, shT = g.shPersonHours, pkT = g.pkPersonHours;
+        var opT = g.opPersonHours;
+        g.opWorkers = g.opHours>0 ? r1(g.opPersonHours/g.opHours) : 0;
         g.dayNo = i+1;
         g.date = g._workDays.size + '일';  // 작업일 수 표시
         delete g._workDays;
@@ -1233,6 +1273,7 @@
           prodCk: rm&&ckT?_r2(rm/ckT):0,
           prodSh: rm&&shT?_r2(rm/shT):0,
           prodPk: rm&&pkT?_r2(rm/pkT):0,
+          prodOp: rm&&opT?_r2(rm/opT):0,
           prodAll: rm&&(ppT+ckT+shT+pkT)?_r2(rm/(ppT+ckT+shT+pkT)):0,
           yieldRmPp: rm?_r2(g.ppKg/rm*100)/100:0,
           yieldRmCk: rm?_r2(g.ckKg/rm*100)/100:0,
@@ -1289,6 +1330,7 @@
 
     function _mapForAgg(r){
       var ppT=r.ppPersonHours||0, ckT=r.ckPersonHours||0, shT=r.shPersonHours||0, pkT=r.pkPersonHours||0;
+      var opT=r.opPersonHours||0;
       var meatKg = r.pkEa*(r.kgea||0);
       var rm=r.rmKg;
       return Object.assign({}, r, {
@@ -1297,6 +1339,7 @@
         prodCk: rm&&ckT?rm/ckT:0,
         prodSh: rm&&shT?rm/shT:0,
         prodPk: rm&&pkT?rm/pkT:0,
+        prodOp: rm&&opT?rm/opT:0,
         prodAll: rm&&(ppT+ckT+shT+pkT)?rm/(ppT+ckT+shT+pkT):0,
         yieldRmPp: rm?r.ppKg/rm:0, yieldRmCk: rm?r.ckKg/rm:0,
         yieldRmSh: rm?r.shKg/rm:0, yieldRmPk: rm?meatKg/rm:0,
@@ -1353,10 +1396,10 @@
       if(grp==='yield') return (v*100).toFixed(1) + '%';
       // 생산성: kg/인시
       if(grp==='prod') return v.toFixed(2);
-      if(c[0]==='pkEa' || c[0]==='dayNo') return Math.round(v).toLocaleString();
-      if(c[0]==='ppWorkers'||c[0]==='ckWorkers'||c[0]==='shWorkers'||c[0]==='pkWorkers') return v.toFixed(1);
-      if(c[0]==='ppHours'||c[0]==='ckHours'||c[0]==='shHours'||c[0]==='pkHours') return v.toFixed(2);
-      if(c[0]==='ppPersonHours'||c[0]==='ckPersonHours'||c[0]==='shPersonHours'||c[0]==='pkPersonHours') return v.toFixed(1);
+      if(c[0]==='pkEa' || c[0]==='dayNo' || c[0]==='opEa') return Math.round(v).toLocaleString();
+      if(c[0]==='ppWorkers'||c[0]==='ckWorkers'||c[0]==='shWorkers'||c[0]==='pkWorkers'||c[0]==='opWorkers') return v.toFixed(1);
+      if(c[0]==='ppHours'||c[0]==='ckHours'||c[0]==='shHours'||c[0]==='pkHours'||c[0]==='opHours') return v.toFixed(2);
+      if(c[0]==='ppPersonHours'||c[0]==='ckPersonHours'||c[0]==='shPersonHours'||c[0]==='pkPersonHours'||c[0]==='opPersonHours') return v.toFixed(1);
       return v%1===0 ? v.toLocaleString() : v.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:2});
     }
 
@@ -1372,7 +1415,7 @@
       'rmKg':1,'ppKg':1,'ppHours':1,'ppWorkers':1,'ppPersonHours':1,
       'ckKg':1,'ckHours':1,'ckWorkers':1,'ckPersonHours':1,
       'shKg':1,'shHours':1,'shWorkers':1,'shPersonHours':1,
-      'prodPp':1,'prodCk':1,'prodSh':1,'prodPk':1,'prodAll':1,
+      'prodPp':1,'prodCk':1,'prodSh':1,'prodPk':1,'prodOp':1,'prodAll':1,
       'yieldRmPp':1,'yieldRmCk':1,'yieldRmSh':1,'yieldRmPk':1,
       'yieldPp':1,'yieldCk':1,'yieldSh':1,'yieldPk':1
     };
@@ -1473,10 +1516,10 @@
       if(c && c[1]==='yield') return (v*100).toFixed(1) + '%';
       if(c && c[1]==='prod') return v.toFixed(2);
       var key = c ? c[0] : '';
-      if(key==='pkEa' || key==='dayNo') return Math.round(v).toLocaleString();
-      if(key==='ppWorkers'||key==='ckWorkers'||key==='shWorkers'||key==='pkWorkers') return v.toFixed(1);
-      if(key==='ppHours'||key==='ckHours'||key==='shHours'||key==='pkHours') return v.toFixed(2);
-      if(key==='ppPersonHours'||key==='ckPersonHours'||key==='shPersonHours'||key==='pkPersonHours') return v.toFixed(1);
+      if(key==='pkEa' || key==='dayNo' || key==='opEa') return Math.round(v).toLocaleString();
+      if(key==='ppWorkers'||key==='ckWorkers'||key==='shWorkers'||key==='pkWorkers'||key==='opWorkers') return v.toFixed(1);
+      if(key==='ppHours'||key==='ckHours'||key==='shHours'||key==='pkHours'||key==='opHours') return v.toFixed(2);
+      if(key==='ppPersonHours'||key==='ckPersonHours'||key==='shPersonHours'||key==='pkPersonHours'||key==='opPersonHours') return v.toFixed(1);
       return v%1===0 ? v.toLocaleString() : v.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:2});
     }
     function isRatio(c){ return c[1]==='yield'||c[1]==='prod'; }
@@ -1488,6 +1531,7 @@
       var ppKg = agg.ppKg||0, ckKg = agg.ckKg||0, shKg = agg.shKg||0;
       var meatKg = agg.meatKg||0;
       var ppT = agg.ppTotal||0, ckT = agg.ckTotal||0, shT = agg.shTotal||0, pkT = agg.pkTotal||0;
+      var opT = agg.opTotal||0;
       // ★ 개별 행과 동일한 반올림 경로 적용 — prod는 _r2(x), yield는 _r2(x*100)/100
       //   (raw로 반환하면 합계만 다른 자리에서 반올림돼 행과 0.1% 어긋남)
       switch(c[0]){
@@ -1495,6 +1539,7 @@
         case 'prodCk':  return rm&&ckT?_r2(rm/ckT):0;
         case 'prodSh':  return rm&&shT?_r2(rm/shT):0;
         case 'prodPk':  return rm&&pkT?_r2(rm/pkT):0;
+        case 'prodOp':  return rm&&opT?_r2(rm/opT):0;
         case 'prodAll': return rm&&(ppT+ckT+shT+pkT)?_r2(rm/(ppT+ckT+shT+pkT)):0;
         case 'yieldRmPp': return rm?_r2(ppKg/rm*100)/100:0;
         case 'yieldRmCk': return rm?_r2(ckKg/rm*100)/100:0;
@@ -1777,7 +1822,7 @@
       if(/Hours$/.test(key)) return '0.00';
       if(/Workers$/.test(key)) return '0.0';
       if(/PersonHours$/.test(key)) return '0.0';
-      if(key === 'pkEa' || key === 'pouchUsed' || key === 'boxUsed') return '#,##0';
+      if(key === 'pkEa' || key === 'opEa' || key === 'pouchUsed' || key === 'boxUsed') return '#,##0';
       if(/Kg$|Used$/.test(key) || key==='rmKg' || key==='meatKg' || key==='prodKg') return '#,##0.0';
       return 'general';
     }
@@ -1788,7 +1833,7 @@
       if(/Hours$/.test(key) && !/Person/.test(key)) return '0.00';
       if(/PersonHours$/.test(key)) return '0.0';
       if(/Workers$/.test(key)) return '0.0';
-      if(key === 'pkEa' || key === 'pouchUsed' || key === 'boxUsed') return '#,##0';
+      if(key === 'pkEa' || key === 'opEa' || key === 'pouchUsed' || key === 'boxUsed') return '#,##0';
       if(/Kg$|Used$/.test(key) || key==='rmKg' || key==='meatKg' || key==='prodKg') return '#,##0.0';
       return 'general';
     }
