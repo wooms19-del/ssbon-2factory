@@ -345,6 +345,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
     <button class="att-sub-tab on" data-tab="input" onclick="attShowSubTab('input',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">출퇴근 입력</button>
     <button class="att-sub-tab" data-tab="monthly" onclick="attShowSubTab('monthly',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">월별 조회</button>
     <button class="att-sub-tab" data-tab="staff" onclick="attShowSubTab('staff',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">직원 관리</button>
+    <button class="att-sub-tab" data-tab="report" onclick="attShowSubTab('report',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">현황·조출</button>
   </div>
 
   <!-- 출퇴근 입력 탭 -->
@@ -382,6 +383,11 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
       <button class="btn bo bsm" onclick="attAddStaff()">+ 직원 추가</button>
     </div>
     <div id="attStaffList" style="padding:0 14px"></div>
+  </div>
+
+  <!-- 현황·조출 탭 -->
+  <div id="attReportWrap" style="display:none">
+    <div id="attReportContent" style="padding:0 14px 14px"></div>
   </div>
 
   <!-- 근태 설정 모달 -->
@@ -1666,9 +1672,9 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
 <script src="js/retort.js?v=1782096226"></script>
 <script src="js/settings.js?v=1778129561"></script>
 <script src="js/kakao.js?v=1778129561"></script>
-<script src="js/app.js?v=1781850664"></script>
+<script src="js/app.js?v=1782959955"></script>
 <script src="js/schedule.js?v=1780015580"></script>
-<script src="js/attendance.js?v=1779956579"></script>
+<script src="js/attendance.js?v=1782959955"></script>
 <script src="js/timepicker.js?v=1778129561"></script>
 <script src="js/globals.js?v=1778599476"></script>
 <script src="js/stock.js?v=1781485236"></script>
