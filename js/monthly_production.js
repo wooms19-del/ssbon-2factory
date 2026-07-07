@@ -1798,7 +1798,7 @@
       +   '<td>'+prevSum.dayCount+'일</td>'
       +   '<td>—</td><td>—</td></tr>'
       + rowAbs('월 누적 원육사용량', 'rmKg', 'kg', 2)
-      + rowAbs('월 누적 EA (외포장)', 'pkEa', '', 0)
+      + rowAbs('월 누적 EA (외포장)', 'pkEa', 'EA', 0)
       + rowAbs('완제품 고기중량', 'meatKg', 'kg', 2)
       + rowYield('전처리 수율', 'ppKg')
       + rowYield('자숙 수율', 'ckKg')
