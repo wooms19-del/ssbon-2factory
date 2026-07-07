@@ -1202,7 +1202,7 @@
         var rm = sub.rmKg;
         var ppT = sub.ppPersonHours, ckT = sub.ckPersonHours, shT = sub.shPersonHours, pkT = sub.pkPersonHours;
         var opT = sub.opPersonHours;
-        sub.opWorkers = sub.opHours>0 ? r1(sub.opPersonHours/sub.opHours) : 0;
+        sub.opWorkers = sub.opHours>0 ? Math.round((sub.opPersonHours/sub.opHours)*10)/10 : 0;
         sub.rmKg = _r2(rm);
         sub.ppKg = _r2(sub.ppKg); sub.ckKg = _r2(sub.ckKg); sub.shKg = _r2(sub.shKg);
         sub.meatKg = _r2(sub.meatKg); sub.prodKg = _r2(sub.prodKg);
@@ -1275,7 +1275,7 @@
         var rm = g.rmKg;
         var ppT = g.ppPersonHours, ckT = g.ckPersonHours, shT = g.shPersonHours, pkT = g.pkPersonHours;
         var opT = g.opPersonHours;
-        g.opWorkers = g.opHours>0 ? r1(g.opPersonHours/g.opHours) : 0;
+        g.opWorkers = g.opHours>0 ? Math.round((g.opPersonHours/g.opHours)*10)/10 : 0;
         g.dayNo = i+1;
         g.date = g._workDays.size + '일';  // 작업일 수 표시
         delete g._workDays;
