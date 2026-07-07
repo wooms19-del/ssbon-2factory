@@ -458,22 +458,30 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
   {
     let moTotRm=0, moTotPkKg=0, moDays=0, moGoodDays=0;
     const dailyYields=[];
-    dayEntries.forEach(([date, allR])=>{
-      const dayRm=r2(rmByDate[date]||0);
+    // ★ mpRows(실제 방혈 + 코스트코 가안 + 6월 override) 기준 per-day — 원육그래프·표와 일치
+    const _mpR = (window._moGD && window._moGD.mpRows) || [];
+    const _byD = {};
+    _mpR.forEach(function(r){
+      if(!r || !r.date || r._isMainRow === false) return;
+      if(!_byD[r.date]) _byD[r.date] = {rm:0, meat:0};
+      _byD[r.date].rm += (r.rmKg||0);
+      _byD[r.date].meat += ((r.pkEaInner!=null?r.pkEaInner:r.pkEa)||0)*(r.kgea||0);  // 내포장(생산) 기준 완제품고기
+    });
+    Object.keys(_byD).sort().forEach(function(date){
+      const dayRm=r2(_byD[date].rm);
       if(!dayRm) return;
-      const effPkM={};
-      allR.forEach(row=>{
-        const oe=opMap[date+'|'+row.product]||0;
-        const p=L.products.find(x=>x.name===row.product);
-        effPkM[row.product]=oe>0&&p?r2(oe*p.kgea):row.pkKg;
-      });
-      const totalAllPk=r2(allR.reduce((s,r)=>s+(effPkM[r.product]||0),0));
-      const dayPkKg=totalAllPk;
+      const dayPkKg=r2(_byD[date].meat);
       moTotRm+=dayRm; moTotPkKg+=dayPkKg; moDays++;
       const yld=dayPkKg/dayRm*100;
       if(yld>=52) moGoodDays++;
       dailyYields.push({date, yld});
     });
+    // ★ 표(생산일보)와 동일 총계 사용 — 표=KPI 일치 (6월 override 포함)
+    if(window._moTableTotals){
+      moTotRm   = window._moTableTotals.totRm;
+      moTotPkKg = window._moTableTotals.totPkKg;
+      moDays    = window._moTableTotals.days;
+    }
     const moAvgYld=moTotRm>0?moTotPkKg/moTotRm*100:0;
     const moLossKg=r2(moTotRm*(0.55-moAvgYld/100));
     _moRenderYieldKPI(moTotRm, moTotPkKg, moAvgYld, moDays, moGoodDays, moLossKg);
@@ -934,6 +942,8 @@ function _moRenderRows() {
   tbody.innerHTML=html.join('')||`<tr><td colspan="11" style="text-align:center;color:#aaa;padding:2rem">데이터 없음</td></tr>`;
 
   const totYld=totRm>0?(totPkKg/totRm*100).toFixed(1)+'%':'—';
+  // ★ KPI 카드가 표(생산일보)와 동일 총계를 쓰도록 stash — 표=KPI 일치, 6월 override 포함
+  window._moTableTotals = { totRm: totRm, totPkKg: totPkKg, days: new Set(disp.map(function(r){return r.date;})).size };
   const modeLbl = mode==='product'?' [제품별]':mode==='part'?' [원육별]':'';
   const cntLbl = mode==='none' ? `(${new Set(disp.map(r=>r.date)).size}일)` : '';
   if(tfoot) tfoot.innerHTML=`<tr style="background:#1e293b;color:#fff;font-weight:700">
@@ -1517,6 +1527,10 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     // 내포장 막대 차트도 재그림 (전월 평균선 반영 위해)
     if(typeof renderPackingChart === 'function' && window._moPackingArgs){
       renderPackingChart(window._moPackingArgs.dayEntries, window._moPackingArgs.opMap, window._moPackingArgs.ym);
+    }
+    // ★ 원육 막대 차트도 재그림 — 전월 일평균 선 반영 (누락돼 있던 버그)
+    if(window._moRmByDate && typeof _moRenderRmChart === 'function'){
+      _moRenderRmChart(window._moRmByDate, _moYm || tod().slice(0,7), window._moRmByDatePart);
     }
     // 일별 원육 차트도 재그림
     if(typeof _moRenderRmChart === 'function' && window._moRmByDate){
@@ -2279,13 +2293,18 @@ function renderDailyFromLocal_(d){
   }
   const _seenTh=new Set();
   const matchedTh=_rawTh.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(_seenTh.has(k))return false;_seenTh.add(k);return true;});
-  const rmKg=r2(matchedTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
+  let rmKg=r2(matchedTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
   // 원육 타입별 KG: matchedTh 기준으로 재계산 (바코드·중복 해동 오염 방지)
   Object.keys(thByType).forEach(k=>delete thByType[k]);
   matchedTh.forEach(r=>{(r.type||'').split(',').map(t=>t.trim()).filter(Boolean).forEach(t=>{if(!thByType[t])thByType[t]=0;thByType[t]+=parseFloat(r.totalKg)||0;});});
-  const ppKg=r2(pp.reduce((s,r)=>s+(parseFloat(r.kg)||0),0));
-  const ckKg=r2(ck.reduce((s,r)=>s+(parseFloat(r.kg)||0),0));
-  const shKg=r2(sh.reduce((s,r)=>s+(parseFloat(r.kg)||0),0));
+  let ppKg=r2(pp.reduce((s,r)=>s+(parseFloat(r.kg)||0),0));
+  let ckKg=r2(ck.reduce((s,r)=>s+(parseFloat(r.kg)||0),0));
+  let shKg=r2(sh.reduce((s,r)=>s+(parseFloat(r.kg)||0),0));
+  // ★ 관리자 6월 override — 그날 원육/공정을 수정본으로 (비관리자/비6월은 원값)
+  if(typeof adminBase==='function' && window._isAdmin){
+    rmKg=r2(adminBase(d,'rm',rmKg)); ppKg=r2(adminBase(d,'pp',ppKg));
+    ckKg=r2(adminBase(d,'ck',ckKg)); shKg=r2(adminBase(d,'sh',shKg));
+  }
   const totalEA=pk.reduce((s,r)=>s+(parseFloat(r.ea)||0),0);
   const totalMH=r2(sumMH(pp)+sumMH(ck)+sumMH(sh)+sumMH(pk));
   const defect=pk.reduce((s,r)=>s+(parseFloat(r.defect)||0),0);
@@ -3759,6 +3778,21 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
   if(_moRmChart){_moRmChart.destroy();_moRmChart=null;}
   rmByDate = rmByDate || {};
   const manual = window._moManualRm || {};
+  // ★ 표(생산일보)와 동일 출처(mpRows: 실제 방혈 + 코스트코 가안 + 6월 override)로 원육 재구성
+  {
+    const _mpRows = (window._moGD && window._moGD.mpRows) || null;
+    if(_mpRows && _mpRows.length){
+      const _rd = {}, _rp = {};
+      _mpRows.forEach(function(r){
+        if(!r || !r.date || r._isMainRow === false) return;
+        _rd[r.date] = (_rd[r.date] || 0) + (r.rmKg || 0);
+        const pt = r.type || '';
+        if(pt){ if(!_rp[r.date]) _rp[r.date] = {}; _rp[r.date][pt] = (_rp[r.date][pt] || 0) + (r.rmKg || 0); }
+      });
+      rmByDate = _rd;
+      rmByDatePart = _rp;
+    }
+  }
   if(!Object.keys(rmByDate).length && !Object.keys(manual).length){ _moRenderManualUI(ym, []); return; }
 
   // 생산한 날 + 수동 입력일

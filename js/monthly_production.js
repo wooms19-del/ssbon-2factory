@@ -611,6 +611,10 @@
         });
         typeList = Object.keys(thTypes).sort(function(a,b){return thTypes[b]-thTypes[a];});
       }
+      // 부위 안 잡히면 제품→부위 설정에서 조회 (하드코딩 대신 데이터)
+      if(typeList.length === 0 && !isNoMeat && window._productParts && window._productParts[p.product]){
+        typeList = [window._productParts[p.product]];
+      }
       p.type = typeList[0] || null;
       p.typeList = typeList;
       p.isNoMeat = isNoMeat;
@@ -845,11 +849,15 @@
                        'ckKg','ckHours','ckPersonHours','ckWorkers',
                        'shKg','shHours','shPersonHours','shWorkers'];
     var __grpMap = {};
+    var __nonEstDT = {};  // 'date|부위' → 비-가안(일반) 제품이 존재 (방혈 주인 판정용)
     rows.forEach(function(r){
       if(r.noMeat){ r._grpKey = null; return; }
       // ★ 메인 행만 그룹화 (부위별 보조 행은 제외)
       if(r._isMainRow === false) return;
-      var key = r.date + '|' + (r.type || '');
+      var _isEst = window._estYields && window._estYields[r.product];
+      if(!_isEst) __nonEstDT[r.date + '|' + (r.type || '')] = true;
+      // 가안 제품(코스트코 등)은 별도 그룹으로 분리 — 다른 부위 제품과 원육 병합 방지
+      var key = r.date + '|' + (r.type || '') + (_isEst ? '|__EST__|' + r.product : '');
       if(!__grpMap[key]) __grpMap[key] = [];
       r._grpKey = key;
       __grpMap[key].push(r);
@@ -859,10 +867,37 @@
       var parts = key.split('|');
       var d = parts[0], t = parts[1];
       // 부위 전체 데이터 (분배 무시, 직접 조회)
-      var rmTotal = thByDateType[d+'|'+t] || 0;
-      var ppItem  = ppByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
-      var ckItem  = ckByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
-      var shItem  = shByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
+      var _isEstGrp = parts[2] === '__EST__';
+      var _useEst = false;
+      if(_isEstGrp){
+        var _thaw = thByDateType[d+'|'+t] || 0;
+        // 형제(일반) 제품이 같은 부위에 있거나, 그 부위 방혈이 없으면 → 가안 역산 (관리자 전용)
+        _useEst = window._isAdmin && (!!__nonEstDT[d+'|'+t] || !(_thaw > 0));
+      }
+      var rmTotal, ppItem, ckItem, shItem;
+      if(_isEstGrp && _useEst){
+        var _cfg = window._estYields[grp[0].product];
+        var _fy = (typeof _cfg === 'number') ? _cfg : ((_cfg && _cfg.final) || 0);
+        var _meat = grp.reduce(function(s,r){ return s + (r.pkEa||0) * (r.kgea||0); }, 0);
+        rmTotal = _fy ? _r2(_meat / _fy) : 0;
+        var _ppY = (_cfg && _cfg.pp) || 0, _ckY = (_cfg && _cfg.ck) || 0, _shY = (_cfg && _cfg.sh) || 0;
+        ppItem = {kg: _r2(rmTotal * _ppY), hours:0, personHours:0};
+        ckItem = {kg: _r2(rmTotal * _ckY), hours:0, personHours:0};
+        shItem = {kg: _r2(rmTotal * _shY), hours:0, personHours:0};
+        grp.forEach(function(r){ r._estRm = true; });
+      } else if(_isEstGrp && __nonEstDT[d+'|'+t]){
+        // __EST__(코스트코)인데 가안 미적용(게스트 등) + 같은 부위에 형제 제품 존재
+        //   → 원육은 형제 그룹 것이므로 0 (중복 계산 방지)
+        rmTotal = 0;
+        ppItem = {kg:0, hours:0, personHours:0};
+        ckItem = {kg:0, hours:0, personHours:0};
+        shItem = {kg:0, hours:0, personHours:0};
+      } else {
+        rmTotal = thByDateType[d+'|'+t] || 0;
+        ppItem  = ppByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
+        ckItem  = ckByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
+        shItem  = shByDT[d+'|'+t] || {kg:0, hours:0, personHours:0};
+      }
       // 그룹 합산 완제품 고기 (yieldPk 계산용)
       var grpMeatKg = grp.reduce(function(s,r){
         return s + (r.pkEa||0) * (r.kgea||0);
@@ -940,8 +975,30 @@
             __PART_KEYS.forEach(function(k){ r[k] = 0; });
           }
         } else {
-          // 단일 row 그룹: 그대로 두되 _grpMeatKg만 부여
+          // 단일 row 그룹: 부위 전체 원육/전처리/자숙/파쇄 배정 (i===0과 동일)
+          if(_isEstGrp && _useEst){
+            r.rmKg = _r2(rmTotal); r.ppKg = _r2(ppItem.kg); r.ckKg = _r2(ckItem.kg); r.shKg = _r2(shItem.kg);
+          } else {
+            r.rmKg = _r2(rmTotal);
+            r.ppKg = _r2(ppItem.kg);
+            r.ppHours = _r2(ppItem.hours);
+            r.ppPersonHours = _r2(ppItem.personHours);
+            r.ppWorkers = ppItem.hours>0 ? r1(ppItem.personHours/ppItem.hours) : 0;
+            r.ckKg = _r2(ckItem.kg);
+            r.ckHours = _r2(ckItem.hours);
+            r.ckPersonHours = _r2(ckItem.personHours);
+            r.ckWorkers = ckItem.hours>0 ? r1(ckItem.personHours/ckItem.hours) : 0;
+            r.shKg = _r2(shItem.kg);
+            r.shHours = _r2(shItem.hours);
+            r.shPersonHours = _r2(shItem.personHours);
+            r.shWorkers = shItem.hours>0 ? r1(shItem.personHours/shItem.hours) : 0;
+          }
           r._grpMeatKg = grpMeatKg;
+          r._grpRmTotal = rmTotal;
+          r._grpPpPH = ppItem.personHours;
+          r._grpCkPH = ckItem.personHours;
+          r._grpShPH = shItem.personHours;
+          r._grpPkPH = grpPkPH;
         }
       });
     });
@@ -954,6 +1011,24 @@
     Object.keys(__byDateG).forEach(function(d){
       __byDateG[d].forEach(function(r, i){ r.dateRowIdx = i; });
     });
+
+    // ── 관리자 6월 override: 기초무게 4개만 갈아끼움 (월단위생산량·월별현황 공용 지점) ──
+    //   비관리자/비오버라이드 날은 adminBase가 원값 반환 → 무영향. 하루 한 행일 때만 안전하게 덮음.
+    if(typeof adminBase === 'function'){
+      var __ovCnt = {};
+      rows.forEach(function(r){ if(r && r.date) __ovCnt[r.date] = (__ovCnt[r.date]||0) + 1; });
+      rows.forEach(function(r){
+        if(!r || !r.date || __ovCnt[r.date] !== 1) return;
+        var _of = {};
+        var _ap = function(fld, key){
+          var nv = adminBase(r.date, key, r[fld]);
+          if(Math.abs((nv||0) - (r[fld]||0)) > 0.5) _of[fld] = true;
+          r[fld] = nv;
+        };
+        _ap('rmKg','rm'); _ap('ppKg','pp'); _ap('ckKg','ck'); _ap('shKg','sh');
+        if(Object.keys(_of).length) r._ovFields = _of;
+      });
+    }
 
     return {
       rows: rows,
@@ -1507,10 +1582,13 @@
         if(__PART_COLS[c[0]]){
           if(grpCnt > 1 && !isGrpFirst) return '';  // 두번째 row부터 부위 컬럼 생략
           var rs = (grpCnt > 1) ? ' rowspan="'+grpCnt+'"' : '';
+          var _isEstCell = (r._estRm && (c[0]==='rmKg'||c[0]==='ppKg'||c[0]==='ckKg'||c[0]==='shKg'));
+          var _ovSty = ((r._ovFields && r._ovFields[c[0]]) || _isEstCell) ? ' style="background:#fef3c7"' : '';  // ★ 수정본/가안 셀
+          var _ovTitle = _isEstCell ? ' title="가안 — 6월 코스트코 평균수율로 역산(실제 방혈·공정 미기록분)"' : '';
           if(typeof v === 'number'){
-            return '<td class="'+_grpCls(c, _i_)+'"'+rs+'>'+fmtCell(v, c)+'</td>';
+            return '<td class="'+_grpCls(c, _i_)+'"'+rs+_ovSty+_ovTitle+'>'+fmtCell(v, c)+'</td>';
           }
-          return '<td class="'+_grpCls(c, _i_)+'"'+rs+'>'+(v==null?'-':v)+'</td>';
+          return '<td class="'+_grpCls(c, _i_)+'"'+rs+_ovSty+_ovTitle+'>'+(v==null?'-':v)+'</td>';
         }
         if(c[0]==='pkEa') {
           var s = v ? Math.round(v).toLocaleString() : '-';
@@ -2003,6 +2081,7 @@
   window.showPerfSub    = showPerfSub;
   window.mpPrevMonth    = mpPrevMonth;
   window._mpProcess     = _mpProcess;  // ★ 월간 생산 일보가 동일 값을 쓰도록 노출
+  window._mpRerender    = function(){ try{ if(_mpYm) _mpReload(); }catch(e){} };  // ★ 관리자 로그인/아웃 시 현재월 재렌더
   window.mpNextMonth    = mpNextMonth;
   window.mpThisMonth    = mpThisMonth;
   window.mpPickMonth    = mpPickMonth;
