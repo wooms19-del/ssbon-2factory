@@ -1906,6 +1906,91 @@
     }
 
     var ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // ═══ 수식 걸기 (원육 바꾸면 수율·합계 자동 재계산) ═══
+    (function(){
+      var keyCol = {}; visibleCols.forEach(function(c,i){ keyCol[c[0]]=i; });
+      function _cl(i){ var s='',n=i+1; while(n>0){ var m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26);} return s; }
+      function _c(key,row){ return keyCol[key]!==undefined ? _cl(keyCol[key])+row : null; }
+      function _setF(key,row,f){ if(keyCol[key]===undefined) return; ws[_cl(keyCol[key])+row] = {t:'n', f:f}; }
+      // 원료육수율(원육 대비) / 공정수율(직전 단계 대비) — [분자, 분모]
+      var yF = {
+        yieldRmPp:['ppKg','rmKg'], yieldRmCk:['ckKg','rmKg'], yieldRmSh:['shKg','rmKg'], yieldRmPk:['meatKg','rmKg'],
+        yieldPp:['ppKg','rmKg'], yieldCk:['ckKg','ppKg'], yieldSh:['shKg','ckKg'], yieldPk:['meatKg','shKg']
+      };
+      var meatSpanKeys = {yieldRmPk:1, yieldPk:1};  // 완제품(meatKg)은 다제품 날 여러 행에 걸침 → 그룹 합
+      var pF = {prodPp:'ppPersonHours', prodCk:'ckPersonHours', prodSh:'shPersonHours', prodPk:'pkPersonHours', prodOp:'opPersonHours'};
+      var dataFirst = 3, dataLast = 3 + calcRows.length - 1;
+
+      // ── 데이터 행 ──
+      calcRows.forEach(function(r, j){
+        var ER = 3 + j;
+        var hasRm = (r.rmKg||0) > 0;   // 원육 있는 대표행만 수율/생산성 수식
+        if(!hasRm) return;
+        var gsz = r._grpSize || 1;      // 그룹 크기 (다제품 날 완제품 합산 범위)
+        function meatRange(){
+          var mc = keyCol['meatKg']!==undefined ? _cl(keyCol['meatKg']) : null;
+          if(!mc) return null;
+          return gsz>1 ? ('SUM('+mc+ER+':'+mc+(ER+gsz-1)+')') : (mc+ER);
+        }
+        Object.keys(yF).forEach(function(key){
+          if(keyCol[key]===undefined) return;
+          var numExpr = meatSpanKeys[key] ? meatRange() : _c(yF[key][0],ER);
+          var den = _c(yF[key][1],ER);
+          if(numExpr && den) _setF(key, ER, 'IF('+den+'=0,"",'+numExpr+'/'+den+')');
+        });
+        Object.keys(pF).forEach(function(key){
+          if(keyCol[key]===undefined) return;
+          var rm=_c('rmKg',ER), ph=_c(pF[key],ER);
+          if(rm && ph) _setF(key, ER, 'IF('+ph+'=0,"",'+rm+'/'+ph+')');
+        });
+        if(keyCol['prodAll']!==undefined){
+          var rm=_c('rmKg',ER), phs=['ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours'].map(function(k){return _c(k,ER);});
+          if(rm && phs.every(Boolean)) _setF('prodAll', ER, 'IF(('+phs.join('+')+')=0,"",'+rm+'/('+phs.join('+')+'))');
+        }
+      });
+
+      // ── 합계 행: SUBTOTAL(필터/숨김 행 제외) ──
+      var SR = sumRowIdx + 1;
+      var sumKeys = ['rmKg','ppKg','ckKg','shKg','pkEa','opEa','meatKg','prodKg',
+        'ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours','opPersonHours',
+        'ppHours','ckHours','shHours','pkHours','opHours','pouchUsed','sauceKgUsed','subKgUsed','boxUsed'];
+      sumKeys.forEach(function(key){
+        if(keyCol[key]===undefined) return;
+        var col=_cl(keyCol[key]);
+        ws[col+SR] = {t:'n', f:'SUBTOTAL(9,'+col+dataFirst+':'+col+dataLast+')'};
+      });
+      // 합계 수율/생산성 = 합계행 자기 셀 비율
+      Object.keys(yF).forEach(function(key){
+        if(keyCol[key]===undefined) return;
+        var num=_c(yF[key][0],SR), den=_c(yF[key][1],SR);
+        if(num && den) _setF(key, SR, 'IF('+den+'=0,"",'+num+'/'+den+')');
+      });
+      Object.keys(pF).forEach(function(key){
+        if(keyCol[key]===undefined) return;
+        var rm=_c('rmKg',SR), ph=_c(pF[key],SR);
+        if(rm && ph) _setF(key, SR, 'IF('+ph+'=0,"",'+rm+'/'+ph+')');
+      });
+      if(keyCol['prodAll']!==undefined){
+        var rm=_c('rmKg',SR), phs=['ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours'].map(function(k){return _c(k,SR);});
+        if(rm && phs.every(Boolean)) _setF('prodAll', SR, 'IF(('+phs.join('+')+')=0,"",'+rm+'/('+phs.join('+')+'))');
+      }
+
+      // ── 평균 행 (있으면): KG/EA/인시 = 합계÷일수, 수율/생산성 = 합계와 동일 비율 ──
+      if(groupMode==='none' && sum.dayCount>0){
+        var AR = SR+1, dc=sum.dayCount;
+        sumKeys.forEach(function(key){
+          if(keyCol[key]===undefined) return;
+          var col=_cl(keyCol[key]);
+          ws[col+AR] = {t:'n', f:col+SR+'/'+dc};
+        });
+        [].concat(Object.keys(yF), Object.keys(pF), ['prodAll']).forEach(function(key){
+          if(keyCol[key]===undefined) return;
+          var col=_cl(keyCol[key]);
+          ws[col+AR] = {t:'n', f:col+SR};
+        });
+      }
+    })();
     var totalCols = visibleCols.length;
 
     // 컬럼별 숫자 포맷 정의 (key 기반)
