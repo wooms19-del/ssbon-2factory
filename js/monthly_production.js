@@ -1906,30 +1906,35 @@
     }
 
     // ── 생산성 수식용 숨김 인시(총작업) 컬럼 추가 — 작업시간 토글 꺼져 있어도 생산성 수식화 ──
-    var _phKeys = ['ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours','opPersonHours'];
-    var _phHdr = {ppPersonHours:'전처리 인시(숨김)', ckPersonHours:'자숙 인시(숨김)', shPersonHours:'파쇄 인시(숨김)', pkPersonHours:'포장 인시(숨김)', opPersonHours:'외포장 인시(숨김)'};
-    var _visKeys = {}; visibleCols.forEach(function(c){ _visKeys[c[0]]=true; });
-    var _hiddenPh = _phKeys.filter(function(k){ return !_visKeys[k]; });
-    if(_hiddenPh.length){
-      aoa.forEach(function(row, ri){
-        _hiddenPh.forEach(function(k){
-          if(ri===0){ row.push(''); }
-          else if(ri===1){ row.push(_phHdr[k]); }
-          else {
-            var dataIdx = ri - 2;
-            if(dataIdx < calcRows.length){
-              var v = calcRows[dataIdx][k];
-              row.push((typeof v==='number' && isFinite(v)) ? v : '');
-            } else if(ri === sumRowIdx){
-              row.push(sum[k]!=null ? sum[k] : '');
-            } else {
-              row.push((sum[k]!=null && sum.dayCount) ? sum[k]/sum.dayCount : '');
-            }
+    // 실효 인시 = 원육 ÷ 생산성 (화면 생산성이 쓰는 실제 인시 = 인원 합집합 반영). 별도 키로 항상 숨김 추가.
+    var _effMap = [
+      {k:'ppEffPH', prod:'prodPp', hdr:'전처리 인시(숨김)'},
+      {k:'ckEffPH', prod:'prodCk', hdr:'자숙 인시(숨김)'},
+      {k:'shEffPH', prod:'prodSh', hdr:'파쇄 인시(숨김)'},
+      {k:'pkEffPH', prod:'prodPk', hdr:'포장 인시(숨김)'},
+      {k:'opEffPH', prod:'prodOp', hdr:'외포장 인시(숨김)'}
+    ];
+    var _effPH = function(row, prodKey){
+      var prod = row[prodKey];
+      return (prod>0 && row.rmKg>0) ? _r2(row.rmKg / prod) : 0;
+    };
+    var _hiddenPh = _effMap.map(function(m){ return m.k; });
+    aoa.forEach(function(row, ri){
+      _effMap.forEach(function(m){
+        if(ri===0){ row.push(''); }
+        else if(ri===1){ row.push(m.hdr); }
+        else {
+          var dataIdx = ri - 2;
+          if(dataIdx < calcRows.length){
+            var v = _effPH(calcRows[dataIdx], m.prod);
+            row.push(v>0 ? v : '');
+          } else {
+            row.push('');  // 합계/평균 행은 아래 SUBTOTAL 수식으로
           }
-        });
+        }
       });
-    }
-    var allCols = visibleCols.concat(_hiddenPh.map(function(k){ return [k, 'hours', _phHdr[k]]; }));
+    });
+    var allCols = visibleCols.concat(_effMap.map(function(m){ return [m.k, 'hours', m.hdr]; }));
 
     var ws = XLSX.utils.aoa_to_sheet(aoa);
 
@@ -1945,7 +1950,7 @@
         yieldPp:['ppKg','rmKg'], yieldCk:['ckKg','ppKg'], yieldSh:['shKg','ckKg'], yieldPk:['meatKg','shKg']
       };
       var meatSpanKeys = {yieldRmPk:1, yieldPk:1};  // 완제품(meatKg)은 다제품 날 여러 행에 걸침 → 그룹 합
-      var pF = {prodPp:'ppPersonHours', prodCk:'ckPersonHours', prodSh:'shPersonHours', prodPk:'pkPersonHours', prodOp:'opPersonHours'};
+      var pF = {prodPp:'ppEffPH', prodCk:'ckEffPH', prodSh:'shEffPH', prodPk:'pkEffPH', prodOp:'opEffPH'};
       var dataFirst = 3, dataLast = 3 + calcRows.length - 1;
 
       // ── 데이터 행 ──
@@ -1971,7 +1976,7 @@
           if(rm && ph) _setF(key, ER, 'IF('+ph+'=0,"",'+rm+'/'+ph+')');
         });
         if(keyCol['prodAll']!==undefined){
-          var rm=_c('rmKg',ER), phs=['ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours'].map(function(k){return _c(k,ER);});
+          var rm=_c('rmKg',ER), phs=['ppEffPH','ckEffPH','shEffPH','pkEffPH'].map(function(k){return _c(k,ER);});
           if(rm && phs.every(Boolean)) _setF('prodAll', ER, 'IF(('+phs.join('+')+')=0,"",'+rm+'/('+phs.join('+')+'))');
         }
       });
@@ -1979,7 +1984,7 @@
       // ── 합계 행: SUBTOTAL(필터/숨김 행 제외) ──
       var SR = sumRowIdx + 1;
       var sumKeys = ['rmKg','ppKg','ckKg','shKg','pkEa','opEa','meatKg','prodKg',
-        'ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours','opPersonHours',
+        'ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours','opPersonHours','ppEffPH','ckEffPH','shEffPH','pkEffPH','opEffPH',
         'ppHours','ckHours','shHours','pkHours','opHours','pouchUsed','sauceKgUsed','subKgUsed','boxUsed'];
       sumKeys.forEach(function(key){
         if(keyCol[key]===undefined) return;
@@ -1998,7 +2003,7 @@
         if(rm && ph) _setF(key, SR, 'IF('+ph+'=0,"",'+rm+'/'+ph+')');
       });
       if(keyCol['prodAll']!==undefined){
-        var rm=_c('rmKg',SR), phs=['ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours'].map(function(k){return _c(k,SR);});
+        var rm=_c('rmKg',SR), phs=['ppEffPH','ckEffPH','shEffPH','pkEffPH'].map(function(k){return _c(k,SR);});
         if(rm && phs.every(Boolean)) _setF('prodAll', SR, 'IF(('+phs.join('+')+')=0,"",'+rm+'/('+phs.join('+')+'))');
       }
 
