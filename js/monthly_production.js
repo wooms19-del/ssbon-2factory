@@ -1905,11 +1905,37 @@
       aoa.push(avgRow);
     }
 
+    // ── 생산성 수식용 숨김 인시(총작업) 컬럼 추가 — 작업시간 토글 꺼져 있어도 생산성 수식화 ──
+    var _phKeys = ['ppPersonHours','ckPersonHours','shPersonHours','pkPersonHours','opPersonHours'];
+    var _phHdr = {ppPersonHours:'전처리 인시(숨김)', ckPersonHours:'자숙 인시(숨김)', shPersonHours:'파쇄 인시(숨김)', pkPersonHours:'포장 인시(숨김)', opPersonHours:'외포장 인시(숨김)'};
+    var _visKeys = {}; visibleCols.forEach(function(c){ _visKeys[c[0]]=true; });
+    var _hiddenPh = _phKeys.filter(function(k){ return !_visKeys[k]; });
+    if(_hiddenPh.length){
+      aoa.forEach(function(row, ri){
+        _hiddenPh.forEach(function(k){
+          if(ri===0){ row.push(''); }
+          else if(ri===1){ row.push(_phHdr[k]); }
+          else {
+            var dataIdx = ri - 2;
+            if(dataIdx < calcRows.length){
+              var v = calcRows[dataIdx][k];
+              row.push((typeof v==='number' && isFinite(v)) ? v : '');
+            } else if(ri === sumRowIdx){
+              row.push(sum[k]!=null ? sum[k] : '');
+            } else {
+              row.push((sum[k]!=null && sum.dayCount) ? sum[k]/sum.dayCount : '');
+            }
+          }
+        });
+      });
+    }
+    var allCols = visibleCols.concat(_hiddenPh.map(function(k){ return [k, 'hours', _phHdr[k]]; }));
+
     var ws = XLSX.utils.aoa_to_sheet(aoa);
 
     // ═══ 수식 걸기 (원육 바꾸면 수율·합계 자동 재계산) ═══
     (function(){
-      var keyCol = {}; visibleCols.forEach(function(c,i){ keyCol[c[0]]=i; });
+      var keyCol = {}; allCols.forEach(function(c,i){ keyCol[c[0]]=i; });
       function _cl(i){ var s='',n=i+1; while(n>0){ var m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26);} return s; }
       function _c(key,row){ return keyCol[key]!==undefined ? _cl(keyCol[key])+row : null; }
       function _setF(key,row,f){ if(keyCol[key]===undefined) return; ws[_cl(keyCol[key])+row] = {t:'n', f:f}; }
@@ -2109,7 +2135,7 @@
       if(i===1) return {wch:13};
       if(c[0]==='product') return {wch:25};
       return {wch:12};
-    });
+    }).concat(_hiddenPh.map(function(){ return {hidden:true, wch:10}; }));  // 인시 컬럼 숨김
 
     // 제목 행 병합
     ws['!merges'] = [
