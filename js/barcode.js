@@ -9,6 +9,7 @@ function cleanBC(v){ return String(v||'').replace(/[^\d]/g,'').trim(); }
 function detT(code){
   if(!code) return '';
   if(/^8\d{11}$/.test(code)) return 'trace';
+  if(/^02\d{14}$/.test(code)) return 'import';   // 호주 EST224 16자리
   let n=code;
   if(!n.startsWith('01')&&n.startsWith('1')) n='0'+n;
   if(n.includes('310')||n.includes('320')||n.includes('11')||
@@ -37,7 +38,50 @@ function add24m(ds){
   return d.toISOString().slice(0,10);
 }
 
+// ============================================================
+// 호주 EST224 (16자리) 바코드
+//   02 | 2035 | 527  | 0207 | 542
+//      제품코드  포장일  CTN   무게×20
+//   포장일: 율리우스식 3자리 (344=25년 344일째=12/10, 5xx=26년 x일째)
+//   무게: 값/20 (0.05kg 단위)
+// ============================================================
+var AU224_PART = { '2035':'홍두깨' };   // EYE ROUND. 다른 부위코드는 확인되면 추가
+
+function isAU224(code){ return /^02\d{14}$/.test(String(code||'')); }
+
+function _au224Date(j){
+  // j: 3자리. 344 → 2025년 344일째 / 5xx → 2026년 (x)일째
+  var n = parseInt(j,10);
+  if(!isFinite(n) || n<=0) return '';
+  var year, doy;
+  if(n>=500){ year=2026; doy=n-500; }
+  else { year=2025; doy=n; }
+  if(doy<1 || doy>366) return '';
+  var d = new Date(Date.UTC(year,0,1));
+  d.setUTCDate(d.getUTCDate() + (doy-1));
+  return d.toISOString().slice(0,10);
+}
+
+function parseAU224(bc){
+  var r={gtin:'',part:'확인필요',weightKg:'',packDate:'',expiryDate:'',ctn:''};
+  var c=String(bc||'');
+  if(!isAU224(c)) return r;
+  var item = c.slice(2,6);      // 2035
+  var jul  = c.slice(6,9);      // 527
+  var ctn  = c.slice(9,13);     // 0207
+  var wRaw = c.slice(13,16);    // 542
+  r.gtin = item;
+  r.ctn  = String(parseInt(ctn,10)||'');
+  if(AU224_PART[item]) r.part = AU224_PART[item];
+  var w = parseInt(wRaw,10);
+  if(isFinite(w) && w>0) r.weightKg = r2(w/20);   // 0.05kg 단위
+  r.packDate = _au224Date(jul);
+  if(r.packDate) r.expiryDate = add24m(r.packDate);
+  return r;
+}
+
 function parseImp(bc){
+  if(isAU224(bc)) return parseAU224(bc);   // 호주 EST224 16자리
   const r={gtin:'',part:'확인필요',weightKg:'',packDate:'',expiryDate:''};
   if(!bc) return r;
   let c=bc;
@@ -180,6 +224,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
 async function procBC(code){
   const type=detT(code);
   if(!type){ setBcAl('❌ 인식 불가: '+code.slice(0,12),'d'); return; }
+
+  // ── 호주 EST224: 바코드 1개로 완결 (이력코드 없음, 원산지=호주 고정) ──
+  if(isAU224(code)){
+    PEND=null;
+    document.getElementById('bcArea').classList.remove('wait');
+    const imp=parseAU224(code);
+    const tr={origin:'호주'};
+    const judge=judgeBC(imp,tr);
+    const now=new Date();
+    const st=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+    const rfEnd=calcRfEnd(st);
+    const today=tod();
+    if(L.barcodes.some(b=>String(b.date||'').slice(0,10)===today&&b.importCode===code)){
+      setBcAl(`⚠️ 이미 스캔된 수입코드 — ${code.slice(-8)}`,'d');
+      return;
+    }
+    const rec={
+      id:gid(), date:today, rfStart:st, rfEnd:rfEnd,
+      importCode:code, traceCode:'',
+      status:judge.status, part:imp.part, origin:tr.origin,
+      weightKg:imp.weightKg, packDate:imp.packDate,
+      expiryDate:imp.expiryDate, reason:judge.reason
+    };
+    L.barcodes.push(rec); saveL(); renderBC();
+    const hint=document.getElementById('bcHint');
+    hint.className='bc-hint';
+    if(judge.status==='적합'){
+      setBcAl(`✅ 적합 — ${imp.part} / ${tr.origin} / ${imp.weightKg}kg · 해동종료 ${rfEnd}`,'s');
+      hint.textContent=`✅ ${imp.part} · ${tr.origin} · ${imp.weightKg}kg`;
+      document.getElementById('bcSub').textContent=`해동기 ${st.slice(0,5)} → 종료 ${rfEnd} · 소비기한 ${imp.expiryDate||'-'}`;
+    } else {
+      setBcAl(`❌ 부적합 — ${judge.reason}`,'d');
+      hint.textContent=`❌ 부적합 — ${imp.part||'?'} · ${tr.origin||'?'}`;
+      document.getElementById('bcSub').textContent=judge.reason;
+    }
+    fbSave('barcode', rec).then(fbId=>{ if(fbId){ rec.fbId=fbId; saveL(); } });
+    return;
+  }
 
   if(!PEND){
     PEND={code,type}; _lastCode=code;
