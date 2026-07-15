@@ -300,9 +300,6 @@ function opCalc(i, innerEa) {
   const prodName = snEl ? snEl.textContent.trim() : '';
   const perBox = getPerBox(prodName) || 0;
 
-  // 잔여 = 내포장 - (박스×입수) - 잔량박스EA - 제품불량 - 샘플
-  const rem = innerEa - boxes * perBox - partial - defp - sample;
-
   // 상단 요약
   const sbox = document.getElementById('op_sbox_'+i);
   const sdefp = document.getElementById('op_sdefp_'+i);
@@ -316,6 +313,9 @@ function opCalc(i, innerEa) {
   const outerCalc = (boxes > 0 && perBox > 0)
     ? boxes * perBox + partial
     : Math.max(0, innerEa - defp - sample);
+  // 잔여(낱개) = 내포장 - 외포장완료 - 제품불량 - 샘플
+  // 박스 미입력 시 외포장완료가 내포장 전량이므로 잔여는 0 → 집계 더블 방지
+  const rem = innerEa - outerCalc - defp - sample;
   const sOuter = document.getElementById('op_souter_'+i);
   const outerInput = document.getElementById('op_outer_'+i);
   if(sOuter){ sOuter.textContent = outerCalc.toLocaleString(); }
@@ -606,8 +606,8 @@ function renderOpDone(list) {
             <div><label style="font-size:11px;color:var(--g5)">파우치 불량 EA</label><br><input class="fc" type="number" id="oe_defp_${i}" value="${item.productDefect||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
             <div><label style="font-size:11px;color:var(--g5)">외박스 불량</label><br><input class="fc" type="number" id="oe_boxd_${i}" value="${item.boxDefect||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
             <div><label style="font-size:11px;color:var(--g5)">트레이 사용${item.product && item.product.indexOf('코스트코')>=0 ? ' <span style="color:#0ea5e9;font-size:10px">· 자동(외박스/10)</span>' : ''}</label><br><input class="fc" type="number" id="oe_tray_${i}" value="${item.trayUsed||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
-            <div><label style="font-size:11px;color:var(--g5)">잔여 EA</label><br><input class="fc" type="number" id="oe_rem_${i}" value="${item.remainEa||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
-            <div><label style="font-size:11px;color:var(--g5)">잔여 박스</label><br><input class="fc" type="number" id="oe_remb_${i}" value="${item.remainBoxes||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
+            <div><label style="font-size:11px;color:var(--g5)">잔여 박스</label><br><input class="fc" type="number" id="oe_rem_${i}" value="${item.remainEa||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
+            <div><label style="font-size:11px;color:var(--g5)">잔량 EA</label><br><input class="fc" type="number" id="oe_remb_${i}" value="${item.remainBoxes||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
             <div><label style="font-size:11px;color:var(--g5)">샘플</label><br><input class="fc" type="number" id="oe_sample_${i}" value="${item.sample||0}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
           </div>
           <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--g5)">비고</label><br><input class="fc" type="text" id="oe_note_${i}" value="${(item.note||'').replace(/"/g,'&quot;')}" style="width:100%;padding:5px 8px;margin-top:2px"></div>
