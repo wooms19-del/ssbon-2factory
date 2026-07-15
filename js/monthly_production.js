@@ -871,8 +871,8 @@
       var _useEst = false;
       if(_isEstGrp){
         var _thaw = thByDateType[d+'|'+t] || 0;
-        // 형제(일반) 제품이 같은 부위에 있거나, 그 부위 방혈이 없으면 → 가안 역산 (관리자 전용)
-        _useEst = window._isAdmin && (!!__nonEstDT[d+'|'+t] || !(_thaw > 0));
+        // 형제(일반) 제품이 같은 부위에 있거나, 그 부위 방혈이 없으면 → 가안 역산 (관리자 전용, 6월부터)
+        _useEst = window._isAdmin && d >= '2026-06' && (!!__nonEstDT[d+'|'+t] || !(_thaw > 0));
       }
       var rmTotal, ppItem, ckItem, shItem;
       if(_isEstGrp && _useEst){
