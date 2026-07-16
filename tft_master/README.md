@@ -29,3 +29,10 @@ ERP BOMList를 파싱해 TFT 통합 마스터 구조로 정리한 산출물.
 - SQL의 item_id는 AUTO_INCREMENT. 현재 실질 키는 item_code(ERP).
   TFT 서버에서 item_id 확정 시 Firestore도 동일 item_id 부여해 정합.
 - 공정중간(해동/자숙/파쇄)은 레시피에서 파쇄육까지만 펼침(웹이 파쇄 공정 관리).
+
+## 웹↔ERP 매핑 (external_key_map)
+- `web_erp_map.json` / `schema_웹ERP매핑.sql`
+- 현행 웹 제품명 11종 → ERP 완제품코드 22종 (부위별 1:N)
+- 현장앱이 제품명으로 돌아가는 동안 ERP 코드와 잇는 다리.
+- Firestore `external_key_map` 컬렉션에도 반영 (문서ID=웹제품명).
+- 확정: 시그니처 130g = 쇠고기장조림 130g 낱개 (관리자 확인)
