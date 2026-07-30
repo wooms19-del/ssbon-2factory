@@ -694,7 +694,9 @@ async function _openGtinRegisterModal(){
       + '      <option value="설도">설도</option>'
       + '      <option value="우둔">우둔</option>'
       + '      <option value="홍두깨">홍두깨</option>'
+      + '      <option value="__custom__">직접 입력...</option>'
       + '    </select>'
+      + '    <input id="gtinCustom_' + i + '" placeholder="원료명 입력" style="display:none;margin-top:6px;padding:6px 10px;border:1px solid #d1d5db;border-radius:5px;font-size:13px;width:130px" />'
       + '  </td>'
       + '</tr>';
   }).join('');
@@ -716,6 +718,16 @@ async function _openGtinRegisterModal(){
     + '  </div>'
     + '</div>';
   document.body.appendChild(modal);
+  unknown.forEach(function(_, i){
+    var sel = document.getElementById('gtinPart_' + i);
+    if(!sel) return;
+    sel.addEventListener('change', function(){
+      var inp = document.getElementById('gtinCustom_' + i);
+      if(!inp) return;
+      inp.style.display = (sel.value === '__custom__') ? 'inline-block' : 'none';
+      if(sel.value === '__custom__') inp.focus();
+    });
+  });
 }
 
 function _closeGtinModal(){
@@ -731,6 +743,10 @@ async function _submitGtinRegister(cnt){
     if(!el) continue;
     var gtin = el.dataset.gtin;
     var part = el.value;
+    if(part === '__custom__'){
+      var cinp = document.getElementById('gtinCustom_' + i);
+      part = cinp ? cinp.value.trim() : '';
+    }
     if(!part){ continue; }  // 미선택은 스킵
     toRegister.push({ gtin: gtin, part: part });
   }
