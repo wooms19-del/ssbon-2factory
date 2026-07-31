@@ -328,8 +328,7 @@ async function renderMonthly() {
     const shareTxt=totCnt>0?((v.cnt/totCnt*100).toFixed(1)+'%'):'—';
     return `<tr>
       <td style="color:var(--g5);font-size:12px">${code||'—'}</td>
-      <td style="font-weight:500">${prod}</td>
-      <td style="text-align:center;font-size:12px;color:${part==='미지정'?'var(--d)':'var(--g5)'}">${part}</td>
+      <td style="font-weight:500">${prod}${part?` <span style="font-weight:400;font-size:12px;color:${part==='미지정'?'var(--d)':'var(--g5)'}">(${part})</span>`:''}</td>
       <td style="text-align:center">${v.cnt}회</td>
       <td style="text-align:center;font-weight:600;color:#9a5b0b">${shareTxt}</td>
       <td style="text-align:center;font-weight:600;color:var(--p)">${(v.pkEa||0).toLocaleString()}</td>
@@ -337,13 +336,12 @@ async function renderMonthly() {
       <td style="text-align:center;color:var(--s)">${pkgKg>0?pkgKg.toLocaleString()+'kg':'—'}</td>
       <td style="text-align:center;color:${dc}">${dr}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--g4);padding:1rem">데이터 없음</td></tr>';
+  }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--g4);padding:1rem">데이터 없음</td></tr>';
   const totPouch=totPkEa+totDef;
   if(tfoot){ const tdr=totPouch>0?(totDef/totPouch*100).toFixed(2)+'%':'—';
     tfoot.innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--g3)">
       <td style="color:var(--g5)">—</td>
       <td>합계</td>
-      <td style="text-align:center">—</td>
       <td style="text-align:center">${totCnt}회</td>
       <td style="text-align:center;color:#9a5b0b">100%</td>
       <td style="text-align:center;color:var(--p)">${totPkEa.toLocaleString()}</td>
