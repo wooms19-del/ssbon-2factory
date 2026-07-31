@@ -872,9 +872,11 @@
       var _useEst = false;
       if(_isEstGrp){
         var _thaw = thByDateType[d+'|'+t] || 0;
-        // 가안 역산은 그 부위 방혈 실측이 "없는 날"만 (관리자 전용, 6월부터)
-        // 방혈이 있으면 코스트코 몫도 그 안에 포함 — 역산을 얹으면 이중 계산 (2026-07-31 수정)
-        _useEst = window._isAdmin && d >= '2026-06' && !(_thaw > 0);
+        // 가안 역산: 그 부위 방혈이 "없는 날" + 명시 예외일만 (관리자 전용, 6월부터)
+        // 방혈이 있으면 코스트코 몫도 그 안에 포함 — 역산을 얹으면 이중 계산 (2026-07-31)
+        // 예외일 = 방혈은 소량(타제품용) 있고 코스트코 원육은 방혈 입력 없이 쓰인 특수일
+        var _EST_FORCE_DATES = { '2026-07-02':1, '2026-07-10':1 };
+        _useEst = window._isAdmin && d >= '2026-06' && ( !(_thaw > 0) || _EST_FORCE_DATES[d] );
       }
       var rmTotal, ppItem, ckItem, shItem;
       if(_isEstGrp && _useEst){
