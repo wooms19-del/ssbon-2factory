@@ -4712,3 +4712,73 @@ function renderDailyAlerts(metrics, dateStr){
 // 탭 핸들러 글로벌 노출 (onclick에서 사용)
 window._moSetPrevCmpTab = _moSetPrevCmpTab;
 
+
+// ── 제품별 생산 현황: 이미지 저장 / 엑셀 다운로드 ──────────────
+function _moProdTableData(){
+  const head=['ERP 코드','제품명','작업 횟수','비중(%)','내포장 EA','파우치 사용량','완제품 중량(KG)','불량률(%)'];
+  const cut=t=>{ const v=parseFloat(String(t).replace(/[^0-9.\-]/g,'')); return isFinite(v)?v:String(t); };
+  const pick=tr=>{
+    const c=[...tr.cells].map(x=>x.textContent.trim());
+    if(c.length<8) return null;
+    return [c[0], c[1], cut(c[2]), cut(c[3]), cut(c[4]), cut(c[5]), cut(c[6]), cut(c[7])];
+  };
+  const body=[...document.querySelectorAll('#mo_prod_tbl tr')].map(pick).filter(Boolean);
+  const foot=[...document.querySelectorAll('#mo_prod_total tr')].map(pick).filter(Boolean);
+  return {head, body, foot};
+}
+
+function _moExportProdExcel(){
+  try{
+    if(typeof XLSX==='undefined'){ alert('엑셀 모듈 로딩 중입니다. 잠시 후 다시 시도하세요.'); return; }
+    const ym=window._moYm||tod().slice(0,7);
+    const {head,body,foot}=_moProdTableData();
+    if(!body.length){ alert('표 데이터가 없습니다.'); return; }
+    const meta=(document.getElementById('mo_prod_meta')||{}).textContent||'';
+    const aoa=[['제품별 생산 현황  '+ym],[meta],[],head,...body,...foot];
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:11},{wch:34},{wch:10},{wch:10},{wch:13},{wch:14},{wch:16},{wch:11}];
+    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}},{s:{r:1,c:0},e:{r:1,c:7}}];
+    const HR=3, LAST=HR+body.length+foot.length;
+    const thin={style:'thin',color:{rgb:'D5DBE4'}};
+    for(let R=0;R<=LAST;R++){
+      for(let C=0;C<8;C++){
+        const ref=XLSX.utils.encode_cell({r:R,c:C});
+        if(!ws[ref]) ws[ref]={t:'s',v:''};
+        const st={font:{name:'맑은 고딕',sz:10},alignment:{vertical:'center',horizontal:C===1?'left':(C===0?'left':'center')}};
+        if(R===0){ st.font={name:'맑은 고딕',sz:14,bold:true,color:{rgb:'1B2A44'}}; st.alignment={horizontal:'left',vertical:'center'}; }
+        else if(R===1){ st.font={name:'맑은 고딕',sz:9,color:{rgb:'6E7682'}}; st.alignment={horizontal:'left',vertical:'center'}; }
+        else if(R===HR){ st.font={name:'맑은 고딕',sz:10,bold:true,color:{rgb:'24282D'}};
+          st.fill={patternType:'solid',fgColor:{rgb:'ECF0F7'}}; st.alignment={horizontal:'center',vertical:'center'};
+          st.border={top:thin,bottom:thin,left:thin,right:thin}; }
+        else if(R>HR){ st.border={top:thin,bottom:thin,left:thin,right:thin};
+          if(R>=HR+body.length+1){ st.font={name:'맑은 고딕',sz:10,bold:true}; st.fill={patternType:'solid',fgColor:{rgb:'F5F7FA'}}; }
+          if([4,5].includes(C)) st.numFmt='#,##0';
+          if(C===6) st.numFmt='#,##0.00';
+          if([3,7].includes(C)) st.numFmt='0.00';
+        }
+        ws[ref].s=st;
+      }
+    }
+    ws['!rows']=[{hpt:22},{hpt:15},{hpt:6}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'제품별 생산 현황');
+    XLSX.writeFile(wb,'2공장_제품별생산현황_'+ym+'.xlsx');
+    if(typeof toast==='function') toast('엑셀 저장됨');
+  }catch(e){ console.error(e); alert('엑셀 저장 실패: '+e.message); }
+}
+
+async function _moSaveProdImage(){
+  const el=document.getElementById('mo_prod_card');
+  if(!el){ alert('표를 찾을 수 없습니다.'); return; }
+  if(typeof html2canvas==='undefined'){ alert('이미지 모듈 로딩 중입니다. 잠시 후 다시 시도하세요.'); return; }
+  const btns=[...el.querySelectorAll('.js-noshot')];
+  btns.forEach(b=>b.style.visibility='hidden');
+  try{
+    const cv=await html2canvas(el,{scale:2,backgroundColor:'#ffffff',logging:false});
+    const a=document.createElement('a');
+    a.download='2공장_제품별생산현황_'+(window._moYm||tod().slice(0,7))+'.png';
+    a.href=cv.toDataURL('image/png'); a.click();
+    if(typeof toast==='function') toast('이미지 저장됨');
+  }catch(e){ console.error(e); alert('이미지 저장 실패: '+e.message); }
+  finally{ btns.forEach(b=>b.style.visibility=''); }
+}
