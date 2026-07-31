@@ -279,10 +279,9 @@ async function renderMonthly() {
   pk.filter(r=>!_isTestPk(r)).forEach(r=>{
     const dt=String(r.date||'').slice(0,10), pr=r.product||'기타', pt=_resolvePart(r,dt);
     const key=dt+'|'+pr+'|'+pt;
-    if(!_dpMap[key]) _dpMap[key]={dt,pr,pt,pkEa:0,defect:0,cnt:0};
+    if(!_dpMap[key]) _dpMap[key]={dt,pr,pt,pkEa:0,defect:0};
     _dpMap[key].pkEa+=parseFloat(r.ea)||0;
     _dpMap[key].defect+=parseFloat(r.defect)||0;
-    _dpMap[key].cnt++;
   });
   // 같은 날 같은 제품의 내포장 합 — 외포장EA를 부위별로 나눌 때 사용
   const _dpSum={};
@@ -295,7 +294,7 @@ async function renderMonthly() {
     if(!byProd[pkey]) byProd[pkey]={prod:v.pr,part:v.pt,ea:0,defect:0,pkEa:0,cnt:0,days:new Set()};
     byProd[pkey].ea+=ea; byProd[pkey].defect+=v.defect;
     byProd[pkey].pkEa+=v.pkEa; // 파우치 사용량 = 내포장 EA (불량 포함)
-    byProd[pkey].cnt+=v.cnt; byProd[pkey].days.add(v.dt);
+    byProd[pkey].cnt+=1; byProd[pkey].days.add(v.dt); // 같은 날 같은 부위는 호기 수와 무관하게 1회
   });
   const opByProd = {};
   opReal.forEach(r=>{ const k=r.product||'기타';
