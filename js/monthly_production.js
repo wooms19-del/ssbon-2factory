@@ -872,8 +872,9 @@
       var _useEst = false;
       if(_isEstGrp){
         var _thaw = thByDateType[d+'|'+t] || 0;
-        // 형제(일반) 제품이 같은 부위에 있거나, 그 부위 방혈이 없으면 → 가안 역산 (관리자 전용, 6월부터)
-        _useEst = window._isAdmin && d >= '2026-06' && (!!__nonEstDT[d+'|'+t] || !(_thaw > 0));
+        // 가안 역산은 그 부위 방혈 실측이 "없는 날"만 (관리자 전용, 6월부터)
+        // 방혈이 있으면 코스트코 몫도 그 안에 포함 — 역산을 얹으면 이중 계산 (2026-07-31 수정)
+        _useEst = window._isAdmin && d >= '2026-06' && !(_thaw > 0);
       }
       var rmTotal, ppItem, ckItem, shItem;
       if(_isEstGrp && _useEst){
