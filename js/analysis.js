@@ -178,6 +178,14 @@ async function renderMonthly() {
   // attendance 결과 → {date: 출근자수} 맵
   const _attendanceCountByDate = attendanceData || {};
 
+  // ERP 품목코드 매핑 로드 (_config/erp_product_map, 세션 1회) — { 제품명: { 부위: 코드, '*': 코드 } }
+  if(!window._erpMap){
+    try{
+      const _ed = await db.collection('_config').doc('erp_product_map').get();
+      window._erpMap = (_ed.exists && _ed.data() && _ed.data().map) || {};
+    }catch(e){ window._erpMap = {}; }
+  }
+
   // ★ 진행중 설비 있는 날짜는 차트/KPI에서 제외 (부분 데이터로 수율 왜곡 방지)
   const _pendingDates = new Set();
   (pendingPk||[]).forEach(r => { const d = String(r.date||'').slice(0,10); if(d) _pendingDates.add(d); });
@@ -251,20 +259,43 @@ async function renderMonthly() {
   // 외포장 map (date_product → outerEa)
   const _opEaMap={};
   opReal.forEach(r=>{ _opEaMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=opEa(r); });
-  // 날짜+제품 단위로 내포장 집계 (testRun 제외)
+  // 부위 판정: packing.type 우선, 비어있으면 그날 파쇄 부위가 1종일 때만 자동 판정
+  const _shPartByDate={};
+  (shMonth||[]).forEach(r=>{
+    const d=String(r.date||'').slice(0,10), t=String(r.type||'').trim();
+    if(!d||!t) return;
+    if(!_shPartByDate[d]) _shPartByDate[d]=new Set();
+    _shPartByDate[d].add(t);
+  });
+  const _resolvePart=(r,dt)=>{
+    const t=String(r.type||'').split(',')[0].trim();
+    if(t) return t;
+    const s=_shPartByDate[dt];
+    if(s && s.size===1) return Array.from(s)[0];
+    return '미지정';
+  };
+  // 날짜+제품+부위 단위로 내포장 집계 (testRun 제외) — 작업 횟수는 포장 기록 건수
   const _dpMap={};
   pk.filter(r=>!_isTestPk(r)).forEach(r=>{
-    const dt=String(r.date||'').slice(0,10), pr=r.product||'기타', key=dt+'_'+pr;
-    if(!_dpMap[key]) _dpMap[key]={dt,pr,pkEa:0,defect:0};
+    const dt=String(r.date||'').slice(0,10), pr=r.product||'기타', pt=_resolvePart(r,dt);
+    const key=dt+'|'+pr+'|'+pt;
+    if(!_dpMap[key]) _dpMap[key]={dt,pr,pt,pkEa:0,defect:0,cnt:0};
     _dpMap[key].pkEa+=parseFloat(r.ea)||0;
     _dpMap[key].defect+=parseFloat(r.defect)||0;
+    _dpMap[key].cnt++;
   });
-  Object.values(_dpMap).forEach(({dt,pr,pkEa,defect})=>{
-    const ea=_opEaMap[dt+'_'+pr]||pkEa; // 외포장 있으면 외포장, 없으면 내포장
-    if(!byProd[pr]) byProd[pr]={ea:0,defect:0,pkEa:0,days:new Set()};
-    byProd[pr].ea+=ea; byProd[pr].defect+=defect;
-    byProd[pr].pkEa+=pkEa; // 파우치 사용량 = 내포장 EA (불량 포함)
-    byProd[pr].days.add(dt);
+  // 같은 날 같은 제품의 내포장 합 — 외포장EA를 부위별로 나눌 때 사용
+  const _dpSum={};
+  Object.values(_dpMap).forEach(v=>{ const k=v.dt+'_'+v.pr; _dpSum[k]=(_dpSum[k]||0)+v.pkEa; });
+  Object.values(_dpMap).forEach(v=>{
+    const k=v.dt+'_'+v.pr, opTot=_opEaMap[k];
+    const share=_dpSum[k]>0 ? v.pkEa/_dpSum[k] : 1;
+    const ea=(opTot!=null&&opTot>0) ? opTot*share : v.pkEa; // 외포장 있으면 외포장(부위별 배분), 없으면 내포장
+    const pkey=v.pr+'|'+v.pt;
+    if(!byProd[pkey]) byProd[pkey]={prod:v.pr,part:v.pt,ea:0,defect:0,pkEa:0,cnt:0,days:new Set()};
+    byProd[pkey].ea+=ea; byProd[pkey].defect+=v.defect;
+    byProd[pkey].pkEa+=v.pkEa; // 파우치 사용량 = 내포장 EA (불량 포함)
+    byProd[pkey].cnt+=v.cnt; byProd[pkey].days.add(v.dt);
   });
   const opByProd = {};
   opReal.forEach(r=>{ const k=r.product||'기타';
@@ -276,30 +307,45 @@ async function renderMonthly() {
   const rows=Object.entries(byProd).sort((a,b)=>b[1].ea-a[1].ea);
   // 제품명에서 그램 파싱 → 완제품 KG (예: 170g→0.17, 3KG→3)
   function _prodKgUnit(name){ const m=(name||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i); if(!m) return 0; return m[2].toUpperCase()==='KG'?parseFloat(m[1]):parseFloat(m[1])/1000; }
-  let totProdKg=0;
-  if(tbody) tbody.innerHTML=rows.map(([prod,v])=>{
+  let totProdKg=0, totCnt=0;
+  const _erpMap=window._erpMap||{};
+  const _erpCode=(prod,part)=>{ const d=_erpMap[prod]; if(!d) return ''; return d[part]||d['*']||''; };
+  const _pkEaByProd={};
+  rows.forEach(([,v])=>{ totCnt+=v.cnt||0; _pkEaByProd[v.prod]=(_pkEaByProd[v.prod]||0)+(v.pkEa||0); });
+  setText('mo_prod_meta', '총 생산일수 '+workDays+'일 · 총 작업 '+totCnt+'회');
+  if(tbody) tbody.innerHTML=rows.map(([,v])=>{
+    const prod=v.prod, part=v.part;
+    // 무게: 기존과 동일 — 제품 단위 외포장EA 우선, 없으면 내포장EA. 부위별은 내포장 비율로 배분
     const op_=opByProd[prod]||{outerEa:0,boxes:0};
-    // 무게: 외포장 EA 우선, 외포장 안 끝났거나 없으면 내포장 EA로 환산
-    // (외포장 ≤ 내포장 가정. 추후 외포장 100% 완료되면 자연스럽게 같은 값)
-    const _eaForKg=op_.outerEa>0?op_.outerEa:(v.pkEa||0);
+    const _shareInProd=(_pkEaByProd[prod]>0)?(v.pkEa||0)/_pkEaByProd[prod]:1;
+    const _eaForKg=op_.outerEa>0?op_.outerEa*_shareInProd:(v.pkEa||0);
     const pkgKg=r2(_eaForKg*_prodKgUnit(prod));
-    totEA+=v.ea; totDef+=v.defect; totOuter+=op_.outerEa; totBx+=op_.boxes; totPkEa+=(v.pkEa||0); totProdKg=r2(totProdKg+pkgKg);
+    totEA+=v.ea; totDef+=v.defect; totPkEa+=(v.pkEa||0); totProdKg=r2(totProdKg+pkgKg);
     const _pouch=(v.pkEa||0)+v.defect;
     const dr=_pouch>0?(v.defect/_pouch*100).toFixed(2)+'%':'—';
     const dc=_pouch>0&&v.defect/_pouch*100>2?'var(--d)':'var(--s)';
+    const code=_erpCode(prod,part);
+    const shareTxt=totCnt>0?((v.cnt/totCnt*100).toFixed(1)+'%'):'—';
     return `<tr>
+      <td style="color:var(--g5);font-size:12px">${code||'—'}</td>
       <td style="font-weight:500">${prod}</td>
-      <td style="text-align:center">${v.days.size}일</td>
+      <td style="text-align:center;font-size:12px;color:${part==='미지정'?'var(--d)':'var(--g5)'}">${part}</td>
+      <td style="text-align:center">${v.cnt}회</td>
+      <td style="text-align:center;font-weight:600;color:#9a5b0b">${shareTxt}</td>
       <td style="text-align:center;font-weight:600;color:var(--p)">${(v.pkEa||0).toLocaleString()}</td>
       <td style="text-align:center">${(v.pkEa+v.defect)>0?(v.pkEa+v.defect).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${pkgKg>0?pkgKg.toLocaleString()+'kg':'—'}</td>
       <td style="text-align:center;color:${dc}">${dr}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--g4);padding:1rem">데이터 없음</td></tr>';
+  }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--g4);padding:1rem">데이터 없음</td></tr>';
   const totPouch=totPkEa+totDef;
   if(tfoot){ const tdr=totPouch>0?(totDef/totPouch*100).toFixed(2)+'%':'—';
     tfoot.innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--g3)">
-      <td>합계</td><td style="text-align:center">—</td>
+      <td style="color:var(--g5)">—</td>
+      <td>합계</td>
+      <td style="text-align:center">—</td>
+      <td style="text-align:center">${totCnt}회</td>
+      <td style="text-align:center;color:#9a5b0b">100%</td>
       <td style="text-align:center;color:var(--p)">${totPkEa.toLocaleString()}</td>
       <td style="text-align:center">${(totPkEa+totDef)>0?(totPkEa+totDef).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${totProdKg>0?totProdKg.toLocaleString()+'kg':'—'}</td>
