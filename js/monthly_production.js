@@ -850,6 +850,7 @@
                        'shKg','shHours','shPersonHours','shWorkers'];
     var __grpMap = {};
     var __nonEstDT = {};  // 'date|부위' → 비-가안(일반) 제품이 존재 (방혈 주인 판정용)
+    var _EST_FORCE_DATES = { '2026-07-02':1, '2026-07-10':1 };
     rows.forEach(function(r){
       if(r.noMeat){ r._grpKey = null; return; }
       // ★ 메인 행만 그룹화 (부위별 보조 행은 제외)
@@ -857,8 +858,12 @@
       // 가안 제품(코스트코 등)은 6월부터만 별도 그룹 분리 — 이전 달은 일반 부위 그룹에 병합
       var _isEst = window._estYields && window._estYields[r.product] && r.date >= '2026-06';
       if(!_isEst) __nonEstDT[r.date + '|' + (r.type || '')] = true;
-      // 가안 제품(코스트코 등)은 별도 그룹으로 분리 — 다른 부위 제품과 원육 병합 방지
-      var key = r.date + '|' + (r.type || '') + (_isEst ? '|__EST__|' + r.product : '');
+      // ★ 별도 그룹으로 떼는 건 "가안 역산이 실제로 적용되는 날"만.
+      //   방혈 실측이 있는 날은 그 방혈로 여러 제품을 만든 것이므로 같은 그룹으로 묶어
+      //   원육~파쇄를 완제품 비율로 분배한다 (2026-08-04)
+      var _estApplies = _isEst && window._isAdmin && r.date >= '2026-06'
+                      && ( !((thByDateType[r.date + '|' + (r.type || '')] || 0) > 0) || _EST_FORCE_DATES[r.date] );
+      var key = r.date + '|' + (r.type || '') + (_estApplies ? '|__EST__|' + r.product : '');
       if(!__grpMap[key]) __grpMap[key] = [];
       r._grpKey = key;
       __grpMap[key].push(r);
@@ -875,7 +880,6 @@
         // 가안 역산: 그 부위 방혈이 "없는 날" + 명시 예외일만 (관리자 전용, 6월부터)
         // 방혈이 있으면 코스트코 몫도 그 안에 포함 — 역산을 얹으면 이중 계산 (2026-07-31)
         // 예외일 = 방혈은 소량(타제품용) 있고 코스트코 원육은 방혈 입력 없이 쓰인 특수일
-        var _EST_FORCE_DATES = { '2026-07-02':1, '2026-07-10':1 };
         _useEst = window._isAdmin && d >= '2026-06' && ( !(_thaw > 0) || _EST_FORCE_DATES[d] );
       }
       var rmTotal, ppItem, ckItem, shItem;
