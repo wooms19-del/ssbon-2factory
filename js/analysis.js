@@ -8,6 +8,8 @@
 // ============================================================
 var _moYm = '';
 var _moBarChart = null, _moDefChart = null, _moYieldChart = null;
+// 원육 사용량 실적에서 제외할 부위 — 매입분이 아닌 테스트 물량 (2026-08-04)
+var _RM_EXCLUDE_PARTS = { '설깃': true };
 
 function chMonth(dir) {
   if(!_moYm) _moYm = tod().slice(0,7);
@@ -1567,6 +1569,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
         _pRows.forEach(r=>{
           if(!r || !r.date || r.isSubTotal) return;
           if(r._isMainRow === false && _pMainDates[r.date]) return;
+          if(_RM_EXCLUDE_PARTS[r.type]) return;  // 테스트 부위 제외 (차트와 동일 규칙)
           const d = String(r.date||'').slice(0,10);
           if(!d) return;
           _pByDay[d] = (_pByDay[d]||0) + (parseFloat(r.rmKg)||0);
@@ -3856,6 +3859,7 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       _mpRows.forEach(function(r){
         if(!r || !r.date || r.isSubTotal) return;
         if(r._isMainRow === false && _mainDates[r.date]) return;  // 메인 행이 있는 날의 보조 행은 중복
+        if(_RM_EXCLUDE_PARTS[r.type]) return;  // 테스트 부위(설깃 등)는 원육 실적에서 제외
         _rd[r.date] = (_rd[r.date] || 0) + (r.rmKg || 0);
         const pt = r.type || '';
         if(pt){ if(!_rp[r.date]) _rp[r.date] = {}; _rp[r.date][pt] = (_rp[r.date][pt] || 0) + (r.rmKg || 0); }
