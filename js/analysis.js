@@ -1561,9 +1561,12 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     try {
       if(window._mpProcess){
         const _pRows = (window._mpProcess(prevPk, prevOp, prevPp, prevTh, prevSh, prevCk, undefined, 'none')||{}).rows || [];
+        const _pMainDates = {};
+        _pRows.forEach(r=>{ if(r && r.date && !r.isSubTotal && r._isMainRow !== false) _pMainDates[r.date] = true; });
         const _pByDay = {};
         _pRows.forEach(r=>{
-          if(r._isMainRow === false || r.isSubTotal) return;
+          if(!r || !r.date || r.isSubTotal) return;
+          if(r._isMainRow === false && _pMainDates[r.date]) return;
           const d = String(r.date||'').slice(0,10);
           if(!d) return;
           _pByDay[d] = (_pByDay[d]||0) + (parseFloat(r.rmKg)||0);
@@ -3844,8 +3847,15 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
     const _mpRows = (window._moGD && window._moGD.mpRows) || null;
     if(_mpRows && _mpRows.length){
       const _rd = {}, _rp = {};
+      // ★ 한 제품을 여러 부위로 만든 날은 메인 행 없이 부위별 보조 행만 생성됨.
+      //   그런 날은 보조 행으로 채운다 (없으면 그날이 통째로 누락 — 7/31 사례, 2026-08-04)
+      const _mainDates = {};
       _mpRows.forEach(function(r){
-        if(!r || !r.date || r._isMainRow === false) return;
+        if(r && r.date && !r.isSubTotal && r._isMainRow !== false) _mainDates[r.date] = true;
+      });
+      _mpRows.forEach(function(r){
+        if(!r || !r.date || r.isSubTotal) return;
+        if(r._isMainRow === false && _mainDates[r.date]) return;  // 메인 행이 있는 날의 보조 행은 중복
         _rd[r.date] = (_rd[r.date] || 0) + (r.rmKg || 0);
         const pt = r.type || '';
         if(pt){ if(!_rp[r.date]) _rp[r.date] = {}; _rp[r.date][pt] = (_rp[r.date][pt] || 0) + (r.rmKg || 0); }
