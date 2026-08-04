@@ -1518,8 +1518,21 @@
       'yieldPp':1,'yieldCk':1,'yieldSh':1,'yieldPk':1
     };
 
+    // ★ 외포장은 부위와 무관한 제품 단위 작업 → 같은 (일자+제품)의 부위행끼리 병합
+    var __opCnt = {}, __opFirst = {};
+    calcRows.forEach(function(r){
+      if(r.isSubTotal || !r._isPartRow) return;
+      var k = r.date + '|' + r.product;
+      __opCnt[k] = (__opCnt[k] || 0) + 1;
+      if(__opFirst[k] === undefined) __opFirst[k] = r;
+    });
+    var __OP_COLS = { 'opEa':1, 'opBoxes':1, 'opHours':1, 'opWorkers':1, 'opPersonHours':1 };
+
     var bodyHtml = calcRows.map(function(r){
       var cnt = dateCntMap[r.date] || 1;
+      var opKey = (!r.isSubTotal && r._isPartRow) ? (r.date + '|' + r.product) : null;
+      var opCnt = opKey ? (__opCnt[opKey] || 1) : 1;
+      var opFirst = opKey ? (__opFirst[opKey] === r) : true;
       var grpCnt = r._grpSize || 1;
       var isGrpFirst = r._grpFirst !== false;
       var trClass = r.isSubTotal ? ' class="subTotalRow"' : '';
@@ -1585,6 +1598,22 @@
             }).join('');
           }
           return '<td class="product col-product" style="text-align:center">'+(v||'')+typeBadges+'</td>';
+        }
+        // 외포장 컬럼: 같은 제품의 부위행끼리 rowspan 병합 (제품 단위 작업이므로)
+        if(__OP_COLS[c[0]] && opCnt > 1){
+          if(!opFirst) return '';
+          var _opv = 0;
+          calcRows.forEach(function(x){
+            if(!x.isSubTotal && x._isPartRow && (x.date+'|'+x.product) === opKey) _opv += (parseFloat(x[c[0]]) || 0);
+          });
+          // 인원(평균)·작업시간은 합산이 아니라 대표값 — 첫 행 값 사용
+          if(c[0] === 'opWorkers' || c[0] === 'opHours'){
+            _opv = 0;
+            calcRows.forEach(function(x){
+              if(!_opv && !x.isSubTotal && x._isPartRow && (x.date+'|'+x.product) === opKey) _opv = parseFloat(x[c[0]]) || 0;
+            });
+          }
+          return '<td class="'+_grpCls(c, _i_)+'" rowspan="'+opCnt+'">'+(_opv>0?fmtCell(_opv, c):'-')+'</td>';
         }
         // 부위 컬럼: 그룹 첫 row만 td 출력 (rowspan으로 병합), 나머지 row는 td 생략
         if(__PART_COLS[c[0]]){
