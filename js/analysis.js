@@ -1554,8 +1554,24 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     // 3단계: 일평균
     const _prevDayKgs = Object.values(_prevDayKgMap).filter(v => v > 0);
     const _avgPkKg = _prevDayKgs.length ? Math.round(_prevDayKgs.reduce((s,v)=>s+v,0)/_prevDayKgs.length) : null;
-    // 4월 일평균 원육 사용량 — pRm(원육 합) / pDays
-    const _avgRmKg = pDays>0 ? pRm/pDays : null;
+    // 전월 일평균 원육 사용량
+    // ★ 이번달 차트와 반드시 같은 산식이어야 함 (7월을 열었을 때의 '이번달 일평균' =
+    //    8월에서 보는 '전월 일평균'). mpRows(실제 방혈 + 코스트코 가안 + override) 기준. (2026-08-04)
+    let _avgRmKg = pDays>0 ? pRm/pDays : null;
+    try {
+      if(window._mpProcess){
+        const _pRows = (window._mpProcess(prevPk, prevOp, prevPp, prevTh, prevSh, prevCk, undefined, 'none')||{}).rows || [];
+        const _pByDay = {};
+        _pRows.forEach(r=>{
+          if(r._isMainRow === false || r.isSubTotal) return;
+          const d = String(r.date||'').slice(0,10);
+          if(!d) return;
+          _pByDay[d] = (_pByDay[d]||0) + (parseFloat(r.rmKg)||0);
+        });
+        const _pVals = Object.values(_pByDay).filter(v=>v>0);
+        if(_pVals.length) _avgRmKg = _pVals.reduce((s,v)=>s+v,0)/_pVals.length;
+      }
+    } catch(e){ console.error('[월별현황] 전월 일평균 mpRows 계산 실패', e); }
     window._moPrevAvgDef = _avgDef;
     window._moPrevAvgYld = _avgYld;
     window._moPrevAvgPkKg = _avgPkKg;
