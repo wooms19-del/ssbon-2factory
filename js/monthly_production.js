@@ -888,6 +888,9 @@
         var _fy = (typeof _cfg === 'number') ? _cfg : ((_cfg && _cfg.final) || 0);
         var _meat = grp.reduce(function(s,r){ return s + (r.pkEa||0) * (r.kgea||0); }, 0);
         rmTotal = _fy ? _r2(_meat / _fy) : 0;
+        // ★ 날짜별 고정 원육값이 있으면 역산보다 우선 (_config/estimate_fixed.rm)
+        var _fx = window._estFixedRm && window._estFixedRm[d + '|' + grp[0].product];
+        if(_fx > 0) rmTotal = _r2(_fx);
         var _ppY = (_cfg && _cfg.pp) || 0, _ckY = (_cfg && _cfg.ck) || 0, _shY = (_cfg && _cfg.sh) || 0;
         ppItem = {kg: _r2(rmTotal * _ppY), hours:0, personHours:0};
         ckItem = {kg: _r2(rmTotal * _ckY), hours:0, personHours:0};

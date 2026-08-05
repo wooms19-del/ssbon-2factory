@@ -145,6 +145,10 @@
       var doc2 = await db.collection('_config').doc('estimate_yields').get();
       var d2 = (doc2.exists && doc2.data()) ? doc2.data() : null;
       if(d2 && d2.yields) window._estYields = d2.yields;
+      // 날짜별 고정 원육값 (역산보다 우선)
+      var doc3 = await db.collection('_config').doc('estimate_fixed').get();
+      var d3 = (doc3.exists && doc3.data()) ? doc3.data() : null;
+      window._estFixedRm = (d3 && d3.rm) || {};
     }catch(e){ window._productPartsLoaded = false; }
   };
 
