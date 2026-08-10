@@ -13,6 +13,9 @@ var _shipHistYm = null;   // 출고 이력에서 보고 있는 월 (YYYY-MM), nu
 var FC3KG = 'FC 장조림 3KG';
 /* 파레트 적재 기준 (1파레트 = 몇 박스). 기준표 확정분만 등록 —
    없는 제품은 파레트 분해 없이 박스·ea만 표시 */
+// 소비기한 선입선출로 파레트를 끊는 제품 (로트 섞임 허용)
+var FIFO_PALLET = { '코스트코 장조림 170g': true };
+
 var PALLET_BOX = {
   '시그니처 장조림 130g': 48,
   '시그니처 장조림 130g 마트용': 100,
@@ -431,6 +434,43 @@ function _shipCopyText(dateStr){
     var per=(L&&L.palletMap&&L.palletMap[p])||PALLET_BOX[p]||0;
     lines.push(p);
     var prodFullBox=0;
+
+    // ★ 코스트코 170g: 소비기한 선입선출로 이어붙여 per박스마다 1파레트로 끊음
+    //   (소비기한 섞임 허용 / 잔량박스는 제외 — 2026-08-10 확정)
+    if(FIFO_PALLET[p] && per>0){
+      var lotKeys=Object.keys(g.lots).sort();
+      var queue=[], remnTxt=[], sampTxt=[];
+      lotKeys.forEach(function(ld){
+        var l=g.lots[ld];
+        if(l.box>0) queue.push({ld:ld, box:l.box});
+        if(l.rbox>0||l.rea>0) remnTxt.push('소비기한'+_fmtYY(ld)+' 잔량 '+(l.rbox>0?l.rbox.toLocaleString()+'box ':'')+l.rea.toLocaleString()+'ea');
+        if(l.sbox||l.sea) sampTxt.push('샘플 '+l.sbox.toLocaleString()+'박스 '+l.sea.toLocaleString()+'ea (합계 미포함)');
+      });
+      var pallets=[], cur=[], curSum=0;
+      queue.forEach(function(q){
+        var left=q.box;
+        while(left>0){
+          var take=Math.min(left, per-curSum);
+          cur.push({ld:q.ld, box:take}); curSum+=take; left-=take;
+          if(curSum>=per){ pallets.push(cur); cur=[]; curSum=0; }
+        }
+      });
+      if(cur.length) pallets.push(cur);
+      pallets.forEach(function(pl, i){
+        var sum=pl.reduce(function(a,b){return a+b.box;},0);
+        var detail=pl.map(function(x){ return _fmtYY(x.ld)+' '+x.box.toLocaleString(); }).join(' + ');
+        lines.push('P'+(i+1)+' '+sum.toLocaleString()+'box ('+detail+')');
+      });
+      remnTxt.forEach(function(t){ lines.push(t); });
+      lines.push('총'+g.box.toLocaleString()+'box총'+g.ea.toLocaleString()+'ea');
+      var fifoPal=(g.palIn>0)?Math.round(g.palIn*10)/10:pallets.length;
+      lines.push('총'+fifoPal+'파레트');
+      sampTxt.forEach(function(t){ lines.push(t); });
+      lines.push('');
+      tBox+=g.box; tEa+=g.ea; tPal+=fifoPal;
+      return;
+    }
+
     Object.keys(g.lots).sort().forEach(function(ld){
       var l=g.lots[ld];
       var lotBox=l.box+l.rbox, lotEa=l.ea+l.rea;
