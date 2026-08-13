@@ -798,6 +798,9 @@ function _shipPrint(){
   var w=window.open('','_blank','width=1100,height=800');
   if(!w){ alert('팝업이 차단되었습니다. 브라우저 주소창의 팝업 차단을 해제해주세요.'); return; }
   w.document.write(html); w.document.close();
-  w.onload=function(){ w.focus(); w.print(); };
-  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 600);
+  // ★ 인쇄는 한 번만 (onload / 타이머 중복 방지)
+  var _printed=false;
+  var doPrint=function(){ if(_printed) return; _printed=true; try{ w.focus(); w.print(); }catch(e){} };
+  w.onload=doPrint;
+  setTimeout(doPrint, 700);
 }
