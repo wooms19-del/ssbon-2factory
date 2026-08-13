@@ -329,7 +329,13 @@ function _buildEarlyMsg(){
   });
   var times=Object.keys(byTime).sort();
   var lines=[_shortDate(_attDate)+' 운영팀 조출',''];
-  if(times.length) times.forEach(function(tm){ lines.push(tm+' '+byTime[tm].join(' ')); });
+  // ★ 이름에 공백이 있는 외국인 직원 구분을 위해 쉼표 + 인원수 표기 (2026-08-13)
+  if(times.length) times.forEach(function(tm){
+    var arr=byTime[tm];
+    lines.push(tm+' ('+arr.length+'명)');
+    lines.push(arr.join(', '));
+    lines.push('');
+  });
   else lines.push('조출자 없음');
   var off=[];
   (_attEmps||[]).forEach(function(e){
@@ -343,7 +349,8 @@ function _buildEarlyMsg(){
     else if(t.indexOf('quarter-pm')>=0)off.push(_attDispName(e)+'(오후반반차)');
     else if(t.indexOf('quarter')>=0)off.push(_attDispName(e)+'(반반차)');
   });
-  lines.push('휴무자 '+(off.length?off.join(' '):'없습니다.'));
+  if(off.length){ lines.push('휴무자 ('+off.length+'명)'); lines.push(off.join(', ')); }
+  else lines.push('휴무자 없습니다.');
   return lines.join('\n');
 }
 function _attDispName(e){ if(e.nickname)return e.nickname; if(e.position)return e.name+e.position; return e.name; }
