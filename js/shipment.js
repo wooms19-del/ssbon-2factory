@@ -306,6 +306,8 @@ function _renderShipView(){
       + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">출고서 날짜</label><input type="date" id="gs_copy_date" value="'+_shipToday()+'" onchange="_shipCopy()" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px"></div>'
       + '<button onclick="_shipCopy()" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">📋 출고서 생성</button>'
       + '<button onclick="_shipCopyClip()" style="padding:8px 16px;background:#fff;border:1px solid #2563eb;color:#2563eb;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">복사하기</button>'
+      + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">수신처</label><input id="gs_recv" value="순수본 D동" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px;width:130px"></div>'
+      + '<button onclick="_shipPrint()" style="padding:8px 16px;background:#0f766e;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">🖨️ 거래명세서 인쇄</button>'
     + '</div>'
     + '<textarea id="gs_copy_out" readonly style="width:100%;min-height:130px;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;line-height:1.6;background:#fff;resize:vertical" placeholder="날짜 선택 후 [출고서 생성] → 메신저에 붙여넣기"></textarea>'
     + '</div>';
@@ -700,3 +702,105 @@ async function goodsShipEditNote(fbId){
   }catch(e){ console.error(e); toast&&toast('오류: '+(e.message||e),'d'); }
 }
 window.goodsShipEditNote=goodsShipEditNote;
+
+
+// ── 거래명세서 인쇄 ──────────────────────────────────
+// 시스템 제품명 → 거래명세서 표기명
+var BILL_NAME = {
+  '시그니처 장조림 130g':'시그니처 쇠고기장조림 130g',
+  '시그니처 장조림 130g 마트용':'시그니처 쇠고기장조림 130g (마트용)',
+  'FC 장조림 3KG':'3kg 장조림',
+  '코스트코 장조림 170g':'쇠고기장조림 170g',
+  '트레이더스 장조림 460g':'쇠고기장조림 460g',
+  '미니쇠고기 장조림 70g 리뉴얼':'미니쇠고기장조림 70g',
+  '미니쇠고기장조림 70g 낱개':'미니쇠고기장조림 70g',
+  '미니쇠고기장조림 70g 5입':'미니쇠고기장조림 70g (5입)',
+  '미니쇠고기 장조림 70g 맥스용':'미니쇠고기장조림 70g (맥스)',
+  '메추리알 장조림 180g':'메추리알장조림 180g'
+};
+// 공급자 정보 (변경 시 이 부분만 수정)
+var BILL_SUPPLIER = {
+  reg:'101-87-00153', name:'순수본', ceo:'이진영',
+  addr:'전북 익산시 국가식품로 11', biz:'업제조', item:'',
+  mgr:'', tel:'010-4788-2690'
+};
+
+function _shipPrintRows(dateStr){
+  var ships=_shipData.ships.filter(function(s){ return String(s.date).slice(0,10)===dateStr; });
+  var map={};
+  ships.forEach(function(s){
+    var p=s.product||'(제품없음)', ld=s.lotDate||'';
+    var key=p+'|'+ld+'|'+(s.smpl?'S':'N');
+    if(!map[key]) map[key]={prod:p, lot:ld, ea:0, smpl:!!s.smpl};
+    map[key].ea+=parseInt(s.ea,10)||0;
+  });
+  return Object.keys(map).map(function(k){ return map[k]; })
+    .filter(function(x){ return x.ea>0; })
+    .sort(function(a,b){
+      if(a.prod!==b.prod) return a.prod<b.prod?-1:1;
+      return (a.lot||'')<(b.lot||'')?-1:1;
+    });
+}
+
+function _shipPrint(){
+  var d=(document.getElementById('gs_copy_date')||{}).value||_shipToday();
+  var recv=((document.getElementById('gs_recv')||{}).value||'').trim();
+  var rows=_shipPrintRows(d);
+  if(!rows.length){ alert(d+' 출고 항목이 없습니다.'); return; }
+  var S=BILL_SUPPLIER;
+  var MINROWS=10;
+  var tr='';
+  rows.forEach(function(x){
+    var nm=BILL_NAME[x.prod]||x.prod;
+    if(x.smpl) nm+=' (샘플)';
+    tr+='<tr><td class="l">'+nm+'</td><td>ea</td><td class="r">'+x.ea.toLocaleString()+'</td><td></td><td></td><td>'+(x.lot?_fmtYY(x.lot):'')+'</td></tr>';
+  });
+  tr+='<tr><td colspan="6" class="void">※　※　※　※　※　※　이　하　여　백　※　※　※　※　※　※</td></tr>';
+  for(var i=rows.length+1;i<MINROWS;i++) tr+='<tr><td class="l">&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>';
+  var html=''
+  +'<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>거래명세서 '+d+'</title><style>'
+  +'@page{size:A4 landscape;margin:12mm}'
+  +'*{box-sizing:border-box}'
+  +'body{font-family:"맑은 고딕","Malgun Gothic",sans-serif;color:#111;margin:0;padding:6px 4px}'
+  +'h1{text-align:center;font-size:26px;letter-spacing:14px;margin:2px 0 16px;font-weight:700}'
+  +'table{border-collapse:collapse;width:100%}'
+  +'.top{display:flex;gap:18px;align-items:flex-start;margin-bottom:12px}'
+  +'.top .lft{flex:1;padding-left:30px;font-size:14px;line-height:2.1}'
+  +'.top .rgt{width:430px}'
+  +'.sup td{border:1px solid #333;padding:5px 8px;font-size:12.5px;height:26px}'
+  +'.sup .hd{background:#f2f5f9;text-align:center;width:70px;font-weight:600}'
+  +'.itm td,.itm th{border:1px solid #333;padding:6px 8px;font-size:13px;height:30px;text-align:center}'
+  +'.itm th{background:#dbe5f1;font-weight:700;letter-spacing:2px}'
+  +'.itm td.l{text-align:left}.itm td.r{text-align:right}'
+  +'.void{color:#2f5597;letter-spacing:2px;font-size:12px}'
+  +'.sum td{border:1px solid #333;padding:7px 8px;font-size:13px;height:32px}'
+  +'.sum .hd{background:#dbe5f1;text-align:center;font-weight:700;width:110px}'
+  +'@media print{body{padding:0}}'
+  +'</style></head><body>'
+  +'<h1>거래명세서</h1>'
+  +'<div class="top"><div class="lft">'
+  +'거래일자 : '+d+'<br>수　신 : '+(recv||'　')+'<br><br>합계금액 : 　　　　　　　원정'
+  +'</div><div class="rgt"><table class="sup">'
+  +'<tr><td class="hd">등록번호</td><td colspan="3">'+S.reg+'</td></tr>'
+  +'<tr><td class="hd">상　호</td><td>'+S.name+'</td><td class="hd">성　명</td><td>'+S.ceo+'</td></tr>'
+  +'<tr><td class="hd">주　소</td><td colspan="3">'+S.addr+'</td></tr>'
+  +'<tr><td class="hd">업　태</td><td>'+S.biz+'</td><td class="hd">종　목</td><td>'+S.item+'</td></tr>'
+  +'<tr><td class="hd">담당자</td><td>'+S.mgr+'</td><td class="hd">전　화</td><td>'+S.tel+'</td></tr>'
+  +'</table></div></div>'
+  +'<table class="itm"><thead><tr>'
+  +'<th style="width:36%">품 목 명</th><th style="width:8%">단위</th><th style="width:12%">수량</th>'
+  +'<th style="width:12%">단가</th><th style="width:16%">공급가액</th><th style="width:16%">비고</th>'
+  +'</tr></thead><tbody>'+tr+'</tbody></table>'
+  +'<table class="sum" style="margin-top:10px">'
+  +'<tr><td class="hd">공급가액</td><td style="width:26%"></td><td class="hd">부가세액</td><td style="width:20%"></td><td class="hd">합계금액</td><td></td></tr>'
+  +'</table>'
+  +'<table class="sum" style="margin-top:6px">'
+  +'<tr><td class="hd">참고사항</td><td style="width:62%"></td><td class="hd">인수자</td><td></td></tr>'
+  +'</table>'
+  +'</body></html>';
+  var w=window.open('','_blank','width=1100,height=800');
+  if(!w){ alert('팝업이 차단되었습니다. 브라우저 주소창의 팝업 차단을 해제해주세요.'); return; }
+  w.document.write(html); w.document.close();
+  w.onload=function(){ w.focus(); w.print(); };
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 600);
+}
