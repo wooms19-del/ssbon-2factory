@@ -306,7 +306,6 @@ function _renderShipView(){
       + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">출고서 날짜</label><input type="date" id="gs_copy_date" value="'+_shipToday()+'" onchange="_shipCopy()" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px"></div>'
       + '<button onclick="_shipCopy()" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">📋 출고서 생성</button>'
       + '<button onclick="_shipCopyClip()" style="padding:8px 16px;background:#fff;border:1px solid #2563eb;color:#2563eb;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">복사하기</button>'
-      + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">수신처</label><input id="gs_recv" value="순수본 D동" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px;width:130px"></div>'
       + '<button onclick="_shipPrint()" style="padding:8px 16px;background:#0f766e;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">🖨️ 거래명세서 인쇄</button>'
     + '</div>'
     + '<textarea id="gs_copy_out" readonly style="width:100%;min-height:130px;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;line-height:1.6;background:#fff;resize:vertical" placeholder="날짜 선택 후 [출고서 생성] → 메신저에 붙여넣기"></textarea>'
@@ -745,7 +744,7 @@ function _shipPrintRows(dateStr){
 
 function _shipPrint(){
   var d=(document.getElementById('gs_copy_date')||{}).value||_shipToday();
-  var recv=((document.getElementById('gs_recv')||{}).value||'').trim();
+  var recv='순수본 D동';   // 고정
   var rows=_shipPrintRows(d);
   if(!rows.length){ alert(d+' 출고 항목이 없습니다.'); return; }
   var S=BILL_SUPPLIER;
