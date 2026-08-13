@@ -707,16 +707,17 @@ window.goodsShipEditNote=goodsShipEditNote;
 // ── 거래명세서 인쇄 ──────────────────────────────────
 // 시스템 제품명 → 거래명세서 표기명
 var BILL_NAME = {
-  '시그니처 장조림 130g':'시그니처 쇠고기장조림 130g',
-  '시그니처 장조림 130g 마트용':'시그니처 쇠고기장조림 130g (마트용)',
   'FC 장조림 3KG':'3kg 장조림',
-  '코스트코 장조림 170g':'쇠고기장조림 170g',
-  '트레이더스 장조림 460g':'쇠고기장조림 460g',
-  '미니쇠고기 장조림 70g 리뉴얼':'미니쇠고기장조림 70g',
-  '미니쇠고기장조림 70g 낱개':'미니쇠고기장조림 70g',
-  '미니쇠고기장조림 70g 5입':'미니쇠고기장조림 70g (5입)',
-  '미니쇠고기 장조림 70g 맥스용':'미니쇠고기장조림 70g (맥스)',
-  '메추리알 장조림 180g':'메추리알장조림 180g'
+  '메추리알 장조림 180g':'메추리알 장조림180g',
+  '미니쇠고기 장조림 70g 리뉴얼':'미니쇠고기장조림 70g 5입 (리뉴얼)',
+  '미니쇠고기장조림 70g 5입':'미니쇠고기장조림 70g 5입',
+  '미니쇠고기장조림 70g 낱개':'미니쇠고기장조림 70g 36입 (리뉴얼)',
+  '미니쇠고기 장조림 70g 맥스용':'미니장조림 70g  맥스용',
+  '시그니처 장조림 120g':'쇠고기장조림 120g',
+  '트레이더스 장조림 460g':'쇠고기장조림 460g (트레이더스)',
+  '시그니처 장조림 130g':'시그니처 쇠고기장조림 130g',
+  '시그니처 장조림 130g 마트용':'시그니처 쇠고기장조림 130g 마트용',
+  '코스트코 장조림 170g':'코스트코 장조림 170g'
 };
 // 공급자 정보 (변경 시 이 부분만 수정)
 var BILL_SUPPLIER = {
@@ -730,8 +731,8 @@ function _shipPrintRows(dateStr){
   var map={};
   ships.forEach(function(s){
     var p=s.product||'(제품없음)', ld=s.lotDate||'';
-    var key=p+'|'+ld+'|'+(s.smpl?'S':'N');
-    if(!map[key]) map[key]={prod:p, lot:ld, ea:0, smpl:!!s.smpl};
+    var key=p+'|'+ld+'|'+(s.smpl?'S':(s.remn?'R':'N'));
+    if(!map[key]) map[key]={prod:p, lot:ld, ea:0, smpl:!!s.smpl, remn:!!s.remn};
     map[key].ea+=parseInt(s.ea,10)||0;
   });
   return Object.keys(map).map(function(k){ return map[k]; })
@@ -752,11 +753,12 @@ function _shipPrint(){
   var tr='';
   rows.forEach(function(x){
     var nm=BILL_NAME[x.prod]||x.prod;
+    if(x.remn) nm+=' 잔량';
     if(x.smpl) nm+=' (샘플)';
-    tr+='<tr><td class="l">'+nm+'</td><td>ea</td><td class="r">'+x.ea.toLocaleString()+'</td><td></td><td></td><td>'+(x.lot?_fmtYY(x.lot):'')+'</td></tr>';
+    tr+='<tr><td class="l">'+nm+'</td><td>ea</td><td class="r">'+x.ea.toLocaleString()+'</td><td>'+(x.lot?_fmtYY(x.lot):'')+'</td></tr>';
   });
-  tr+='<tr><td colspan="6" class="void">※　※　※　※　※　※　이　하　여　백　※　※　※　※　※　※</td></tr>';
-  for(var i=rows.length+1;i<MINROWS;i++) tr+='<tr><td class="l">&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>';
+  tr+='<tr><td colspan="4" class="void">※　※　※　※　※　※　이　하　여　백　※　※　※　※　※　※</td></tr>';
+  for(var i=rows.length+1;i<MINROWS;i++) tr+='<tr><td class="l">&nbsp;</td><td></td><td></td><td></td></tr>';
   var html=''
   +'<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>거래명세서 '+d+'</title><style>'
   +'@page{size:A4 landscape;margin:12mm}'
@@ -779,7 +781,7 @@ function _shipPrint(){
   +'</style></head><body>'
   +'<h1>거래명세서</h1>'
   +'<div class="top"><div class="lft">'
-  +'거래일자 : '+d+'<br>수　신 : '+(recv||'　')+'<br><br>합계금액 : 　　　　　　　원정'
+  +'거래일자 : '+d+'<br>수　신 : '+(recv||'　')
   +'</div><div class="rgt"><table class="sup">'
   +'<tr><td class="hd">등록번호</td><td colspan="3">'+S.reg+'</td></tr>'
   +'<tr><td class="hd">상　호</td><td>'+S.name+'</td><td class="hd">성　명</td><td>'+S.ceo+'</td></tr>'
@@ -788,13 +790,9 @@ function _shipPrint(){
   +'<tr><td class="hd">담당자</td><td>'+S.mgr+'</td><td class="hd">전　화</td><td>'+S.tel+'</td></tr>'
   +'</table></div></div>'
   +'<table class="itm"><thead><tr>'
-  +'<th style="width:36%">품 목 명</th><th style="width:8%">단위</th><th style="width:12%">수량</th>'
-  +'<th style="width:12%">단가</th><th style="width:16%">공급가액</th><th style="width:16%">비고</th>'
+  +'<th style="width:50%">품 목 명</th><th style="width:10%">단위</th><th style="width:18%">수량</th><th style="width:22%">비고</th>'
   +'</tr></thead><tbody>'+tr+'</tbody></table>'
   +'<table class="sum" style="margin-top:10px">'
-  +'<tr><td class="hd">공급가액</td><td style="width:26%"></td><td class="hd">부가세액</td><td style="width:20%"></td><td class="hd">합계금액</td><td></td></tr>'
-  +'</table>'
-  +'<table class="sum" style="margin-top:6px">'
   +'<tr><td class="hd">참고사항</td><td style="width:62%"></td><td class="hd">인수자</td><td></td></tr>'
   +'</table>'
   +'</body></html>';
