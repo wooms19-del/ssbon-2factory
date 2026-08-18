@@ -303,11 +303,12 @@ function _renderShipView(){
   // 출고서 복사
   var copyBox='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:16px">'
     + '<div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px">'
-      + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">출고서 날짜</label><input type="date" id="gs_copy_date" value="'+_shipToday()+'" onchange="_shipCopy()" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px"></div>'
+      + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">출고서 날짜</label><input type="date" id="gs_copy_date" value="'+_shipToday()+'" onchange="_shipCopy();_shipBillProds()" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px"></div>'
       + '<button onclick="_shipCopy()" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">📋 출고서 생성</button>'
       + '<button onclick="_shipCopyClip()" style="padding:8px 16px;background:#fff;border:1px solid #2563eb;color:#2563eb;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">복사하기</button>'
       + '<button onclick="_shipPrint()" style="padding:8px 16px;background:#0f766e;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">🖨️ 거래명세서 인쇄</button>'
     + '</div>'
+    + '<div id="gs_billprods" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px"></div>'
     + '<textarea id="gs_copy_out" readonly style="width:100%;min-height:130px;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;line-height:1.6;background:#fff;resize:vertical" placeholder="날짜 선택 후 [출고서 생성] → 메신저에 붙여넣기"></textarea>'
     + '</div>';
   host.innerHTML = '<div style="font-size:15px;font-weight:700;color:#0f172a;margin:4px 2px 10px">🚚 출고 등록 (오늘 나갈 것 여러 개 추가)</div>'
@@ -315,7 +316,7 @@ function _renderShipView(){
     + '<div style="font-size:15px;font-weight:700;color:#0f172a;margin:4px 2px 10px">📋 출고서 복사 (메신저용)</div>'
     + copyBox
     + '<div id="op_shiphist_wrap">'+_shipHistTable()+'</div>';
-  setTimeout(function(){ _gsFillLots(); _gsCalcEa(); }, 0);
+  setTimeout(function(){ _gsFillLots(); _gsCalcEa(); _shipBillProds(); }, 0);
 }
 
 // 출고 목록 — 선택한 월(_shipHistYm)만 표시. 월 선택 드롭다운 + 월 합계 포함.
@@ -513,6 +514,26 @@ function _shipCopy(){
   var out=document.getElementById('gs_copy_out'); if(out) out.value=_shipCopyText(d);
 }
 window._shipCopy=_shipCopy;
+
+// 거래명세서에 넣을 제품 선택 — 선택한 날짜에 출고된 제품만 체크박스로 표시(기본 전체 선택)
+function _shipBillProds(){
+  var host=document.getElementById('gs_billprods'); if(!host) return;
+  var d=(document.getElementById('gs_copy_date')||{}).value||_shipToday();
+  var prods=[], seen={};
+  _shipData.ships.forEach(function(s){
+    if(String(s.date).slice(0,10)!==d) return;
+    var p=s.product||'(제품없음)';
+    if(!seen[p]){ seen[p]=true; prods.push(p); }
+  });
+  prods.sort();
+  if(!prods.length){ host.innerHTML='<span style="font-size:11px;color:#9ca3af">해당 날짜 출고 항목 없음</span>'; return; }
+  host.innerHTML='<span style="font-size:11px;color:#6b7280;margin-right:2px">명세서 제품</span>'
+    + prods.map(function(p){
+        return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;background:#fff;border:1px solid #bfdbfe;border-radius:20px;padding:3px 11px;cursor:pointer">'
+          + '<input type="checkbox" class="gs_billp" value="'+p.replace(/"/g,'&quot;')+'" checked>'+p+'</label>';
+      }).join('');
+}
+window._shipBillProds=_shipBillProds;
 function _shipCopyClip(){
   var out=document.getElementById('gs_copy_out'); if(!out||!out.value){ _shipCopy(); }
   if(!out||!out.value) return;
@@ -766,6 +787,10 @@ function _shipPrint(){
   var recv='순수본 D동';   // 고정
   var rows=_shipPrintRows(d);
   if(!rows.length){ alert(d+' 출고 항목이 없습니다.'); return; }
+  var sel={}, anySel=false;
+  Array.prototype.forEach.call(document.querySelectorAll('.gs_billp'), function(cb){ if(cb.checked){ sel[cb.value]=true; anySel=true; } });
+  if(anySel) rows=rows.filter(function(x){ return sel[x.prod]; });
+  if(!rows.length){ alert('선택한 제품의 출고 항목이 없습니다.'); return; }
   var S=BILL_SUPPLIER;
   var MINROWS=10;
   var tr='';
