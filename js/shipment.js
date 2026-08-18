@@ -308,7 +308,8 @@ function _renderShipView(){
       + '<button onclick="_shipCopyClip()" style="padding:8px 16px;background:#fff;border:1px solid #2563eb;color:#2563eb;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">복사하기</button>'
       + '<button onclick="_shipPrint()" style="padding:8px 16px;background:#0f766e;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">🖨️ 거래명세서 인쇄</button>'
     + '</div>'
-    + '<div id="gs_billprods" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px"></div>'
+    + '<div id="gs_billprods" style="margin-bottom:10px"></div>'
+    + '<div id="gs_billpv"></div>'
     + '<textarea id="gs_copy_out" readonly style="width:100%;min-height:130px;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;line-height:1.6;background:#fff;resize:vertical" placeholder="날짜 선택 후 [출고서 생성] → 메신저에 붙여넣기"></textarea>'
     + '</div>';
   host.innerHTML = '<div style="font-size:15px;font-weight:700;color:#0f172a;margin:4px 2px 10px">🚚 출고 등록 (오늘 나갈 것 여러 개 추가)</div>'
@@ -515,25 +516,93 @@ function _shipCopy(){
 }
 window._shipCopy=_shipCopy;
 
-// 거래명세서에 넣을 제품 선택 — 선택한 날짜에 출고된 제품만 체크박스로 표시(기본 전체 선택)
+// 거래명세서에 넣을 항목 선택 — 제품(상위) + 소비기한(하위) 2단 체크박스. 기본 전체 선택
 function _shipBillProds(){
   var host=document.getElementById('gs_billprods'); if(!host) return;
   var d=(document.getElementById('gs_copy_date')||{}).value||_shipToday();
-  var prods=[], seen={};
+  var byProd={}, order=[];
   _shipData.ships.forEach(function(s){
     if(String(s.date).slice(0,10)!==d) return;
-    var p=s.product||'(제품없음)';
-    if(!seen[p]){ seen[p]=true; prods.push(p); }
+    var p=s.product||'(제품없음)', ld=s.lotDate||'';
+    if(!byProd[p]){ byProd[p]={}; order.push(p); }
+    byProd[p][ld]=true;
   });
-  prods.sort();
-  if(!prods.length){ host.innerHTML='<span style="font-size:11px;color:#9ca3af">해당 날짜 출고 항목 없음</span>'; return; }
-  host.innerHTML='<span style="font-size:11px;color:#6b7280;margin-right:2px">명세서 제품</span>'
-    + prods.map(function(p){
-        return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;background:#fff;border:1px solid #bfdbfe;border-radius:20px;padding:3px 11px;cursor:pointer">'
-          + '<input type="checkbox" class="gs_billp" value="'+p.replace(/"/g,'&quot;')+'" checked>'+p+'</label>';
+  order.sort();
+  if(!order.length){ host.innerHTML='<span style="font-size:11px;color:#9ca3af">해당 날짜 출고 항목 없음</span>'; _shipBillPv(); return; }
+  var esc=function(t){ return String(t).replace(/"/g,'&quot;'); };
+  host.innerHTML='<div style="font-size:11px;color:#6b7280;margin-bottom:6px">명세서 항목 선택</div>'
+    + order.map(function(p){
+        var lots=Object.keys(byProd[p]).sort();
+        var head='<label style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#0f172a;background:#fff;border:1px solid #bfdbfe;border-radius:20px;padding:4px 12px;cursor:pointer">'
+          + '<input type="checkbox" class="gs_billpp" data-prod="'+esc(p)+'" onchange="_shipBillAll(this)" checked>'+p+'</label>';
+        var kids=lots.map(function(ld){
+          return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#475569;background:#fff;border:1px solid #e5e7eb;border-radius:20px;padding:3px 10px;cursor:pointer">'
+            + '<input type="checkbox" class="gs_billp" value="'+esc(p+'|'+ld)+'" onchange="_shipBillSync()" checked>'
+            + (ld?('소비기한 '+_fmtYY(ld)):'로트없음')+'</label>';
+        }).join('');
+        return '<div style="margin-bottom:8px">'+head
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0 18px">'+kids+'</div></div>';
       }).join('');
+  _shipBillPv();
 }
 window._shipBillProds=_shipBillProds;
+
+// 제품 체크 → 하위 소비기한 전체 토글
+function _shipBillAll(cb){
+  var p=cb.getAttribute('data-prod')+'|';
+  Array.prototype.forEach.call(document.querySelectorAll('.gs_billp'), function(x){
+    if(x.value.slice(0,p.length)===p) x.checked=cb.checked;
+  });
+  _shipBillPv();
+}
+window._shipBillAll=_shipBillAll;
+
+// 하위 체크 변경 → 상위 제품 체크 상태 동기화(부분 선택은 중간 표시)
+function _shipBillSync(){
+  Array.prototype.forEach.call(document.querySelectorAll('.gs_billpp'), function(pp){
+    var p=pp.getAttribute('data-prod')+'|', all=true, none=true;
+    Array.prototype.forEach.call(document.querySelectorAll('.gs_billp'), function(x){
+      if(x.value.slice(0,p.length)!==p) return;
+      if(x.checked) none=false; else all=false;
+    });
+    pp.checked=all; pp.indeterminate=(!all&&!none);
+  });
+  _shipBillPv();
+}
+window._shipBillSync=_shipBillSync;
+
+// 선택 항목 기준 명세서 미리보기
+function _shipBillPv(){
+  var pv=document.getElementById('gs_billpv'); if(!pv) return;
+  var d=(document.getElementById('gs_copy_date')||{}).value||_shipToday();
+  var rows=_shipBillRows(d);
+  if(!rows.length){ pv.innerHTML='<div style="font-size:11px;color:#9ca3af;padding:6px 2px">선택된 항목이 없습니다.</div>'; return; }
+  pv.innerHTML='<div style="background:#fff;border:1px solid #dbeafe;border-radius:6px;padding:8px 10px;margin-bottom:10px">'
+    + '<div style="font-size:11px;color:#6b7280;margin-bottom:4px">명세서 미리보기 '+rows.length+'행</div>'
+    + rows.map(function(x){
+        var nm=BILL_NAME[x.prod]||x.prod;
+        if(x.remn) nm+=' 잔량';
+        if(x.smpl) nm+=' (샘플)';
+        var unit=x.box>0?'박스':'ea', qty=x.box>0?x.box:x.ea;
+        return '<div style="display:flex;gap:8px;font-size:12px;font-family:monospace;line-height:1.8">'
+          + '<span style="flex:1;min-width:0">'+nm+'</span>'
+          + '<span style="width:34px;color:#6b7280">'+unit+'</span>'
+          + '<span style="width:64px;text-align:right;font-weight:600">'+qty.toLocaleString()+'</span>'
+          + '<span style="width:62px;text-align:right;color:#6b7280">'+(x.lot?_fmtYY(x.lot):'')+'</span></div>';
+      }).join('')
+    + '</div>';
+}
+window._shipBillPv=_shipBillPv;
+
+// 체크된 제품|소비기한만 남긴 명세서 행 (체크박스가 없으면 전체)
+function _shipBillRows(d){
+  var rows=_shipPrintRows(d);
+  var boxes=document.querySelectorAll('.gs_billp');
+  if(!boxes.length) return rows;
+  var sel={};
+  Array.prototype.forEach.call(boxes, function(cb){ if(cb.checked) sel[cb.value]=true; });
+  return rows.filter(function(x){ return sel[x.prod+'|'+(x.lot||'')]; });
+}
 function _shipCopyClip(){
   var out=document.getElementById('gs_copy_out'); if(!out||!out.value){ _shipCopy(); }
   if(!out||!out.value) return;
@@ -787,10 +856,8 @@ function _shipPrint(){
   var recv='순수본 D동';   // 고정
   var rows=_shipPrintRows(d);
   if(!rows.length){ alert(d+' 출고 항목이 없습니다.'); return; }
-  var sel={}, anySel=false;
-  Array.prototype.forEach.call(document.querySelectorAll('.gs_billp'), function(cb){ if(cb.checked){ sel[cb.value]=true; anySel=true; } });
-  if(anySel) rows=rows.filter(function(x){ return sel[x.prod]; });
-  if(!rows.length){ alert('선택한 제품의 출고 항목이 없습니다.'); return; }
+  rows=_shipBillRows(d);
+  if(!rows.length){ alert('선택된 항목이 없습니다. 명세서에 넣을 제품을 체크해주세요.'); return; }
   var S=BILL_SUPPLIER;
   var MINROWS=10;
   var tr='';
