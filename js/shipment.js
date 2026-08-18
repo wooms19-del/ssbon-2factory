@@ -336,7 +336,7 @@ function _shipHistTable(){
     var isFuture = String(s.date||'').slice(0,10) > _shipToday();
     var dateCell = (s.date||'-') + (isFuture ? ' <span style="font-size:10px;color:#d97706;background:#fff7ed;border:0.5px solid #fdba74;padding:1px 6px;border-radius:20px;font-weight:600;font-family:sans-serif">예정</span>' : '');
     return '<tr style="border-top:0.5px solid #f3f4f6'+(isFuture?';background:#fffbf5':'')+'">'
-      + '<td style="padding:9px 14px;font-weight:600;font-family:monospace">'+dateCell+'</td>'
+      + '<td style="padding:9px 14px;font-weight:600;font-family:monospace'+(fb?';cursor:pointer':'')+'"'+(fb?' onclick="goodsShipEditDate(\''+fb+'\')" title="클릭해서 출고일 수정"':'')+'>'+dateCell+'</td>'
       + '<td style="padding:9px 14px">'+(s.product||'-')+(s.remn?' <span style="font-size:10px;color:#92400e;background:#fef3c7;border:0.5px solid #fcd34d;padding:1px 6px;border-radius:20px;font-weight:600">잔량</span>':'')+(s.smpl?' <span style="font-size:10px;color:#5b21b6;background:#ede9fe;border:0.5px solid #c4b5fd;padding:1px 6px;border-radius:20px;font-weight:600">샘플</span>':'')+'</td>'
       + '<td style="padding:9px 14px;font-family:monospace;color:#6b7280">'+(s.lotDate||'-')+'</td>'
       + '<td style="padding:9px 10px;text-align:right">'+(box?box.toLocaleString():'-')+'</td>'
@@ -701,6 +701,24 @@ async function goodsShipEditNote(fbId){
   }catch(e){ console.error(e); toast&&toast('오류: '+(e.message||e),'d'); }
 }
 window.goodsShipEditNote=goodsShipEditNote;
+
+// 출고 기록 출고일 수정
+async function goodsShipEditDate(fbId){
+  if(!fbId) return;
+  var s=_shipData.ships.filter(function(x){ return (x.fbId||x.id)===fbId; })[0];
+  if(!s){ toast&&toast('항목을 찾을 수 없음 — 새로고침','d'); return; }
+  var nv=prompt(s.product+' 출고일 수정 (YYYY-MM-DD)', s.date||'');
+  if(nv===null) return;              // 취소
+  nv=String(nv).trim();
+  if(!nv || nv===(s.date||'')) return; // 변경 없음
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(nv)){ toast&&toast('날짜는 YYYY-MM-DD 형식으로 입력','d'); return; }
+  toast&&toast('저장 중...','i');
+  try{ var ok=await fbUpdate('goodsShip', fbId, { date:nv });
+    if(ok){ s.date=nv; _shipHistYm=nv.slice(0,7); _renderShipViews(); toast&&toast('✓ 출고일 수정됨','s'); }
+    else toast&&toast('수정 실패','d');
+  }catch(e){ console.error(e); toast&&toast('오류: '+(e.message||e),'d'); }
+}
+window.goodsShipEditDate=goodsShipEditDate;
 
 
 // ── 거래명세서 인쇄 ──────────────────────────────────
