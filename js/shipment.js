@@ -749,11 +749,12 @@ function _shipPrintRows(dateStr){
   ships.forEach(function(s){
     var p=s.product||'(제품없음)', ld=s.lotDate||'';
     var key=p+'|'+ld+'|'+(s.smpl?'S':(s.remn?'R':'N'));
-    if(!map[key]) map[key]={prod:p, lot:ld, ea:0, smpl:!!s.smpl, remn:!!s.remn};
+    if(!map[key]) map[key]={prod:p, lot:ld, ea:0, box:0, smpl:!!s.smpl, remn:!!s.remn};
     map[key].ea+=parseInt(s.ea,10)||0;
+    map[key].box+=parseInt(s.boxes,10)||0;
   });
   return Object.keys(map).map(function(k){ return map[k]; })
-    .filter(function(x){ return x.ea>0; })
+    .filter(function(x){ return x.ea>0 || x.box>0; })
     .sort(function(a,b){
       if(a.prod!==b.prod) return a.prod<b.prod?-1:1;
       return (a.lot||'')<(b.lot||'')?-1:1;
@@ -772,7 +773,9 @@ function _shipPrint(){
     var nm=BILL_NAME[x.prod]||x.prod;
     if(x.remn) nm+=' 잔량';
     if(x.smpl) nm+=' (샘플)';
-    tr+='<tr><td class="l">'+nm+'</td><td>ea</td><td class="r">'+x.ea.toLocaleString()+'</td><td>'+(x.lot?_fmtYY(x.lot):'')+'</td></tr>';
+    var unit = x.box>0 ? '박스' : 'ea';
+    var qty  = x.box>0 ? x.box : x.ea;
+    tr+='<tr><td class="l">'+nm+'</td><td>'+unit+'</td><td class="r">'+qty.toLocaleString()+'</td><td>'+(x.lot?_fmtYY(x.lot):'')+'</td></tr>';
   });
   tr+='<tr><td colspan="4" class="void">※　※　※　※　※　※　이　하　여　백　※　※　※　※　※　※</td></tr>';
   for(var i=rows.length+1;i<MINROWS;i++) tr+='<tr><td class="l">&nbsp;</td><td></td><td></td><td></td></tr>';
