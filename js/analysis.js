@@ -532,6 +532,7 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
     window._moCurAvgYld = moAvgYld>0 ? moAvgYld : null;
     const moLossKg=r2(moTotRm*(0.55-moAvgYld/100));
     _moRenderYieldKPI(moTotRm, moTotPkKg, moAvgYld, moDays, moGoodDays, moLossKg);
+    _moRenderRmWarn(pk, thMonth);
     _moRenderYieldChart(dailyYields);
 
     // ★ 동일 작업일 탭용 — cur 일별 공정 합계 (전처리/자숙/파쇄/완제품 + 원육)
@@ -1076,6 +1077,42 @@ window._moClearGrpSel = function() {
 };
 
 // ── 수율 KPI 카드 렌더 ──────────────────────────────────────
+// 방혈(원육) 기록 누락일 경고 — 내포장 실적은 있는데 원육이 없거나 말이 안 되는 날
+// 부위 매칭은 오탐(4~5월 코스트코=우둔)이 나서, 물리적으로 불가능한 조건만 사용:
+//   ① 방혈 기록 0  ② 수율 100% 초과 (원육보다 완제품이 많음)
+// 관리자 화면에선 가안 역산으로 메워지지만, 원본 누락 자체를 알려줘야 당일에 채울 수 있음
+function _moRenderRmWarn(pkArr, thArr){
+  const el=document.getElementById('mo_rm_warn'); if(!el) return;
+  el.innerHTML='';
+  const rmD={}, mtD={};
+  (thArr||[]).forEach(r=>{
+    const e=String(r.end||''), d=(e.length>=10?e.slice(0,10):String(r.date||'').slice(0,10));
+    if(!d) return;
+    rmD[d]=(rmD[d]||0)+(parseFloat(r.totalKg)||0);
+  });
+  (pkArr||[]).forEach(r=>{
+    if(r.testRun||r.isTest) return;
+    const d=String(r.date||'').slice(0,10); if(!d) return;
+    const p=(L.products||[]).find(x=>x.name===r.product); if(!p) return;
+    mtD[d]=(mtD[d]||0)+(parseFloat(r.ea)||0)*(parseFloat(p.kgea)||0);
+  });
+  const bad=[];
+  Object.keys(mtD).sort().forEach(d=>{
+    const m=mtD[d]; if(!(m>0)) return;
+    const rk=rmD[d]||0;
+    if(!(rk>0)) bad.push({d:d, why:'방혈 없음'});
+    else if(m/rk>1) bad.push({d:d, why:'수율 '+Math.round(m/rk*100)+'%'});
+  });
+  if(!bad.length) return;
+  el.innerHTML='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:12px">'
+    + '<div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:4px">방혈 기록 누락 의심 '+bad.length+'일</div>'
+    + '<div style="font-size:12px;color:#78350f;line-height:1.7">'
+    + bad.map(x=>x.d.slice(5)+' ('+x.why+')').join(' · ')
+    + '</div>'
+    + '<div style="font-size:11px;color:#a16207;margin-top:6px">내포장 실적은 있는데 원육 기록이 없거나 부족합니다. 방혈 입력을 확인해주세요.</div>'
+    + '</div>';
+}
+
 function _moRenderYieldKPI(totRm, totPkKg, avgYld, workDays, goodDays, lossKg) {
   const el=document.getElementById('mo_yield_kpi');
   if(!el) return;
