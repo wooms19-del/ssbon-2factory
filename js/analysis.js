@@ -528,6 +528,8 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
       moDays    = window._moTableTotals.days;
     }
     const moAvgYld=moTotRm>0?moTotPkKg/moTotRm*100:0;
+    // ★ 차트 평균선도 이 값(총량 가중평균)을 씀 — KPI 카드와 숫자 일치 (2026-08-19)
+    window._moCurAvgYld = moAvgYld>0 ? moAvgYld : null;
     const moLossKg=r2(moTotRm*(0.55-moAvgYld/100));
     _moRenderYieldKPI(moTotRm, moTotPkKg, moAvgYld, moDays, moGoodDays, moLossKg);
     _moRenderYieldChart(dailyYields);
@@ -1266,9 +1268,9 @@ function _moRenderYieldChart(dailyYields) {
   const ylds = weekdays.map(d => yldMap[d]!=null ? parseFloat(yldMap[d].toFixed(1)) : null);
   const ptColors = ylds.map(v => v==null?'transparent':v>=55?'#047857':v>=52?'#3b82f6':v>=50?'#f59e0b':'#ef4444');
   const xLen = weekdays.length;
-  // 이번달 평균
-  const _curVals = ylds.filter(v => v!=null);
-  const _curAvg = _curVals.length ? (_curVals.reduce((s,v)=>s+v,0)/_curVals.length) : null;
+  // 이번달 평균 — 총량 가중평균(KPI 카드와 동일). 일별 단순평균은 소량 생산일이
+  // 대량 생산일과 같은 비중으로 잡혀 실제 수율보다 높게 나옴. (2026-08-19)
+  const _curAvg = (window._moCurAvgYld!=null) ? window._moCurAvgYld : null;
   const datasets = [
     {label:'이번달 수율',data:ylds,borderColor:'#64748b',backgroundColor:'rgba(100,116,139,0.08)',fill:true,tension:0.3,pointRadius:5,pointBackgroundColor:ptColors,pointBorderColor:ptColors,borderWidth:2,spanGaps:false}
   ];
@@ -1277,7 +1279,7 @@ function _moRenderYieldChart(dailyYields) {
   }
   const _avgYld = window._moPrevAvgYld;
   if(_avgYld!=null){
-    datasets.push({label:'전월 일평균',data:Array(xLen).fill(parseFloat(_avgYld.toFixed(1))),borderColor:'#94a3b8',borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:_avgYld.toFixed(1)+'%'});
+    datasets.push({label:'전월 평균',data:Array(xLen).fill(parseFloat(_avgYld.toFixed(1))),borderColor:'#94a3b8',borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false,_endLabel:_avgYld.toFixed(1)+'%'});
   }
   const _T_y = (typeof getTargets === 'function') ? getTargets() : {yieldGoal:55, yieldDanger:50};
   datasets.push(
@@ -1576,23 +1578,16 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
         });
         const _pVals = Object.values(_pByDay).filter(v=>v>0);
         if(_pVals.length) _avgRmKg = _pVals.reduce((s,v)=>s+v,0)/_pVals.length;
-        // 전월 일평균 수율도 같은 mpRows 기준으로 재계산
+        // 전월 평균 수율 — 이번달 KPI와 같은 총량 가중평균으로 재계산
         // ★ 기존 _pYldByIdx는 방혈 end일 ÷ 포장일을 그대로 나눠서, 전날 원육으로 포장만
         //    돌린 날(분모 급감)에 수율이 수백 %로 튀어 평균이 망가졌음. (2026-08-19)
-        const _pYByD = {};
+        let _pRmSum = 0, _pMeatSum = 0;
         _pRows.forEach(r=>{
           if(!r || !r.date || r._isMainRow === false) return;
-          if(!_pYByD[r.date]) _pYByD[r.date] = {rm:0, meat:0};
-          _pYByD[r.date].rm += (r.rmKg||0);
-          _pYByD[r.date].meat += ((r.pkEaInner!=null?r.pkEaInner:r.pkEa)||0)*(r.kgea||0);
+          _pRmSum += (r.rmKg||0);
+          _pMeatSum += ((r.pkEaInner!=null?r.pkEaInner:r.pkEa)||0)*(r.kgea||0);
         });
-        const _pYlds = [];
-        Object.keys(_pYByD).forEach(d=>{
-          const dayRm = r2(_pYByD[d].rm);
-          if(!dayRm) return;
-          _pYlds.push(r2(_pYByD[d].meat)/dayRm*100);
-        });
-        if(_pYlds.length) _avgYld = _pYlds.reduce((s,v)=>s+v,0)/_pYlds.length;
+        if(_pRmSum>0) _avgYld = _pMeatSum/_pRmSum*100;
       }
     } catch(e){ console.error('[월별현황] 전월 일평균 mpRows 계산 실패', e); }
     window._moPrevAvgDef = _avgDef;
