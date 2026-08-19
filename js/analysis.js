@@ -1080,10 +1080,12 @@ window._moClearGrpSel = function() {
 // 방혈(원육) 기록 누락일 경고 — 내포장 실적은 있는데 원육이 없거나 말이 안 되는 날
 // 부위 매칭은 오탐(4~5월 코스트코=우둔)이 나서, 물리적으로 불가능한 조건만 사용:
 //   ① 방혈 기록 0  ② 수율 100% 초과 (원육보다 완제품이 많음)
-// 관리자 화면에선 가안 역산으로 메워지지만, 원본 누락 자체를 알려줘야 당일에 채울 수 있음
+// ★ 가안 역산 대상 제품(_estYields = 코스트코 등)은 판정에서 제외 — 이미 처리가 끝난
+//   기지의 케이스라, 경고를 띄우면 해결된 걸 다시 확인하라는 소리가 됨. (2026-08-19)
 function _moRenderRmWarn(pkArr, thArr){
   const el=document.getElementById('mo_rm_warn'); if(!el) return;
   el.innerHTML='';
+  const estP=window._estYields||{};
   const rmD={}, mtD={};
   (thArr||[]).forEach(r=>{
     const e=String(r.end||''), d=(e.length>=10?e.slice(0,10):String(r.date||'').slice(0,10));
@@ -1092,6 +1094,7 @@ function _moRenderRmWarn(pkArr, thArr){
   });
   (pkArr||[]).forEach(r=>{
     if(r.testRun||r.isTest) return;
+    if(estP[r.product]) return;   // 가안 처리 제품은 판정 제외
     const d=String(r.date||'').slice(0,10); if(!d) return;
     const p=(L.products||[]).find(x=>x.name===r.product); if(!p) return;
     mtD[d]=(mtD[d]||0)+(parseFloat(r.ea)||0)*(parseFloat(p.kgea)||0);
