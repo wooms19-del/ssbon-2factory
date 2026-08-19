@@ -1515,7 +1515,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
 
     // 4월 평균값 (한 줄 가로선용)
     const _avgDef = prevByIdx.length ? (prevByIdx.reduce((s,r)=>s+(r.defectPct||0),0)/prevByIdx.length) : null;
-    const _avgYld = _pYldByIdx.length ? (_pYldByIdx.reduce((s,r)=>s+(r.yld||0),0)/_pYldByIdx.length) : null;
+    let _avgYld = _pYldByIdx.length ? (_pYldByIdx.reduce((s,r)=>s+(r.yld||0),0)/_pYldByIdx.length) : null;
     // 4월 일평균 KG — 이번달 막대 그래프와 완전 동일하게:
     //   · testRun/isTest 제외
     //   · 그 날 그 제품의 ea 합 (record 여러 개면 합산)
@@ -1576,6 +1576,23 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
         });
         const _pVals = Object.values(_pByDay).filter(v=>v>0);
         if(_pVals.length) _avgRmKg = _pVals.reduce((s,v)=>s+v,0)/_pVals.length;
+        // 전월 일평균 수율도 같은 mpRows 기준으로 재계산
+        // ★ 기존 _pYldByIdx는 방혈 end일 ÷ 포장일을 그대로 나눠서, 전날 원육으로 포장만
+        //    돌린 날(분모 급감)에 수율이 수백 %로 튀어 평균이 망가졌음. (2026-08-19)
+        const _pYByD = {};
+        _pRows.forEach(r=>{
+          if(!r || !r.date || r._isMainRow === false) return;
+          if(!_pYByD[r.date]) _pYByD[r.date] = {rm:0, meat:0};
+          _pYByD[r.date].rm += (r.rmKg||0);
+          _pYByD[r.date].meat += ((r.pkEaInner!=null?r.pkEaInner:r.pkEa)||0)*(r.kgea||0);
+        });
+        const _pYlds = [];
+        Object.keys(_pYByD).forEach(d=>{
+          const dayRm = r2(_pYByD[d].rm);
+          if(!dayRm) return;
+          _pYlds.push(r2(_pYByD[d].meat)/dayRm*100);
+        });
+        if(_pYlds.length) _avgYld = _pYlds.reduce((s,v)=>s+v,0)/_pYlds.length;
       }
     } catch(e){ console.error('[월별현황] 전월 일평균 mpRows 계산 실패', e); }
     window._moPrevAvgDef = _avgDef;
