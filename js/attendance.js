@@ -168,10 +168,18 @@ function attSave(){
   try{
     var full={};
     var totalWorkers=0,totalAbsent=0,totalAnnual=0,totalEarly=0,totalOvertime=0,totalHoliday=0;
+    // ★ 마스터에서 빠진 사람(퇴사자 등)의 기존 기록은 절대 지우지 않고 그대로 보존 (2026-08-28)
+    //   이전에는 _attEmps만 기록으로 써서, 과거 날짜를 다시 저장하면 퇴사자 기록이 통째로 사라졌음
+    var _inMaster={};
+    _attEmps.forEach(function(e){ _inMaster[e.name]=true; });
+    Object.keys(_attRecs||{}).forEach(function(n){
+      if(!_inMaster[n] && _attRecs[n]) full[n]=_attRecs[n];
+    });
     _attEmps.forEach(function(e){
-      var r=_attRecs[e.name]||{tags:[],inTime:'09:00',outTime:'18:00'};
-      full[e.name]=r;
-      var tags=r.tags||[];
+      full[e.name] = _attRecs[e.name]||{tags:[],inTime:'09:00',outTime:'18:00'};
+    });
+    Object.keys(full).forEach(function(n){
+      var tags=(full[n]||{}).tags||[];
       if(tags.indexOf('absent')>=0)totalAbsent++;
       else if(tags.indexOf('annual')>=0)totalAnnual++;
       else if(tags.indexOf('holiday')>=0)totalHoliday++;
@@ -189,7 +197,7 @@ function attSave(){
         totalHoliday:totalHoliday,   // 휴무자 수
         totalEarly:totalEarly,       // 조출자 수
         totalOvertime:totalOvertime, // 연장자 수
-        totalHeadcount:_attEmps.length // 전체 인원
+        totalHeadcount:Object.keys(full).length // 전체 인원
       },
       updatedAt:new Date().toISOString()
     });
@@ -848,8 +856,24 @@ function _renderAttMonthly(){
     html+='<th style="padding:3px 4px;font-size:10px;color:var(--g5);font-weight:500;text-align:center;border:0.5px solid var(--g2)">퇴근</th>';
   });
   html+='</tr></thead><tbody>';
-  _attEmps.forEach(function(emp){
-    html+='<tr><td style="padding:6px 10px;font-size:12px;font-weight:500;border:0.5px solid var(--g2);white-space:nowrap;position:sticky;left:0;background:var(--bg)">'+emp.name+'</td>';
+  // ★ 마스터에 없지만 그 주에 기록이 남아 있는 사람(퇴사자 등)도 행으로 표시 (2026-08-28)
+  var _rowEmps = _attEmps.slice();
+  (function(){
+    var seen={}; _attEmps.forEach(function(e){ seen[e.name]=true; });
+    var extra=[];
+    dates.forEach(function(dt){
+      var raw=localStorage.getItem(_attDateKey(_attFmtDate2(dt)));
+      if(!raw) return;
+      var day; try{ day=JSON.parse(raw)||{}; }catch(e){ return; }
+      Object.keys(day).forEach(function(n){
+        if(seen[n]) return; seen[n]=true; extra.push({name:n, _left:true});
+      });
+    });
+    _rowEmps = _rowEmps.concat(extra);
+  })();
+  _rowEmps.forEach(function(emp){
+    var _nameTd = emp._left ? (emp.name+'<span style="font-size:9px;color:var(--g5);margin-left:4px">퇴사</span>') : emp.name;
+    html+='<tr><td style="padding:6px 10px;font-size:12px;font-weight:500;border:0.5px solid var(--g2);white-space:nowrap;position:sticky;left:0;background:var(--bg)">'+_nameTd+'</td>';
     var weekHours=0;
     dates.forEach(function(dt){
       var ds=_attFmtDate2(dt);
