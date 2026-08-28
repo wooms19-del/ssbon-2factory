@@ -536,24 +536,8 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
     _moRenderYieldChart(dailyYields);
 
     // ★ 동일 작업일 탭용 — cur 일별 공정 합계 (전처리/자숙/파쇄/완제품 + 원육)
-    const _curWorkDates = dayEntries.map(([d]) => d).filter(d => rmByDate[d]).sort();
-    const _curByWorkDay = _curWorkDates.map((date, i) => {
-      const rm = r2(rmByDate[date]||0);
-      const ppKg = (ppMonth||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
-      const ckKg = (ckMonth||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
-      const shKg = (shMonth||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
-      // 완제품 = dayEntries에서 이미 계산
-      const dayEntry = dayEntries.find(([d]) => d === date);
-      const allR = dayEntry ? dayEntry[1] : [];
-      const effPkM = {};
-      allR.forEach(row=>{
-        const oe = opMap[date+'|'+row.product]||0;
-        const p = L.products.find(x=>x.name===row.product);
-        effPkM[row.product] = oe>0&&p ? r2(oe*p.kgea) : row.pkKg;
-      });
-      const pkKg = r2(allR.reduce((s,r)=>s+(effPkM[r.product]||0),0));
-      return { idx:i+1, date, rm, ppKg, ckKg, shKg, pkKg };
-    });
+    //   전월(prev)과 반드시 같은 산식이어야 함 → 양쪽 모두 mpRows 기준 (2026-08-28)
+    const _curByWorkDay = _moWorkDaysFromMpRows((window._moGD||{}).mpRows);
     window._moCurByWorkDay = _curByWorkDay;
     _moLoadAndRenderPrevCmp(moAvgYld, moTotRm, moTotPkKg, moDays);
     // KPI 일평균 원육 사용량
@@ -1397,6 +1381,34 @@ function _moRenderYieldChart(dailyYields) {
   });
 }
 
+// ★ mpRows(월단위생산량과 동일 데이터) → 작업일별 공정 합계
+//   당월·전월이 같은 산식을 쓰도록 반드시 이 함수 하나만 사용할 것. (2026-08-28)
+//   집계 규칙은 생산일보 표(_moTableTotals)와 동일 — disp 필터 + 날짜별 r2 후 합산.
+function _moWorkDaysFromMpRows(rows){
+  if(!rows || !rows.length) return [];
+  const mainD = {};
+  rows.forEach(r => { if(r && r._isMainRow !== false && r.date) mainD[r.date] = true; });
+  const disp = rows.filter(r => r && (r._isMainRow !== false || !mainD[r.date]));
+  const byD = {};
+  disp.forEach(r => {
+    const d = r.date; if(!d) return;
+    if(!byD[d]) byD[d] = {rm:0, pp:0, ck:0, sh:0, pk:0};
+    byD[d].rm += (r.rmKg||0);
+    byD[d].pp += (r.ppKg||0);
+    byD[d].ck += (r.ckKg||0);
+    byD[d].sh += (r.shKg||0);
+    byD[d].pk += r2((r.pkEa||0)*(r.kgea||0));
+  });
+  return Object.keys(byD).sort().map((date, i) => ({
+    idx:i+1, date,
+    rm:   r2(byD[date].rm),
+    ppKg: r2(byD[date].pp),
+    ckKg: r2(byD[date].ck),
+    shKg: r2(byD[date].sh),
+    pkKg: r2(byD[date].pk)
+  }));
+}
+
 // ── 전월 비교 로드 + 렌더 ────────────────────────────────────
 async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
   const el=document.getElementById('mo_prev_cmp');
@@ -1554,28 +1566,9 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     window._moPrevYldByIdx = _pYldByIdx;
     window._moPrevYm = prevYm;
 
-    // ★ 동일 작업일 탭용 — prev 일별 공정 합계 (전처리/자숙/파쇄/완제품 + 원육)
-    // 작업일 = 생산한 날 (prevGrouped 키, 정렬)
-    const _prevWorkDates = Object.keys(prevGrouped).sort();
-    const _prevByWorkDay = _prevWorkDates.map((date, i) => {
-      // 그날 원육 — 체인 제외 데이터 사용
-      const ppDay = _prevPpClean.filter(r=>String(r.date||'').slice(0,10)===date);
-      const rm = r2(getThKgByPP_(ppDay,_prevThClean,date));
-      // 그날 전처리/자숙/파쇄 합계
-      const ppKg = ppDay.reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
-      const ckKg = (prevCk||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
-      const shKg = (prevSh||[]).filter(r=>String(r.date||'').slice(0,10)===date).reduce((s,r)=>s+(parseFloat(r.kg)||0), 0);
-      // 그날 완제품 (effM에서 계산된 값)
-      const allR = prevGrouped[date] || [];
-      const effM = {};
-      allR.forEach(row=>{
-        const oe = prevOpMap[date+'|'+row.product]||0;
-        const p = L.products.find(x=>x.name===row.product);
-        effM[row.product] = oe>0&&p ? r2(oe*p.kgea) : row.pkKg;
-      });
-      const pkKg = r2(allR.reduce((s,r)=>s+(effM[r.product]||0),0));
-      return { idx:i+1, date, rm, ppKg, ckKg, shKg, pkKg };
-    });
+    // ★ 동일 작업일 탭용 — prev 일별 공정 합계
+    //   cur와 반드시 같은 산식이어야 함 → 양쪽 모두 mpRows 기준 (2026-08-28)
+    const _prevByWorkDay = _moWorkDaysFromMpRows(_pRowsCache);
     window._moPrevByWorkDay = _prevByWorkDay;
 
     // 4월 평균값 (한 줄 가로선용)
