@@ -538,7 +538,7 @@ function _shipBillProds(){
         var kids=lots.map(function(ld){
           return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#475569;background:#fff;border:1px solid #e5e7eb;border-radius:20px;padding:3px 10px;cursor:pointer">'
             + '<input type="checkbox" class="gs_billp" value="'+esc(p+'|'+ld)+'" onchange="_shipBillSync()" checked>'
-            + (ld?('소비기한 '+_fmtYY(ld)):'로트없음')+'</label>';
+            + (ld?(p===FC3KG ? ('제조 '+_fmtYY(_plusDays(ld,-(_shelfDays(p)-1)))+' / 소비 '+_fmtYY(ld)) : ('소비기한 '+_fmtYY(ld))):'로트없음')+'</label>';
         }).join('');
         return '<div style="margin-bottom:8px">'+head
           + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0 18px">'+kids+'</div></div>';
@@ -588,7 +588,7 @@ function _shipBillPv(){
           + '<span style="flex:1;min-width:0">'+nm+'</span>'
           + '<span style="width:34px;color:#6b7280">'+unit+'</span>'
           + '<span style="width:64px;text-align:right;font-weight:600">'+qty.toLocaleString()+'</span>'
-          + '<span style="width:62px;text-align:right;color:#6b7280">'+(x.lot?_fmtYY(x.lot):'')+'</span></div>';
+          + '<span style="width:62px;text-align:right;color:#6b7280">'+_billDate(x.prod, x.lot)+'</span></div>';
       }).join('')
     + '</div>';
 }
@@ -833,6 +833,13 @@ var BILL_SUPPLIER = {
   mgr:'', tel:'010-4788-2690'
 };
 
+// 명세서 비고 날짜 — FC 3KG는 제조일자, 나머지는 소비기한 (2026-08-28)
+// lotDate는 항상 소비기한으로 저장되므로 FC는 (소비기한 - (유통일수-1))로 역산
+function _billDate(prod, lot){
+  if(!lot) return '';
+  return (prod===FC3KG) ? ('제조 '+_fmtYY(_plusDays(lot, -(_shelfDays(prod)-1)))) : _fmtYY(lot);
+}
+
 function _shipPrintRows(dateStr){
   var ships=_shipData.ships.filter(function(s){ return String(s.date).slice(0,10)===dateStr; });
   var map={};
@@ -867,7 +874,7 @@ function _shipPrint(){
     if(x.smpl) nm+=' (샘플)';
     var unit = x.box>0 ? '박스' : 'ea';
     var qty  = x.box>0 ? x.box : x.ea;
-    tr+='<tr><td class="l">'+nm+'</td><td>'+unit+'</td><td class="r">'+qty.toLocaleString()+'</td><td>'+(x.lot?_fmtYY(x.lot):'')+'</td></tr>';
+    tr+='<tr><td class="l">'+nm+'</td><td>'+unit+'</td><td class="r">'+qty.toLocaleString()+'</td><td>'+_billDate(x.prod, x.lot)+'</td></tr>';
   });
   tr+='<tr><td colspan="4" class="void">※　※　※　※　※　※　이　하　여　백　※　※　※　※　※　※</td></tr>';
   for(var i=rows.length+1;i<MINROWS;i++) tr+='<tr><td class="l">&nbsp;</td><td></td><td></td><td></td></tr>';
