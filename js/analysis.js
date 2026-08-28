@@ -1483,6 +1483,29 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
       allR.forEach(row=>{const oe=prevOpMap[date+'|'+row.product]||0;const p=L.products.find(x=>x.name===row.product);effM[row.product]=oe>0&&p?r2(oe*p.kgea):row.pkKg;});
       pRm+=dayRm; pPk+=r2(allR.reduce((s,r)=>s+(effM[r.product]||0),0)); pDays++;
     });
+    // ★ 전월 비교 표도 이번달(cur)과 반드시 같은 산식이어야 함. cur는 _moTableTotals(mpRows:
+    //    실제 방혈 + 코스트코 가안 + override, 테스트 체인 제외) 기준인데 prev만 방혈 직합산이라
+    //    같은 달이 화면마다 다른 원육·완제품·수율로 보였음. mpRows 기준으로 통일. (2026-08-28)
+    let _pRowsCache = null;
+    try {
+      if(window._mpProcess){
+        _pRowsCache = (window._mpProcess(prevPk, prevOp, prevPp, prevTh, prevSh, prevCk, undefined, 'none')||{}).rows || null;
+        if(_pRowsCache && _pRowsCache.length){
+          const _pMainD = {};
+          _pRowsCache.forEach(r => { if(r && r._isMainRow !== false && r.date) _pMainD[r.date] = true; });
+          const _pDisp = _pRowsCache.filter(r => r && (r._isMainRow !== false || !_pMainD[r.date]));
+          const _pByD = {};
+          _pDisp.forEach(r => {
+            const d = r.date; if(!d) return;
+            if(!_pByD[d]) _pByD[d] = {rm:0, meat:0};
+            _pByD[d].rm   += (r.rmKg||0);
+            _pByD[d].meat += r2((r.pkEa||0)*(r.kgea||0));
+          });
+          pRm=0; pPk=0; pDays=0;
+          Object.keys(_pByD).forEach(d => { pRm += r2(_pByD[d].rm); pPk += r2(_pByD[d].meat); pDays++; });
+        }
+      }
+    } catch(e){ console.error('[전월 비교] mpRows 총계 계산 실패', e); }
     const pYld=pRm>0?pPk/pRm*100:0;
     _moRenderPrevCmp(el,{yld:curYld,rm:curRm,pkKg:curPkKg,days:curDays},{yld:pYld,rm:pRm,pkKg:pPk,days:pDays},prevYm);
 
@@ -1604,7 +1627,7 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
     let _avgRmKg = pDays>0 ? pRm/pDays : null;
     try {
       if(window._mpProcess){
-        const _pRows = (window._mpProcess(prevPk, prevOp, prevPp, prevTh, prevSh, prevCk, undefined, 'none')||{}).rows || [];
+        const _pRows = _pRowsCache || (window._mpProcess(prevPk, prevOp, prevPp, prevTh, prevSh, prevCk, undefined, 'none')||{}).rows || [];
         const _pMainDates = {};
         _pRows.forEach(r=>{ if(r && r.date && !r.isSubTotal && r._isMainRow !== false) _pMainDates[r.date] = true; });
         const _pByDay = {};
@@ -1621,13 +1644,8 @@ async function _moLoadAndRenderPrevCmp(curYld, curRm, curPkKg, curDays) {
         // 전월 평균 수율 — 이번달 KPI와 같은 총량 가중평균으로 재계산
         // ★ 기존 _pYldByIdx는 방혈 end일 ÷ 포장일을 그대로 나눠서, 전날 원육으로 포장만
         //    돌린 날(분모 급감)에 수율이 수백 %로 튀어 평균이 망가졌음. (2026-08-19)
-        let _pRmSum = 0, _pMeatSum = 0;
-        _pRows.forEach(r=>{
-          if(!r || !r.date || r._isMainRow === false) return;
-          _pRmSum += (r.rmKg||0);
-          _pMeatSum += ((r.pkEaInner!=null?r.pkEaInner:r.pkEa)||0)*(r.kgea||0);
-        });
-        if(_pRmSum>0) _avgYld = _pMeatSum/_pRmSum*100;
+        // ★ 표(전월 비교)와 같은 총계를 그대로 씀 — 차트 평균선 = 표 수율 (2026-08-28)
+        if(pRm>0) _avgYld = pPk/pRm*100;
       }
     } catch(e){ console.error('[월별현황] 전월 일평균 mpRows 계산 실패', e); }
     window._moPrevAvgDef = _avgDef;
