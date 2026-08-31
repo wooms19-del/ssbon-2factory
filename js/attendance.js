@@ -234,7 +234,8 @@ var LEAVE_TYPES=[
   {v:'quarter', label:'반반차',        unit:0.25}
 ];
 var _leaveCache=null;        // 전체 신청 목록 (배열)
-var _leaveMonth=null;        // 목록 표시 월 'YYYY-MM'
+var _leaveEditId=null;       // 수정 중인 신청 id (null이면 신규)
+var _leaveShowPast=false;    // 지난 신청 표시 여부
 
 function _leaveTypeLabel(t){ var f=LEAVE_TYPES.filter(function(x){return x.v===t;})[0]; return f?f.label:t; }
 function _leaveTypeUnit(t){ var f=LEAVE_TYPES.filter(function(x){return x.v===t;})[0]; return f?f.unit:1; }
@@ -290,12 +291,7 @@ async function _attShowLeave(){
   _renderAttLeave();
 }
 
-function attLeaveMonthShift(delta){
-  var p=(_leaveMonth||tod().slice(0,7)).split('-');
-  var d=new Date(+p[0], +p[1]-1+delta, 1);
-  _leaveMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  _renderAttLeave();
-}
+function attLeaveTogglePast(v){ _leaveShowPast=!!v; _renderAttLeave(); }
 
 function attLeavePreview(){
   var el=document.getElementById('lvPreview'); if(!el)return;
@@ -322,26 +318,53 @@ async function attLeaveAdd(){
   var reason=((document.getElementById('lvReason')||{}).value||'').trim();
   if(!name){ toast('직원을 선택하세요','e'); return; }
   var ds=_leaveWorkDates(from,to);
-  if(!ds.length){ toast('유효한 날짜를 선택하세요','e'); return; }
+  if(!ds.length){ toast('유효한 날짜를 선택하세요 (주말·공휴일만 선택됨)','e'); return; }
   var dup=(_leaveCache||[]).filter(function(lv){
-    return lv.name===name && _leaveWorkDates(lv.from,lv.to).some(function(d){return ds.indexOf(d)>=0;});
+    return lv.name===name && lv._id!==_leaveEditId
+        && _leaveWorkDates(lv.from,lv.to).some(function(d){return ds.indexOf(d)>=0;});
   });
-  if(dup.length && !confirm(name+'님은 해당 기간에 이미 신청이 있습니다.\n그래도 추가할까요?')) return;
+  if(dup.length && !confirm(name+'님은 해당 기간에 이미 신청이 있습니다.\n그래도 진행할까요?')) return;
   var e=(_attEmps||[]).filter(function(x){return x.name===name;})[0]||{};
   var rec={ name:name, part:e.part||'', type:type, from:from, to:to,
             days:Math.round(ds.length*_leaveTypeUnit(type)*100)/100,
-            reason:reason, createdAt:new Date().toISOString() };
+            reason:reason, updatedAt:new Date().toISOString() };
+  var prevDates=[];
   try{
-    var ref=await firebase.firestore().collection(LEAVE_COL).add(rec);
-    rec._id=ref.id; _leaveCache.push(rec);
+    if(_leaveEditId){
+      var old=(_leaveCache||[]).filter(function(x){return x._id===_leaveEditId;})[0];
+      if(old) prevDates=_leaveWorkDates(old.from, old.to);
+      await firebase.firestore().collection(LEAVE_COL).doc(_leaveEditId).update(rec);
+    } else {
+      rec.createdAt=new Date().toISOString();
+      await firebase.firestore().collection(LEAVE_COL).add(rec);
+    }
+    await _leaveLoad(true);                 // ★ 서버에서 다시 읽어옴 (캐시 신뢰 안 함)
     await _leaveSyncUsedDays();
-    _leaveMonth=from.slice(0,7);
-    var rs=document.getElementById('lvReason'); if(rs)rs.value='';
+    var wasEdit=!!_leaveEditId;
+    _leaveEditId=null;
     _renderAttLeave();
-    if(ds.indexOf(_attDate)>=0) await _loadAttDate(_attDate);
-    toast('연차 등록됨 ✓','s');
-  }catch(err){ console.error('[연차] 등록 실패', err); toast('등록 실패','e'); }
+    if(prevDates.concat(ds).indexOf(_attDate)>=0) await _loadAttDate(_attDate);
+    toast(wasEdit?'수정됨 ✓':'연차 등록됨 ✓','s');
+  }catch(err){
+    console.error('[연차] 저장 실패', err);
+    toast('저장 실패: '+(err&&err.message?err.message:'알 수 없는 오류'),'e');
+  }
 }
+
+function attLeaveEdit(id){
+  var lv=(_leaveCache||[]).filter(function(x){return x._id===id;})[0];
+  if(!lv) return;
+  _leaveEditId=id;
+  _renderAttLeave();
+  var set=function(i,v){ var el=document.getElementById(i); if(el)el.value=v; };
+  set('lvName',lv.name); set('lvType',lv.type); set('lvFrom',lv.from);
+  set('lvTo',lv.to||lv.from); set('lvReason',lv.reason||'');
+  attLeavePreview();
+  var host=document.getElementById('attLeaveContent');
+  if(host&&host.scrollIntoView) host.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function attLeaveCancelEdit(){ _leaveEditId=null; _renderAttLeave(); }
 
 async function attLeaveDelete(id){
   var lv=(_leaveCache||[]).filter(function(x){return x._id===id;})[0];
@@ -349,7 +372,8 @@ async function attLeaveDelete(id){
   if(!confirm(lv.name+' '+lv.from+(lv.to&&lv.to!==lv.from?('~'+lv.to):'')+' 신청을 삭제할까요?')) return;
   try{
     await firebase.firestore().collection(LEAVE_COL).doc(id).delete();
-    _leaveCache=_leaveCache.filter(function(x){return x._id!==id;});
+    await _leaveLoad(true);
+    if(_leaveEditId===id) _leaveEditId=null;
     await _leaveSyncUsedDays();
     _renderAttLeave();
     if(_leaveWorkDates(lv.from,lv.to).indexOf(_attDate)>=0) await _loadAttDate(_attDate);
@@ -375,7 +399,6 @@ async function _leaveSyncUsedDays(){
 
 function _renderAttLeave(){
   var host=document.getElementById('attLeaveContent'); if(!host)return;
-  if(!_leaveMonth) _leaveMonth=tod().slice(0,7);
   var emps=(_attEmps||[]).slice().sort(function(a,b){
     var ai=ATT_PART_ORDER.indexOf(a.part||''), bi=ATT_PART_ORDER.indexOf(b.part||'');
     if(ai!==bi) return (ai<0?99:ai)-(bi<0?99:bi);
@@ -384,8 +407,11 @@ function _renderAttLeave(){
   var today=tod();
   var h='';
 
-  h+='<div style="background:var(--g1);border-radius:12px;padding:12px;margin-bottom:12px">'
-   + '<div style="font-size:13px;font-weight:600;margin-bottom:10px">새 신청</div>'
+  h+='<div style="background:var(--g1);border-radius:12px;padding:12px;margin-bottom:12px'+(_leaveEditId?';border:2px solid #f59e0b':'')+'">'
+   + '<div style="display:flex;align-items:center;margin-bottom:10px">'
+   +   '<div style="font-size:13px;font-weight:600;flex:1">'+(_leaveEditId?'신청 수정':'새 신청')+'</div>'
+   +   (_leaveEditId?'<button class="btn" style="padding:2px 10px;font-size:11px" onclick="attLeaveCancelEdit()">취소</button>':'')
+   + '</div>'
    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
    +   '<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">직원</div>'
    +     '<select id="lvName" onchange="attLeavePreview()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:13px;background:var(--bg)">'
@@ -405,31 +431,33 @@ function _renderAttLeave(){
    + '<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--g5);margin-bottom:3px">사유 (선택)</div>'
    +   '<input type="text" id="lvReason" placeholder="가족 행사" style="width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:13px;background:var(--bg)"></div>'
    + '<div id="lvPreview" style="font-size:12px;padding:9px 10px;background:#eff6ff;border-radius:8px;margin-bottom:8px;color:#1e40af"></div>'
-   + '<button class="btn bp bblk" style="width:100%" onclick="attLeaveAdd()">신청 등록</button>'
+   + '<button class="btn bp bblk" style="width:100%" onclick="attLeaveAdd()">'+(_leaveEditId?'수정 저장':'신청 등록')+'</button>'
    + '</div>';
 
-  var p=_leaveMonth.split('-');
-  var inMonth=(_leaveCache||[]).filter(function(lv){
-    return _leaveWorkDates(lv.from,lv.to).some(function(d){return d.slice(0,7)===_leaveMonth;});
-  }).sort(function(a,b){ return String(a.from).localeCompare(String(b.from)); });
+  var all=(_leaveCache||[]).slice().sort(function(a,b){ return String(a.from).localeCompare(String(b.from)); });
+  var upcoming=all.filter(function(lv){ return _leaveWorkDates(lv.from,lv.to).some(function(d){return d>=today;}); });
+  var past=all.filter(function(lv){ return upcoming.indexOf(lv)<0; }).reverse();
+  var show=_leaveShowPast?past:upcoming;
 
-  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
-   + '<button class="btn" style="padding:4px 10px;font-size:12px" onclick="attLeaveMonthShift(-1)">◀</button>'
-   + '<span style="font-size:13px;font-weight:600;flex:1;text-align:center">'+p[0]+'년 '+parseInt(p[1],10)+'월 · '+inMonth.length+'건</span>'
-   + '<button class="btn" style="padding:4px 10px;font-size:12px" onclick="attLeaveMonthShift(1)">▶</button>'
+  h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+   + '<button class="btn'+(_leaveShowPast?'':' bp')+'" style="padding:4px 12px;font-size:12px" onclick="attLeaveTogglePast(false)">예정 '+upcoming.length+'</button>'
+   + '<button class="btn'+(_leaveShowPast?' bp':'')+'" style="padding:4px 12px;font-size:12px" onclick="attLeaveTogglePast(true)">지난 '+past.length+'</button>'
+   + '<span style="flex:1"></span>'
+   + '<span style="font-size:11px;color:var(--g4)">전체 '+all.length+'건</span>'
    + '</div>';
 
-  if(!inMonth.length){
-    h+='<div style="text-align:center;color:var(--g4);font-size:12px;padding:1.5rem">신청 없음</div>';
+  if(!show.length){
+    h+='<div style="text-align:center;color:var(--g4);font-size:12px;padding:1.5rem">'+(_leaveShowPast?'지난 신청 없음':'예정된 신청 없음')+'</div>';
   } else {
     h+='<div style="border:1px solid var(--g2);border-radius:10px;overflow:hidden">';
-    inMonth.forEach(function(lv,i){
+    show.forEach(function(lv,i){
       var rng=lv.from.slice(5).replace('-','/')+(lv.to&&lv.to!==lv.from?('~'+lv.to.slice(5).replace('-','/')):'');
-      var past=_leaveWorkDates(lv.from,lv.to).every(function(d){return d<today;});
-      h+='<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;'+(i?'border-top:1px solid var(--g2);':'')+(past?'opacity:.55':'')+'">'
+      var editing=(lv._id===_leaveEditId);
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;'+(i?'border-top:1px solid var(--g2);':'')+(_leaveShowPast?'opacity:.55;':'')+(editing?'background:#fef9c3':'')+'">'
        + '<div style="width:82px;font-size:12px;color:var(--g5)">'+rng+'</div>'
        + '<div style="flex:1;font-size:13px;font-weight:500">'+lv.name+' <span style="font-size:11px;color:var(--g4);font-weight:400">'+(lv.part||'')+'</span></div>'
        + '<div style="font-size:11px;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#1e40af;white-space:nowrap">'+_leaveTypeLabel(lv.type)+' '+lv.days+'일</div>'
+       + '<button class="btn" style="padding:2px 8px;font-size:11px" onclick="attLeaveEdit(\''+lv._id+'\')">수정</button>'
        + '<button class="btn" style="padding:2px 8px;font-size:11px;color:#dc2626" onclick="attLeaveDelete(\''+lv._id+'\')">삭제</button>'
        + '</div>';
       if(lv.reason) h+='<div style="padding:0 10px 8px 100px;font-size:11px;color:var(--g5)">'+lv.reason+'</div>';
