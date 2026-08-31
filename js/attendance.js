@@ -391,7 +391,9 @@ function attLeavePrint(id){
    +'<div style="margin-top:58px;font-size:19px;font-weight:700">위와 같은 사유로 연차/반차/반반차 신청서를 제출하오니 허가하여 주시기 바랍니다.</div>'
    +'<div style="margin-top:76px;text-align:right;font-size:19px">'+td[0]+' 년 &nbsp;&nbsp;'+parseInt(td[1],10)+' 월 &nbsp;&nbsp;'+parseInt(td[2],10)+' 일</div>'
    +'<div style="margin-top:26px;text-align:right;font-size:19px">작성자 : &nbsp;&nbsp;'+lv.name
-   +' <span style="font-family:\'Noto Serif CJK KR\',serif;font-size:28px;margin:0 10px">'+lv.name+'</span> (인)</div>'
+   +' <span style="position:relative;display:inline-block;width:150px;text-align:right">(인)'
+   +'<span style="position:absolute;right:6px;top:-11px;font-family:\'Noto Serif CJK KR\',serif;font-size:30px;white-space:nowrap">'+lv.name+'</span>'
+   +'</span></div>'
    +'<div style="margin-top:68px;text-align:center;font-size:28px;font-weight:700">순수본 주식회사</div>'
    +'</body></html>';
   var w=window.open('','_blank','width=900,height=1100');
