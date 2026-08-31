@@ -348,25 +348,25 @@ function attLeavePrint(id){
   var sh=(st>='13')?String(parseInt(st,10)-12):st;
   var f=lv.from.split('-'), t=(lv.to||lv.from).split('-');
   var td=(lv.approvedAt||lv.createdAt||new Date().toISOString()).slice(0,10).split('-');
-  var cell='border:1px solid #000;padding:7px 10px;font-size:14px';
-  var lbl=cell+';background:#efe9d8;text-align:center;font-weight:700;width:80px';
+  var cell='border:1px solid #000;padding:22px 16px;font-size:19px';
+  var lbl=cell+';background:#efe9d8;text-align:center;font-weight:700;width:120px';
   var html='<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>연차·반차 신청서 '+lv.name+'</title><style>'
    +'@page{size:A4;margin:18mm}'
    +'body{font-family:"Malgun Gothic","맑은 고딕",sans-serif;color:#000;margin:0}'
    +'table{border-collapse:collapse;width:100%}'
-   +'.ttl{font-size:26px;font-weight:700;text-align:center;letter-spacing:6px;border-bottom:2px solid #000;padding-bottom:8px;width:300px;margin:0 auto}'
-   +'.sec{font-size:14px;font-weight:700;margin:22px 0 6px}'
-   +'.hand{font-size:15px}'
+   +'.ttl{font-size:34px;font-weight:700;text-align:center;letter-spacing:8px;border-bottom:2px solid #000;padding-bottom:12px;width:400px;margin:0 auto}'
+   +'.sec{font-size:19px;font-weight:700;margin:40px 0 12px}'
+   +'.hand{font-size:20px}'
    +'</style></head><body>'
-   +'<div style="text-align:right;font-size:17px;font-weight:700;margin-bottom:6px">순수본㈜</div>'
+   +'<div style="text-align:right;font-size:22px;font-weight:700;margin-bottom:10px">순수본㈜</div>'
    +'<div style="display:flex;align-items:flex-start;gap:16px">'
    +  '<div style="flex:1;padding-top:8px"><div class="ttl">연차/반차 신청서</div></div>'
-   +  '<table style="width:210px"><tr>'
-   +    '<td rowspan="2" style="'+cell+';width:34px;text-align:center;font-weight:700">결<br>재</td>'
-   +    '<td style="'+cell+';text-align:center;font-size:12px">실장</td>'
-   +    '<td style="'+cell+';text-align:center;font-size:12px">팀장</td></tr>'
-   +  '<tr><td style="'+cell+';height:52px;text-align:center;font-size:13px">'+(lv.approvedBy||'')+'</td>'
-   +      '<td style="'+cell+';height:52px"></td></tr></table>'
+   +  '<table style="width:260px"><tr>'
+   +    '<td rowspan="2" style="'+cell+';width:42px;text-align:center;font-weight:700;padding:8px 4px">결<br>재</td>'
+   +    '<td style="'+cell+';text-align:center;font-size:14px;padding:8px">실장</td>'
+   +    '<td style="'+cell+';text-align:center;font-size:14px;padding:8px">팀장</td></tr>'
+   +  '<tr><td style="'+cell+';height:68px;text-align:center;font-size:15px">'+(lv.approvedBy||'')+'</td>'
+   +      '<td style="'+cell+';height:68px"></td></tr></table>'
    +'</div>'
    +'<div class="sec">1. 신청인</div>'
    +'<table>'
@@ -378,20 +378,21 @@ function attLeavePrint(id){
    +'<div class="sec">2. 신청내용 <span style="font-weight:400;font-size:12px">(기념일 또는 연차 외 유급일 경우 "기타"체크, 해당 신청사유 작성)</span></div>'
    +'<table>'
    +'<tr><td style="'+lbl+'">구 분</td><td style="'+cell+'">'
-   +   '<span style="margin-right:26px">'+_lvPrintBox(isAn)+' 연 차(8시간)</span>'
-   +   '<span style="margin-right:26px">'+_lvPrintBox(isHalf)+' 반 차(4시간)</span>'
-   +   '<span style="margin-right:26px">'+_lvPrintBox(isQ)+' 반반차(2시간)</span>'
+   +   '<span style="margin-right:34px">'+_lvPrintBox(isAn)+' 연 차(8시간)</span>'
+   +   '<span style="margin-right:34px">'+_lvPrintBox(isHalf)+' 반 차(4시간)</span>'
+   +   '<span style="margin-right:34px">'+_lvPrintBox(isQ)+' 반반차(2시간)</span>'
    +   '<span>'+_lvPrintBox(false)+' 기 타</span></td></tr>'
    +'<tr><td style="'+lbl+'" rowspan="2">신청기간</td><td style="'+cell+'" class="hand">'
    +   f[0]+'년 &nbsp;'+parseInt(f[1],10)+'월 &nbsp;'+parseInt(f[2],10)+'일 &nbsp;&nbsp;'+ap+' &nbsp;'+parseInt(sh,10)+'시 &nbsp;00분부터</td></tr>'
    +'<tr><td style="'+cell+'" class="hand">'
    +   t[0]+'년 &nbsp;'+parseInt(t[1],10)+'월 &nbsp;'+parseInt(t[2],10)+'일 &nbsp;&nbsp;'+ap2+' &nbsp;'+parseInt(eh,10)+'시 &nbsp;00분까지 &nbsp;&nbsp;(총 '+lv.days+'일)</td></tr>'
-   +'<tr><td style="'+lbl+'">신청사유</td><td style="'+cell+';height:70px" class="hand">'+(lv.reason||'')+'</td></tr>'
+   +'<tr><td style="'+lbl+'">신청사유</td><td style="'+cell+';height:190px;vertical-align:top" class="hand">'+(lv.reason||'')+'</td></tr>'
    +'</table>'
-   +'<div style="margin-top:30px;font-size:15px;font-weight:700">위와 같은 사유로 연차/반차/반반차 신청서를 제출하오니 허가하여 주시기 바랍니다.</div>'
-   +'<div style="margin-top:44px;text-align:right;font-size:15px">'+td[0]+' 년 &nbsp;&nbsp;'+parseInt(td[1],10)+' 월 &nbsp;&nbsp;'+parseInt(td[2],10)+' 일</div>'
-   +'<div style="margin-top:16px;text-align:right;font-size:15px">작성자 : &nbsp;&nbsp;'+lv.name+' &nbsp;&nbsp;(인)</div>'
-   +'<div style="margin-top:40px;text-align:center;font-size:20px;font-weight:700">순수본 주식회사</div>'
+   +'<div style="margin-top:58px;font-size:19px;font-weight:700">위와 같은 사유로 연차/반차/반반차 신청서를 제출하오니 허가하여 주시기 바랍니다.</div>'
+   +'<div style="margin-top:76px;text-align:right;font-size:19px">'+td[0]+' 년 &nbsp;&nbsp;'+parseInt(td[1],10)+' 월 &nbsp;&nbsp;'+parseInt(td[2],10)+' 일</div>'
+   +'<div style="margin-top:26px;text-align:right;font-size:19px">작성자 : &nbsp;&nbsp;'+lv.name
+   +' <span style="font-family:\'Noto Serif CJK KR\',serif;font-size:28px;margin:0 10px">'+lv.name+'</span> (인)</div>'
+   +'<div style="margin-top:68px;text-align:center;font-size:28px;font-weight:700">순수본 주식회사</div>'
    +'</body></html>';
   var w=window.open('','_blank','width=900,height=1100');
   if(!w){ alert('팝업이 차단되었습니다. 브라우저 주소창의 팝업 차단을 해제해주세요.'); return; }
