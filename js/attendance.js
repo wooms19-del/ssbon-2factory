@@ -112,6 +112,7 @@ async function initAttendance(){
     await _saveAttEmps();
   }
 
+  await _leaveLoad();
   await _loadAttDate(_attDate);
 }
 
@@ -143,6 +144,7 @@ async function _loadAttDate(date){
     if(doc.exists){
       _attRecs = doc.data().records || {};
       _applyAutoHoliday(date);
+      _applyLeaveRequests(date);
       localStorage.setItem(_attDateKey(date), JSON.stringify(_attRecs));
       _renderAttAll();
       return;
@@ -153,6 +155,7 @@ async function _loadAttDate(date){
   var raw=localStorage.getItem(_attDateKey(date));
   _attRecs=raw?JSON.parse(raw):{};
   _applyAutoHoliday(date);
+  _applyLeaveRequests(date);
   _renderAttAll();
 }
 function _attFmtLabel(d){
@@ -208,14 +211,241 @@ function attSave(){
 
 function _renderAttAll(){
   _renderAttSummary();
-  ['attInputWrap','attMonthlyWrap','attStaffWrap','attReportWrap'].forEach(function(id){var w=document.getElementById(id);if(w)w.style.display='none';});
-  var wrapId={input:'attInputWrap',monthly:'attMonthlyWrap',staff:'attStaffWrap',report:'attReportWrap'}[_attSubTab];
+  ['attInputWrap','attMonthlyWrap','attLeaveWrap','attStaffWrap','attReportWrap'].forEach(function(id){var w=document.getElementById(id);if(w)w.style.display='none';});
+  var wrapId={input:'attInputWrap',monthly:'attMonthlyWrap',leave:'attLeaveWrap',staff:'attStaffWrap',report:'attReportWrap'}[_attSubTab];
   var w=document.getElementById(wrapId);if(w)w.style.display='';
   if(_attSubTab==='input')_renderAttInput();
   if(_attSubTab==='monthly')_attShowMonthly();  // ★ Firebase prefetch + render
+  if(_attSubTab==='leave')_attShowLeave();
   if(_attSubTab==='staff')_renderAttStaff();
   if(_attSubTab==='report')_renderAttReport();
 }
+// ============================================================
+// 연차 신청 — 미리 신청해두면 그 날짜를 열 때 자동으로 근태에 반영 (2026-08-31)
+//   승인 단계 없음. 등록 = 확정.
+//   컬렉션 leave_requests / 문서 1건 = 신청 1건
+//   {name, part, type:'annual'|'half-am'|'half-pm'|'quarter', from, to, days, reason, createdAt}
+// ============================================================
+var LEAVE_COL='leave_requests';
+var LEAVE_TYPES=[
+  {v:'annual',  label:'연차 (하루)',   unit:1},
+  {v:'half-am', label:'반차 (오전)',   unit:0.5},
+  {v:'half-pm', label:'반차 (오후)',   unit:0.5},
+  {v:'quarter', label:'반반차',        unit:0.25}
+];
+var _leaveCache=null;        // 전체 신청 목록 (배열)
+var _leaveMonth=null;        // 목록 표시 월 'YYYY-MM'
+
+function _leaveTypeLabel(t){ var f=LEAVE_TYPES.filter(function(x){return x.v===t;})[0]; return f?f.label:t; }
+function _leaveTypeUnit(t){ var f=LEAVE_TYPES.filter(function(x){return x.v===t;})[0]; return f?f.unit:1; }
+
+// from~to 사이 실제 차감 대상 날짜 (주말·공휴일 제외)
+function _leaveWorkDates(from,to){
+  var out=[]; if(!from) return out;
+  var d=new Date(from), end=new Date(to||from);
+  if(isNaN(d)||isNaN(end)||d>end) return out;
+  var guard=0;
+  while(d<=end && guard++<400){
+    var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    var dow=d.getDay();
+    if(dow!==0 && dow!==6 && !_isHoliday(ds)) out.push(ds);
+    d.setDate(d.getDate()+1);
+  }
+  return out;
+}
+
+async function _leaveLoad(force){
+  if(_leaveCache && !force) return _leaveCache;
+  _leaveCache=[];
+  try{
+    var snap=await firebase.firestore().collection(LEAVE_COL).get();
+    snap.forEach(function(doc){ var o=doc.data()||{}; o._id=doc.id; _leaveCache.push(o); });
+  }catch(e){ console.error('[연차] 목록 로드 실패', e); }
+  return _leaveCache;
+}
+
+// ★ 해당 날짜에 걸린 연차 신청을 근태 기록에 반영
+//   현장에서 이미 입력된 기록(출퇴근 시각/조출/체크인)은 절대 덮어쓰지 않음
+function _applyLeaveRequests(date){
+  if(!_leaveCache || !_leaveCache.length) return;
+  _leaveCache.forEach(function(lv){
+    if(!lv || !lv.name) return;
+    if(_leaveWorkDates(lv.from, lv.to).indexOf(date) < 0) return;
+    var r=_attRecs[lv.name];
+    var tags=(r&&r.tags)||[];
+    var worked=(r&&(r.inTime||r.outTime))||tags.indexOf('checkin')>=0||tags.indexOf('early')>=0;
+    if(worked) return;                                  // 실제 근무 기록 우선
+    if(tags.indexOf('absent')>=0) return;                // 결근 처리도 우선
+    if(tags.indexOf(lv.type)>=0) return;                 // 이미 같은 태그면 그대로
+    if(lv.type==='annual'){
+      _attRecs[lv.name]={tags:['annual'], inTime:'', outTime:''};
+    } else {
+      _attRecs[lv.name]={tags:[lv.type], inTime:(r&&r.inTime)||'09:00', outTime:(r&&r.outTime)||'18:00'};
+    }
+  });
+}
+
+async function _attShowLeave(){
+  await _leaveLoad();
+  _renderAttLeave();
+}
+
+function attLeaveMonthShift(delta){
+  var p=(_leaveMonth||tod().slice(0,7)).split('-');
+  var d=new Date(+p[0], +p[1]-1+delta, 1);
+  _leaveMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  _renderAttLeave();
+}
+
+function attLeavePreview(){
+  var el=document.getElementById('lvPreview'); if(!el)return;
+  var name=(document.getElementById('lvName')||{}).value||'';
+  var type=(document.getElementById('lvType')||{}).value||'annual';
+  var from=(document.getElementById('lvFrom')||{}).value||'';
+  var to=(document.getElementById('lvTo')||{}).value||from;
+  var ds=_leaveWorkDates(from,to);
+  if(!ds.length){ el.innerHTML='<span style="color:var(--g5)">날짜를 선택하세요 (주말·공휴일은 제외됩니다)</span>'; return; }
+  var days=Math.round(ds.length*_leaveTypeUnit(type)*100)/100;
+  var e=(_attEmps||[]).filter(function(x){return x.name===name;})[0]||{};
+  var total=e.annualDays||0, used=e.usedDays||0;
+  var wd=['일','월','화','수','목','금','토'];
+  var list=ds.slice(0,6).map(function(d){return d.slice(5).replace('-','/')+'('+wd[new Date(d).getDay()]+')';}).join(', ')+(ds.length>6?' 외 '+(ds.length-6)+'일':'');
+  el.innerHTML='<b>차감 '+days+'일</b> · 잔여 '+(total-used)+' → <b style="color:var(--p)">'+Math.round((total-used-days)*100)/100+'일</b>'
+    +'<div style="font-size:11px;color:var(--g5);margin-top:3px">'+list+'</div>';
+}
+
+async function attLeaveAdd(){
+  var name=(document.getElementById('lvName')||{}).value||'';
+  var type=(document.getElementById('lvType')||{}).value||'annual';
+  var from=(document.getElementById('lvFrom')||{}).value||'';
+  var to=(document.getElementById('lvTo')||{}).value||from;
+  var reason=((document.getElementById('lvReason')||{}).value||'').trim();
+  if(!name){ toast('직원을 선택하세요','e'); return; }
+  var ds=_leaveWorkDates(from,to);
+  if(!ds.length){ toast('유효한 날짜를 선택하세요','e'); return; }
+  var dup=(_leaveCache||[]).filter(function(lv){
+    return lv.name===name && _leaveWorkDates(lv.from,lv.to).some(function(d){return ds.indexOf(d)>=0;});
+  });
+  if(dup.length && !confirm(name+'님은 해당 기간에 이미 신청이 있습니다.\n그래도 추가할까요?')) return;
+  var e=(_attEmps||[]).filter(function(x){return x.name===name;})[0]||{};
+  var rec={ name:name, part:e.part||'', type:type, from:from, to:to,
+            days:Math.round(ds.length*_leaveTypeUnit(type)*100)/100,
+            reason:reason, createdAt:new Date().toISOString() };
+  try{
+    var ref=await firebase.firestore().collection(LEAVE_COL).add(rec);
+    rec._id=ref.id; _leaveCache.push(rec);
+    await _leaveSyncUsedDays();
+    _leaveMonth=from.slice(0,7);
+    var rs=document.getElementById('lvReason'); if(rs)rs.value='';
+    _renderAttLeave();
+    if(ds.indexOf(_attDate)>=0) await _loadAttDate(_attDate);
+    toast('연차 등록됨 ✓','s');
+  }catch(err){ console.error('[연차] 등록 실패', err); toast('등록 실패','e'); }
+}
+
+async function attLeaveDelete(id){
+  var lv=(_leaveCache||[]).filter(function(x){return x._id===id;})[0];
+  if(!lv) return;
+  if(!confirm(lv.name+' '+lv.from+(lv.to&&lv.to!==lv.from?('~'+lv.to):'')+' 신청을 삭제할까요?')) return;
+  try{
+    await firebase.firestore().collection(LEAVE_COL).doc(id).delete();
+    _leaveCache=_leaveCache.filter(function(x){return x._id!==id;});
+    await _leaveSyncUsedDays();
+    _renderAttLeave();
+    if(_leaveWorkDates(lv.from,lv.to).indexOf(_attDate)>=0) await _loadAttDate(_attDate);
+    toast('삭제됨 ✓','s');
+  }catch(err){ console.error('[연차] 삭제 실패', err); toast('삭제 실패','e'); }
+}
+
+// 신청 내역 → 직원 마스터 usedDays 재계산 (신청이 단일 진실 공급원)
+async function _leaveSyncUsedDays(){
+  var yr=tod().slice(0,4);
+  var sum={};
+  (_leaveCache||[]).forEach(function(lv){
+    if(!lv||!lv.name||String(lv.from||'').slice(0,4)!==yr) return;
+    sum[lv.name]=(sum[lv.name]||0)+(lv.days||0);
+  });
+  var changed=false;
+  (_attEmps||[]).forEach(function(e){
+    var v=Math.round((sum[e.name]||0)*100)/100;
+    if((e.usedDays||0)!==v){ e.usedDays=v; changed=true; }
+  });
+  if(changed) await _saveAttEmps();
+}
+
+function _renderAttLeave(){
+  var host=document.getElementById('attLeaveContent'); if(!host)return;
+  if(!_leaveMonth) _leaveMonth=tod().slice(0,7);
+  var emps=(_attEmps||[]).slice().sort(function(a,b){
+    var ai=ATT_PART_ORDER.indexOf(a.part||''), bi=ATT_PART_ORDER.indexOf(b.part||'');
+    if(ai!==bi) return (ai<0?99:ai)-(bi<0?99:bi);
+    return String(a.name).localeCompare(String(b.name),'ko');
+  });
+  var today=tod();
+  var h='';
+
+  h+='<div style="background:var(--g1);border-radius:12px;padding:12px;margin-bottom:12px">'
+   + '<div style="font-size:13px;font-weight:600;margin-bottom:10px">새 신청</div>'
+   + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+   +   '<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">직원</div>'
+   +     '<select id="lvName" onchange="attLeavePreview()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:13px;background:var(--bg)">'
+   +       emps.map(function(e){return '<option value="'+e.name.replace(/"/g,'&quot;')+'">'+_attDispName(e)+' ('+(e.part||'미배치')+')</option>';}).join('')
+   +     '</select></div>'
+   +   '<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">종류</div>'
+   +     '<select id="lvType" onchange="attLeavePreview()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:13px;background:var(--bg)">'
+   +       LEAVE_TYPES.map(function(t){return '<option value="'+t.v+'">'+t.label+'</option>';}).join('')
+   +     '</select></div>'
+   + '</div>'
+   + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+   +   '<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">시작일</div>'
+   +     '<input type="date" id="lvFrom" value="'+today+'" onchange="attLeaveSyncTo();attLeavePreview()" style="width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:13px;background:var(--bg)"></div>'
+   +   '<div><div style="font-size:11px;color:var(--g5);margin-bottom:3px">종료일</div>'
+   +     '<input type="date" id="lvTo" value="'+today+'" onchange="attLeavePreview()" style="width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:13px;background:var(--bg)"></div>'
+   + '</div>'
+   + '<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--g5);margin-bottom:3px">사유 (선택)</div>'
+   +   '<input type="text" id="lvReason" placeholder="가족 행사" style="width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid var(--g3);font-size:13px;background:var(--bg)"></div>'
+   + '<div id="lvPreview" style="font-size:12px;padding:9px 10px;background:#eff6ff;border-radius:8px;margin-bottom:8px;color:#1e40af"></div>'
+   + '<button class="btn bp bblk" style="width:100%" onclick="attLeaveAdd()">신청 등록</button>'
+   + '</div>';
+
+  var p=_leaveMonth.split('-');
+  var inMonth=(_leaveCache||[]).filter(function(lv){
+    return _leaveWorkDates(lv.from,lv.to).some(function(d){return d.slice(0,7)===_leaveMonth;});
+  }).sort(function(a,b){ return String(a.from).localeCompare(String(b.from)); });
+
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+   + '<button class="btn" style="padding:4px 10px;font-size:12px" onclick="attLeaveMonthShift(-1)">◀</button>'
+   + '<span style="font-size:13px;font-weight:600;flex:1;text-align:center">'+p[0]+'년 '+parseInt(p[1],10)+'월 · '+inMonth.length+'건</span>'
+   + '<button class="btn" style="padding:4px 10px;font-size:12px" onclick="attLeaveMonthShift(1)">▶</button>'
+   + '</div>';
+
+  if(!inMonth.length){
+    h+='<div style="text-align:center;color:var(--g4);font-size:12px;padding:1.5rem">신청 없음</div>';
+  } else {
+    h+='<div style="border:1px solid var(--g2);border-radius:10px;overflow:hidden">';
+    inMonth.forEach(function(lv,i){
+      var rng=lv.from.slice(5).replace('-','/')+(lv.to&&lv.to!==lv.from?('~'+lv.to.slice(5).replace('-','/')):'');
+      var past=_leaveWorkDates(lv.from,lv.to).every(function(d){return d<today;});
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;'+(i?'border-top:1px solid var(--g2);':'')+(past?'opacity:.55':'')+'">'
+       + '<div style="width:82px;font-size:12px;color:var(--g5)">'+rng+'</div>'
+       + '<div style="flex:1;font-size:13px;font-weight:500">'+lv.name+' <span style="font-size:11px;color:var(--g4);font-weight:400">'+(lv.part||'')+'</span></div>'
+       + '<div style="font-size:11px;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#1e40af;white-space:nowrap">'+_leaveTypeLabel(lv.type)+' '+lv.days+'일</div>'
+       + '<button class="btn" style="padding:2px 8px;font-size:11px;color:#dc2626" onclick="attLeaveDelete(\''+lv._id+'\')">삭제</button>'
+       + '</div>';
+      if(lv.reason) h+='<div style="padding:0 10px 8px 100px;font-size:11px;color:var(--g5)">'+lv.reason+'</div>';
+    });
+    h+='</div>';
+  }
+
+  host.innerHTML=h;
+  attLeavePreview();
+}
+
+function attLeaveSyncTo(){
+  var f=document.getElementById('lvFrom'), t=document.getElementById('lvTo');
+  if(f&&t&&(!t.value||t.value<f.value)) t.value=f.value;
+}
+
 function attShowSubTab(tab,el){
   _attSubTab=tab; _attSelStatus='';
   document.querySelectorAll('.att-sub-tab').forEach(function(t){t.classList.remove('on');});

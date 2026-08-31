@@ -345,6 +345,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
   <div style="display:flex;gap:0;border-bottom:2px solid var(--g2);margin-bottom:8px">
     <button class="att-sub-tab on" data-tab="input" onclick="attShowSubTab('input',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">출퇴근 입력</button>
     <button class="att-sub-tab" data-tab="monthly" onclick="attShowSubTab('monthly',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">월별 조회</button>
+    <button class="att-sub-tab" data-tab="leave" onclick="attShowSubTab('leave',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">연차 신청</button>
     <button class="att-sub-tab" data-tab="staff" onclick="attShowSubTab('staff',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">직원 관리</button>
     <button class="att-sub-tab" data-tab="report" onclick="attShowSubTab('report',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">현황·조출</button>
   </div>
@@ -375,6 +376,11 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
     <div style="overflow-x:auto;padding:0">
       <table id="attWeekTable" style="width:100%;border-collapse:collapse;font-size:12px"></table>
     </div>
+  </div>
+
+  <!-- 연차 신청 탭 -->
+  <div id="attLeaveWrap" style="display:none">
+    <div id="attLeaveContent" style="padding:0 14px 14px"></div>
   </div>
 
   <!-- 직원 관리 탭 -->
@@ -1729,7 +1735,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
 <script src="js/kakao.js?v=1778129561"></script>
 <script src="js/app.js?v=1784179254"></script>
 <script src="js/schedule.js?v=1780015580"></script>
-<script src="js/attendance.js?v=1788138822"></script>
+<script src="js/attendance.js?v=1788139250"></script>
 <script src="js/timepicker.js?v=1778129561"></script>
 <script src="js/globals.js?v=1778599476"></script>
 <script src="js/stock.js?v=1785372224"></script>
