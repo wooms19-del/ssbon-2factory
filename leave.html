@@ -257,8 +257,10 @@ function viewNew(){
   return h;
 }
 function onFrom(){
+  // ★ 시작일을 바꾸면 종료일도 같은 날로 따라감 — 종료일이 다른 달에 남아 있지 않게 (2026-08-31)
+  //   여러 날 신청은 시작일을 고른 뒤 종료일을 뒤로 늘리는 방식.
   var f=$('lvFrom'), t=$('lvTo');
-  if(f&&t&&(!t.value||t.value<f.value)) t.value=f.value;
+  if(f&&t) t.value=f.value;
   preview();
 }
 function curType(){ return MODE==='half' ? (($('lvHalf')||{}).value||'half-am') : 'annual'; }
