@@ -72,6 +72,20 @@ function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'
 function typeLabel(t){for(var i=0;i<TYPES.length;i++)if(TYPES[i].v===t)return TYPES[i].l;return t;}
 function typeUnit(t){for(var i=0;i<TYPES.length;i++)if(TYPES[i].v===t)return TYPES[i].u;return 1;}
 function isMgr(e){return e && (e.position==='실장'||e.position==='파트장');}
+// ★ 승인 단계 — 자기보다 위 단계만 승인할 수 있음 (2026-08-31)
+//   일반 0 < 파트장 1 < 실장 2 < 관리자 3(2공장 웹)
+//   파트장 신청은 실장이, 실장 신청은 관리자가 승인. 본인 승인은 자동으로 막힘.
+function rank(e){
+  if(!e) return 0;
+  if(e.position==='실장') return 2;
+  if(e.position==='파트장') return 1;
+  return 0;
+}
+function rankOf(lv){
+  var e=EMPS.filter(function(x){return (x.id&&x.id===lv.empId)||x.name===lv.name;})[0];
+  return rank(e);
+}
+function needWho(n){ return n>=2 ? '관리자' : (n>=1 ? '실장' : '실장·파트장'); }
 function fmtK(ds){var w=['일','월','화','수','목','금','토'];var p=ds.split('-');return parseInt(p[1],10)+'월 '+parseInt(p[2],10)+'일 ('+w[new Date(ds).getDay()]+')';}
 
 // 주말·공휴일 제외한 실제 차감 날짜
@@ -122,7 +136,7 @@ function render(){
   var mgr=isMgr(ME);
   var h='';
   if(mgr){
-    var pend=LEAVES.filter(function(l){return (l.status||'pending')==='pending';}).length;
+    var pend=LEAVES.filter(function(l){return (l.status||'pending')==='pending' && rank(ME)>rankOf(l);}).length;
     h+='<div class="tabs">'
      + '<button class="'+(TAB==='new'?'on':'')+'" onclick="setTab(\'new\')">내 신청</button>'
      + '<button class="'+(TAB==='appr'?'on':'')+'" onclick="setTab(\'appr\')">승인'+(pend?' ('+pend+')':'')+'</button>'
@@ -303,8 +317,11 @@ async function cancelLeave(id){
 
 // ─── 승인 화면 (실장·파트장만) ───
 function viewApprove(){
-  var pend=LEAVES.filter(function(l){return (l.status||'pending')==='pending';})
+  var my=rank(ME);
+  var allPend=LEAVES.filter(function(l){return (l.status||'pending')==='pending';})
     .sort(function(a,b){return String(a.from).localeCompare(String(b.from));});
+  var pend=allPend.filter(function(l){return my>rankOf(l);});
+  var other=allPend.filter(function(l){return my<=rankOf(l);});
   var done=LEAVES.filter(function(l){return (l.status||'pending')!=='pending';})
     .sort(function(a,b){return String(b.from).localeCompare(String(a.from));}).slice(0,15);
   var h='<div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">승인 대기 '+pend.length+'건</div>';
@@ -324,7 +341,20 @@ function viewApprove(){
      + '<button class="btn sub" style="width:auto;height:40px;padding:0 12px;font-size:14px;color:var(--d)" onclick="decide(\''+l._id+'\',\'rejected\')">반려</button>'
      + '</div>';
   });
-  h+='</div><div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">최근 처리</div>';
+  h+='</div>';
+
+  if(other.length){
+    h+='<div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">다른 분이 승인할 건 '+other.length+'건</div>';
+    other.forEach(function(l){
+      var rng=l.from.slice(5).replace('-','/')+(l.to&&l.to!==l.from?('~'+l.to.slice(5).replace('-','/')):'');
+      h+='<div class="row"><div style="flex:1"><div>'+esc(l.name)+' <span class="sm">'+esc(rng)+' · '+esc(typeLabel(l.type))+' '+l.days+'일</span></div>'
+       + '<div class="sm">'+esc(needWho(rankOf(l)))+' 승인 필요</div></div>'
+       + '<span class="pill p-wait">대기</span></div>';
+    });
+    h+='</div>';
+  }
+
+  h+='<div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">최근 처리</div>';
   if(!done.length) h+='<div class="mut">없음</div>';
   else done.forEach(function(l){
     var st=l.status;
@@ -341,6 +371,7 @@ function viewApprove(){
 }
 async function unapprove(id){
   var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
+  if(rank(ME)<=rankOf(l)){ alert(needWho(rankOf(l))+'만 처리할 수 있습니다.'); return; }
   if(!confirm(l.name+' '+l.from+'\n다시 대기 상태로 되돌릴까요?')) return;
   try{
     await db.collection('leave_requests').doc(id).update({status:'pending', approvedBy:'', approvedAt:''});
@@ -349,6 +380,7 @@ async function unapprove(id){
 }
 async function removeLeave(id){
   var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
+  if(rank(ME)<=rankOf(l)){ alert(needWho(rankOf(l))+'만 처리할 수 있습니다.'); return; }
   if(!confirm(l.name+' '+l.from+'\n완전히 삭제할까요? 되돌릴 수 없습니다.')) return;
   try{
     await db.collection('leave_requests').doc(id).delete();
@@ -359,6 +391,7 @@ async function removeLeave(id){
 
 async function decide(id,status){
   var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
+  if(rank(ME)<=rankOf(l)){ alert(needWho(rankOf(l))+'만 승인할 수 있습니다.'); return; }
   if(!confirm(l.name+' '+l.from+' '+(status==='approved'?'승인':'반려')+'할까요?')) return;
   try{
     await db.collection('leave_requests').doc(id).update({
