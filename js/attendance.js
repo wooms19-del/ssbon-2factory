@@ -328,6 +328,79 @@ async function attLeaveUnapprove(id){
   }catch(err){ console.error('[연차] 승인 취소 실패', err); toast('처리 실패','e'); }
 }
 
+// ============================================================
+// 연차/반차 신청서 인쇄 — 기존 종이 양식과 동일한 배치 (2026-08-31)
+//   승인된 건만 인쇄. 결재란 실장 칸에 승인자 이름이 들어감.
+// ============================================================
+function _lvPrintBox(on){ return on ? '<span style="font-family:serif">&#9745;</span>' : '&#9633;'; }
+function attLeavePrint(id){
+  var lv=(_leaveCache||[]).filter(function(x){return x._id===id;})[0];
+  if(!lv){ toast('신청을 찾을 수 없습니다','w'); return; }
+  if((lv.status||'approved')!=='approved'){ toast('승인된 신청만 인쇄할 수 있습니다','w'); return; }
+  var e=(_attEmps||[]).filter(function(x){return (x.id&&x.id===lv.empId)||x.name===lv.name;})[0]||{};
+  var ds=_leaveWorkDates(lv.from, lv.to);
+  var isAn=(lv.type==='annual'), isHalf=(lv.type==='half-am'||lv.type==='half-pm'), isQ=(lv.type==='quarter');
+  var st=(lv.type==='half-pm')?'13':'09';
+  var en=isAn?'18':(isHalf?(lv.type==='half-am'?'13':'18'):(lv.type==='half-pm'?'18':'11'));
+  var ap=(lv.type==='half-pm')?'오후':'오전';
+  var ap2=(en>='13')?'오후':'오전';
+  var eh=(en>='13')?String(parseInt(en,10)-12):en;
+  var sh=(st>='13')?String(parseInt(st,10)-12):st;
+  var f=lv.from.split('-'), t=(lv.to||lv.from).split('-');
+  var td=(lv.approvedAt||lv.createdAt||new Date().toISOString()).slice(0,10).split('-');
+  var cell='border:1px solid #000;padding:7px 10px;font-size:14px';
+  var lbl=cell+';background:#efe9d8;text-align:center;font-weight:700;width:80px';
+  var html='<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>연차·반차 신청서 '+lv.name+'</title><style>'
+   +'@page{size:A4;margin:18mm}'
+   +'body{font-family:"Malgun Gothic","맑은 고딕",sans-serif;color:#000;margin:0}'
+   +'table{border-collapse:collapse;width:100%}'
+   +'.ttl{font-size:26px;font-weight:700;text-align:center;letter-spacing:6px;border-bottom:2px solid #000;padding-bottom:8px;width:300px;margin:0 auto}'
+   +'.sec{font-size:14px;font-weight:700;margin:22px 0 6px}'
+   +'.hand{font-size:15px}'
+   +'</style></head><body>'
+   +'<div style="text-align:right;font-size:17px;font-weight:700;margin-bottom:6px">순수본㈜</div>'
+   +'<div style="display:flex;align-items:flex-start;gap:16px">'
+   +  '<div style="flex:1;padding-top:8px"><div class="ttl">연차/반차 신청서</div></div>'
+   +  '<table style="width:210px"><tr>'
+   +    '<td rowspan="2" style="'+cell+';width:34px;text-align:center;font-weight:700">결<br>재</td>'
+   +    '<td style="'+cell+';text-align:center;font-size:12px">실장</td>'
+   +    '<td style="'+cell+';text-align:center;font-size:12px">팀장</td></tr>'
+   +  '<tr><td style="'+cell+';height:52px;text-align:center;font-size:13px">'+(lv.approvedBy||'')+'</td>'
+   +      '<td style="'+cell+';height:52px"></td></tr></table>'
+   +'</div>'
+   +'<div class="sec">1. 신청인</div>'
+   +'<table>'
+   +'<tr><td style="'+lbl+'">소 속</td><td style="'+cell+';width:35%" class="hand">2공장 '+(e.part||lv.part||'')+'</td>'
+   +    '<td style="'+lbl+'">직 급</td><td style="'+cell+'" class="hand">'+(e.position||'생산')+'</td></tr>'
+   +'<tr><td style="'+lbl+'">성 명</td><td style="'+cell+'" class="hand">'+lv.name+'</td>'
+   +    '<td style="'+lbl+'">연락처</td><td style="'+cell+'"></td></tr>'
+   +'</table>'
+   +'<div class="sec">2. 신청내용 <span style="font-weight:400;font-size:12px">(기념일 또는 연차 외 유급일 경우 "기타"체크, 해당 신청사유 작성)</span></div>'
+   +'<table>'
+   +'<tr><td style="'+lbl+'">구 분</td><td style="'+cell+'">'
+   +   '<span style="margin-right:26px">'+_lvPrintBox(isAn)+' 연 차(8시간)</span>'
+   +   '<span style="margin-right:26px">'+_lvPrintBox(isHalf)+' 반 차(4시간)</span>'
+   +   '<span style="margin-right:26px">'+_lvPrintBox(isQ)+' 반반차(2시간)</span>'
+   +   '<span>'+_lvPrintBox(false)+' 기 타</span></td></tr>'
+   +'<tr><td style="'+lbl+'" rowspan="2">신청기간</td><td style="'+cell+'" class="hand">'
+   +   f[0]+'년 &nbsp;'+parseInt(f[1],10)+'월 &nbsp;'+parseInt(f[2],10)+'일 &nbsp;&nbsp;'+ap+' &nbsp;'+parseInt(sh,10)+'시 &nbsp;00분부터</td></tr>'
+   +'<tr><td style="'+cell+'" class="hand">'
+   +   t[0]+'년 &nbsp;'+parseInt(t[1],10)+'월 &nbsp;'+parseInt(t[2],10)+'일 &nbsp;&nbsp;'+ap2+' &nbsp;'+parseInt(eh,10)+'시 &nbsp;00분까지 &nbsp;&nbsp;(총 '+lv.days+'일)</td></tr>'
+   +'<tr><td style="'+lbl+'">신청사유</td><td style="'+cell+';height:70px" class="hand">'+(lv.reason||'')+'</td></tr>'
+   +'</table>'
+   +'<div style="margin-top:30px;font-size:15px;font-weight:700">위와 같은 사유로 연차/반차/반반차 신청서를 제출하오니 허가하여 주시기 바랍니다.</div>'
+   +'<div style="margin-top:44px;text-align:right;font-size:15px">'+td[0]+' 년 &nbsp;&nbsp;'+parseInt(td[1],10)+' 월 &nbsp;&nbsp;'+parseInt(td[2],10)+' 일</div>'
+   +'<div style="margin-top:16px;text-align:right;font-size:15px">작성자 : &nbsp;&nbsp;'+lv.name+' &nbsp;&nbsp;(인)</div>'
+   +'<div style="margin-top:40px;text-align:center;font-size:20px;font-weight:700">순수본 주식회사</div>'
+   +'</body></html>';
+  var w=window.open('','_blank','width=900,height=1100');
+  if(!w){ alert('팝업이 차단되었습니다. 브라우저 주소창의 팝업 차단을 해제해주세요.'); return; }
+  w.document.write(html); w.document.close();
+  var done=false;
+  var go=function(){ if(done)return; done=true; try{ w.focus(); w.print(); }catch(e){} };
+  w.onload=go; setTimeout(go, 700);
+}
+
 function attLeaveTogglePast(v){ _leaveShowPast=!!v; _renderAttLeave(); }
 
 function attLeavePreview(){
@@ -520,6 +593,7 @@ function _renderAttLeave(){
        + '<div style="flex:1;font-size:13px;font-weight:500'+(rej?';text-decoration:line-through;color:var(--g4)':'')+'">'+lv.name+' <span style="font-size:11px;color:var(--g4);font-weight:400">'+(lv.part||'')+'</span></div>'
        + (rej?'<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#991b1b">반려</span>':'')
        + '<div style="font-size:11px;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#1e40af;white-space:nowrap">'+_leaveTypeLabel(lv.type)+' '+lv.days+'일</div>'
+       + ((lv.status||'approved')==='approved'?'<button class="btn" style="padding:2px 8px;font-size:11px;color:#0f766e" onclick="attLeavePrint(\''+lv._id+'\')">인쇄</button>':'')
        + '<button class="btn" style="padding:2px 8px;font-size:11px" onclick="attLeaveEdit(\''+lv._id+'\')">수정</button>'
        + (lv.status==='approved'&&lv.source==='phone'?'<button class="btn" style="padding:2px 8px;font-size:11px;color:#b45309" onclick="attLeaveUnapprove(\''+lv._id+'\')">승인취소</button>':'')
        + '<button class="btn" style="padding:2px 8px;font-size:11px;color:#dc2626" onclick="attLeaveDelete(\''+lv._id+'\')">삭제</button>'
