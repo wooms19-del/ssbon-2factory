@@ -1244,14 +1244,32 @@ function _renderAttStaff(){
   el.innerHTML=_attEmps.map(function(e,i){
     return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--g2);gap:10px">'
       +'<span style="font-size:12px;color:var(--g4);width:20px;text-align:right">'+(i+1)+'</span>'
-      +'<span style="flex:1;font-size:14px">'+e.name+'<span style="font-size:11px;color:var(--g5);margin-left:6px;background:var(--g1);padding:1px 6px;border-radius:4px">'+(e.part||'미배치')+'</span></span>'
+      +'<span style="flex:1;font-size:14px">'+e.name+'<span style="font-size:11px;color:var(--g5);margin-left:6px;background:var(--g1);padding:1px 6px;border-radius:4px">'+(e.part||'미배치')+'</span>'
+      +(e.birth?'':'<span style="font-size:11px;color:#dc2626;margin-left:6px">생년월일 없음</span>')+'</span>'
       +'<span style="font-size:12px;color:var(--g5)">연차 '+e.annualDays+'일 / 잔여 <b style="color:var(--p)">'+(e.annualDays-(e.usedDays||0))+'일</b></span>'
       +'<button class="btn bo bsm" onclick="attEditStaff('+i+')">수정</button>'
       +'<button class="btn bo bsm" style="color:#e53935" onclick="attDeleteStaff('+i+')">삭제</button>'
       +'</div>';
   }).join('');
 }
-function attAddStaff(){var n=prompt('직원 이름:');if(!n||!n.trim())return;var d=parseInt(prompt('연차 일수:','15'))||15;_attEmps.push({name:n.trim(),annualDays:d,usedDays:0});_attHist.push({name:n.trim(),date:tod(),type:'입사'});_saveAttEmps();_renderAttStaff();}
+// ★ 직원 고유 ID — 동명이인이 생겨도 기록이 섞이지 않도록 (2026-08-31)
+//   화면에는 노출하지 않음. 직원이 외울 필요 없는 내부 값.
+function _attNextEmpId(){
+  var max=0;
+  (_attEmps||[]).forEach(function(e){
+    var m=/^emp_(\d+)$/.exec(String(e.id||''));
+    if(m) max=Math.max(max, parseInt(m[1],10));
+  });
+  return 'emp_'+String(max+1).padStart(3,'0');
+}
+function attAddStaff(){
+  var n=prompt('직원 이름:'); if(!n||!n.trim())return;
+  var d=parseInt(prompt('연차 일수:','15'))||15;
+  _attEmps.push({id:_attNextEmpId(), name:n.trim(), annualDays:d, usedDays:0});
+  _attHist.push({name:n.trim(),date:tod(),type:'입사'});
+  _saveAttEmps(); _renderAttStaff();
+  toast(n.trim()+' 추가됨 — 수정에서 생년월일을 넣어주세요','s');
+}
 function attEditStaff(i){
   var e=_attEmps[i]||{};
   var partOpts=ATT_PART_ORDER.concat(['미배치']).map(function(p){
@@ -1261,9 +1279,15 @@ function attEditStaff(i){
   var roleOpts=roleList.map(function(r){
     return '<option value="'+r[0]+'"'+(((e.role||'')===r[0])?' selected':'')+'>'+r[1]+'</option>';
   }).join('');
+  var genderList=[['','(미설정)'],['M','남자'],['F','여자']];
+  var genderOpts=genderList.map(function(r){
+    return '<option value="'+r[0]+'"'+(((e.gender||'')===r[0])?' selected':'')+'>'+r[1]+'</option>';
+  }).join('');
   var fld=function(lbl,inner){return '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">'+lbl+'</div>'+inner+'</div>';};
   var body='<div style="display:flex;flex-direction:column;gap:12px">'
     +fld('이름','<input class="fc" id="aes_name" value="'+(e.name||'')+'" style="width:100%;padding:8px;box-sizing:border-box">')
+    +fld('생년월일 <span style="color:var(--g4)">— 연차 신청 본인 확인용</span>','<input class="fc" id="aes_birth" type="date" value="'+(e.birth||'')+'" style="width:100%;padding:8px;box-sizing:border-box">')
+    +fld('성별','<select class="fc" id="aes_gender" style="width:100%;padding:8px;box-sizing:border-box">'+genderOpts+'</select>')
     +fld('파트 (조직도)','<select class="fc" id="aes_part" style="width:100%;padding:8px;box-sizing:border-box">'+partOpts+'</select>')
     +fld('역할','<select class="fc" id="aes_role" style="width:100%;padding:8px;box-sizing:border-box">'+roleOpts+'</select>')
     +fld('연차 일수','<input class="fc" id="aes_annual" type="number" value="'+(e.annualDays||15)+'" style="width:100%;padding:8px;box-sizing:border-box">')
@@ -1278,9 +1302,19 @@ function attSaveStaff(i){
   if(!name){toast('이름을 입력하세요','w');return;}
   var part=g('aes_part')||e.part;
   var role=g('aes_role');
+  var birth=(g('aes_birth')||'').trim();
+  var gen=g('aes_gender');
   var annual=parseInt(g('aes_annual'));
+  // ★ 생년월일은 연차 신청 본인 확인 열쇠 — 다른 직원과 겹치면 구분 불가
+  if(birth){
+    var clash=_attEmps.filter(function(x,j){ return j!==i && x.birth===birth; });
+    if(clash.length){ toast(clash[0].name+'님과 생년월일이 같습니다','w'); return; }
+  }
   var upd={name:name, part:part, annualDays:(isNaN(annual)?e.annualDays:annual)};
   if(role) upd.role=role;   // 미설정('')이면 기존 유지
+  if(birth) upd.birth=birth;
+  if(gen) upd.gender=gen;
+  if(!e.id) upd.id=_attNextEmpId();
   _attEmps[i]=Object.assign({},e,upd);
   _saveAttEmps();
   _attCloseModal();
