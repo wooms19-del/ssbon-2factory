@@ -1666,9 +1666,16 @@ function attDownloadWeekly(){
     }
 
     // 한 탭에 전원 — 인쇄 시 페이지 나누기로 2장 분할 (rowBreaks)
+    // ★ 엑셀 출력 순서는 사번(empNo)순. 화면 입력 순서(_attEmps 배열)와 별개. (2026-08-31)
+    //   사번 없는 직원은 맨 뒤로.
+    var _xlEmps=(_attEmps||[]).slice().sort(function(a,b){
+      var an=a.empNo||'\uffff', bn=b.empNo||'\uffff';
+      if(an!==bn) return an<bn?-1:1;
+      return String(a.name).localeCompare(String(b.name),'ko');
+    });
     var wb={SheetNames:[],Sheets:{}};
     wb.SheetNames.push('출퇴근기록부');
-    wb.Sheets['출퇴근기록부']=buildSheet(_attEmps, 0);
+    wb.Sheets['출퇴근기록부']=buildSheet(_xlEmps, 0);
 
     var fname='출퇴근_'+yr+String(mo).padStart(2,'0')+'.xlsx';
     // 인쇄설정: 시트마다 landscape + fitToWidth1 + fitToHeight1
@@ -1678,10 +1685,10 @@ function attDownloadWeekly(){
     // fitToWidth만 1 (가로 한 장), fitToHeight 미지정 → 세로는 페이지 나누기(rowBreaks)대로 분할
     var _ps='<pageMargins left="0.2" right="0.2" top="0.3" bottom="0.3" header="0.1" footer="0.1"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
     // 절반 지점 행 뒤에서 페이지 나누기 (헤더3행 + 절반인원)
-    var _perPage=Math.ceil(_attEmps.length/2);
+    var _perPage=Math.ceil(_xlEmps.length/2);
     var _brkRow=3+_perPage;
     var _lastColIdx=(DS+numDays*8+2)-1;
-    var _rb = _attEmps.length>_perPage
+    var _rb = _xlEmps.length>_perPage
       ? '<rowBreaks count="1" manualBreakCount="1"><brk id="'+_brkRow+'" max="'+_lastColIdx+'" man="1"/></rowBreaks>'
       : '';
     Object.keys(_z).forEach(function(k){
