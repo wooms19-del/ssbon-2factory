@@ -22,7 +22,7 @@
   .btn:disabled{opacity:.5}
   .btn.sub{background:var(--bg);color:var(--tx);border:1px solid var(--g3);font-weight:500}
   .seg{display:flex;gap:6px}
-  .seg button{flex:1;height:48px;font-size:15px;border:1px solid var(--g3);border-radius:10px;background:var(--bg);color:var(--g5);cursor:pointer}
+  .seg button{flex:1;min-height:56px;font-size:15px;line-height:1.25;border:1px solid var(--g3);border-radius:10px;background:var(--bg);color:var(--g5);cursor:pointer;padding:6px 2px}
   .seg button.on{background:var(--p);color:#fff;border-color:var(--p);font-weight:700}
   .info{background:#eff6ff;color:#1e40af;border-radius:10px;padding:12px;font-size:14px;line-height:1.5}
   .err{color:var(--d);font-size:14px;min-height:20px;margin:8px 2px 0}
@@ -191,16 +191,17 @@ function viewNew(){
    + '<div class="seg" style="margin-bottom:14px">'
    +   '<button class="'+(MODE==='one'?'on':'')+'" onclick="setMode(\'one\')">하루</button>'
    +   '<button class="'+(MODE==='many'?'on':'')+'" onclick="setMode(\'many\')">여러 날</button>'
-   +   '<button class="'+(MODE==='half'?'on':'')+'" onclick="setMode(\'half\')">반차</button>'
+   +   '<button class="'+(MODE==='half'?'on':'')+'" onclick="setMode(\'half\')">반차<br><span style="font-size:11px;font-weight:400">반반차 포함</span></button>'
    + '</div>'
    + '<div class="lb">'+(MODE==='many'?'시작일':'날짜')+'</div>'
    + '<input id="lvFrom" type="date" value="'+vFrom+'" onchange="onFrom()">';
   if(MODE==='many') h+='<div class="lb" style="margin-top:12px">종료일</div><input id="lvTo" type="date" value="'+vTo+'" onchange="preview()">';
   if(MODE==='half'){
     var ht=(E&&E.type!=='annual')?E.type:'half-am';
-    h+='<div class="lb" style="margin-top:12px">오전·오후</div><select id="lvHalf" onchange="preview()">'
+    var HL={'half-am':'오전 반차 — 오후에 출근 (0.5일)','half-pm':'오후 반차 — 오전만 근무 (0.5일)','quarter':'반반차 — 2시간만 쉼 (0.25일)'};
+    h+='<div class="lb" style="margin-top:12px">어떻게 쉬시나요</div><select id="lvHalf" onchange="preview()">'
      + ['half-am','half-pm','quarter'].map(function(v){
-         return '<option value="'+v+'"'+(ht===v?' selected':'')+'>'+({'half-am':'오전 반차','half-pm':'오후 반차','quarter':'반반차'}[v])+'</option>';
+         return '<option value="'+v+'"'+(ht===v?' selected':'')+'>'+HL[v]+'</option>';
        }).join('') + '</select>';
   }
   h+= '<div class="lb" style="margin-top:12px">사유 <span class="sm">(안 써도 됩니다)</span></div>'
