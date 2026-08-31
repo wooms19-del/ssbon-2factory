@@ -63,7 +63,7 @@ if(firebase.auth) firebase.auth().signInAnonymously().catch(function(e){ console
 var LS='ssbon_leave_me';
 var TYPES=[{v:'annual',l:'연차 (하루 종일)',u:1},{v:'half-am',l:'반차 (오전)',u:.5},{v:'half-pm',l:'반차 (오후)',u:.5},{v:'quarter',l:'반반차',u:.25}];
 var PART_ORDER=['실장·파트장','해동/전처리','자숙/소스','파쇄','내포장','외포장','물류','OP','공정QC','기술직선임','AR/도급'];
-var EMPS=[], LEAVES=[], HOLI={}, ME=null, TAB='new', MODE='one';
+var EMPS=[], LEAVES=[], HOLI={}, ME=null, TAB='new', MODE='one', EDIT=null;
 
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -168,14 +168,25 @@ function logout(){ try{ localStorage.removeItem(LS); }catch(e){} ME=null; TAB='n
 
 // ─── 신청 화면 ───
 function setMode(m){ MODE=m; render(); }
+function startEdit(id){
+  var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
+  EDIT=l;
+  MODE = (l.type==='annual') ? ((l.to&&l.to!==l.from)?'many':'one') : 'half';
+  render();
+}
+function cancelEdit(){ EDIT=null; MODE='one'; render(); }
+
 function viewNew(){
   var t=tod();
+  var E=EDIT;
+  var vFrom = E?E.from:t, vTo = E?(E.to||E.from):t, vReason = E?(E.reason||''):'';
   var mine=LEAVES.filter(function(l){return l.empId===(ME.id||ME.name)||l.name===ME.name;})
     .sort(function(a,b){return String(b.from).localeCompare(String(a.from));});
   var rem=(ME.annualDays||0)-(ME.usedDays||0);
-  var h='<div class="card">'
-   + '<div style="font-size:15px;margin-bottom:4px"><b>'+esc(ME.name)+'</b> <span class="sm">'+esc(ME.part||'')+'</span></div>'
-   + '<div class="sm" style="margin-bottom:14px">남은 연차 <b style="color:var(--p);font-size:15px">'+rem+'일</b></div>'
+  var h='<div class="card"'+(E?' style="border:2px solid #f59e0b"':'')+'>'
+   + (E ? '<div style="display:flex;align-items:center;margin-bottom:10px"><div style="font-size:15px;font-weight:700;flex:1">신청 수정</div><button class="btn sub" style="width:auto;height:34px;padding:0 12px;font-size:13px" onclick="cancelEdit()">그만두기</button></div>'
+        : '<div style="font-size:15px;margin-bottom:4px"><b>'+esc(ME.name)+'</b> <span class="sm">'+esc(ME.part||'')+'</span></div>'
+        + '<div class="sm" style="margin-bottom:14px">남은 연차 <b style="color:var(--p);font-size:15px">'+rem+'일</b></div>')
    + '<div class="lb">언제 쉬시나요</div>'
    + '<div class="seg" style="margin-bottom:14px">'
    +   '<button class="'+(MODE==='one'?'on':'')+'" onclick="setMode(\'one\')">하루</button>'
@@ -183,15 +194,20 @@ function viewNew(){
    +   '<button class="'+(MODE==='half'?'on':'')+'" onclick="setMode(\'half\')">반차</button>'
    + '</div>'
    + '<div class="lb">'+(MODE==='many'?'시작일':'날짜')+'</div>'
-   + '<input id="lvFrom" type="date" value="'+t+'" onchange="onFrom()">';
-  if(MODE==='many') h+='<div class="lb" style="margin-top:12px">종료일</div><input id="lvTo" type="date" value="'+t+'" onchange="preview()">';
-  if(MODE==='half') h+='<div class="lb" style="margin-top:12px">오전·오후</div>'
-   + '<select id="lvHalf" onchange="preview()"><option value="half-am">오전 반차</option><option value="half-pm">오후 반차</option><option value="quarter">반반차</option></select>';
+   + '<input id="lvFrom" type="date" value="'+vFrom+'" onchange="onFrom()">';
+  if(MODE==='many') h+='<div class="lb" style="margin-top:12px">종료일</div><input id="lvTo" type="date" value="'+vTo+'" onchange="preview()">';
+  if(MODE==='half'){
+    var ht=(E&&E.type!=='annual')?E.type:'half-am';
+    h+='<div class="lb" style="margin-top:12px">오전·오후</div><select id="lvHalf" onchange="preview()">'
+     + ['half-am','half-pm','quarter'].map(function(v){
+         return '<option value="'+v+'"'+(ht===v?' selected':'')+'>'+({'half-am':'오전 반차','half-pm':'오후 반차','quarter':'반반차'}[v])+'</option>';
+       }).join('') + '</select>';
+  }
   h+= '<div class="lb" style="margin-top:12px">사유 <span class="sm">(안 써도 됩니다)</span></div>'
-   + '<input id="lvReason" placeholder="예) 병원">'
+   + '<input id="lvReason" placeholder="예) 병원" value="'+esc(vReason)+'">'
    + '<div class="info" id="pv" style="margin-top:14px"></div>'
    + '<div class="err" id="addErr"></div>'
-   + '<button class="btn" id="addBtn" style="margin-top:10px" onclick="submitLeave()">신청하기</button>'
+   + '<button class="btn" id="addBtn" style="margin-top:10px" onclick="submitLeave()">'+(E?'수정 저장':'신청하기')+'</button>'
    + '</div>';
 
   h+='<div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">내 신청 내역</div>';
@@ -201,11 +217,11 @@ function viewNew(){
     var cls=st==='approved'?'p-ok':(st==='rejected'?'p-no':'p-wait');
     var txt=st==='approved'?'승인':(st==='rejected'?'반려':'대기');
     var rng=l.from.slice(5).replace('-','/')+(l.to&&l.to!==l.from?('~'+l.to.slice(5).replace('-','/')):'');
-    h+='<div class="row"><div style="flex:1"><div>'+esc(rng)+' <span class="sm">'+esc(typeLabel(l.type))+' '+l.days+'일</span></div>'
-     + (st==='approved'&&l.approvedBy?'<div class="sm">'+esc(l.approvedBy)+' 승인</div>':'')
-     + (st==='rejected'&&l.approvedBy?'<div class="sm">'+esc(l.approvedBy)+' 반려</div>':'')
+    h+='<div class="row"'+(EDIT&&EDIT._id===l._id?' style="background:#fef9c3"':'')+'><div style="flex:1"><div>'+esc(rng)+' <span class="sm">'+esc(typeLabel(l.type))+' '+l.days+'일</span></div>'
+     + (st!=='pending'&&l.approvedBy?'<div class="sm">'+esc(l.approvedBy)+' '+(st==='approved'?'승인':'반려')+'</div>':'')
      + '</div><span class="pill '+cls+'">'+txt+'</span>'
-     + (st==='pending'?'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px" onclick="cancelLeave(\''+l._id+'\')">취소</button>':'')
+     + (st==='pending'?'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px" onclick="startEdit(\''+l._id+'\')">수정</button>'
+                      +'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px;color:var(--d)" onclick="cancelLeave(\''+l._id+'\')">취소</button>':'')
      + '</div>';
   });
   h+='</div><div style="padding:0 12px"><button class="btn sub" onclick="logout()">다른 사람으로 바꾸기</button></div>';
@@ -238,28 +254,46 @@ async function submitLeave(){
   if(!ds.length){ err.textContent='날짜를 다시 골라 주세요.'; return; }
   var dup=LEAVES.filter(function(l){
     return (l.empId===(ME.id||ME.name)||l.name===ME.name) && (l.status||'pending')!=='rejected'
+        && (!EDIT || l._id!==EDIT._id)
         && workDates(l.from,l.to).some(function(d){return ds.indexOf(d)>=0;});
   });
   if(dup.length){ err.textContent='그 날짜에는 이미 신청한 내역이 있습니다.'; return; }
   err.textContent=''; btn.disabled=true; btn.textContent='보내는 중…';
   var f=($('lvFrom')||{}).value, t=(MODE==='many'?(($('lvTo')||{}).value||f):f);
+  var payload={
+    type:curType(), from:f, to:t,
+    days:Math.round(ds.length*typeUnit(curType())*100)/100,
+    reason:(($('lvReason')||{}).value||'').trim()
+  };
   try{
-    await db.collection('leave_requests').add({
-      empId:ME.id||ME.name, name:ME.name, part:ME.part||'', type:curType(),
-      from:f, to:t, days:Math.round(ds.length*typeUnit(curType())*100)/100,
-      reason:(($('lvReason')||{}).value||'').trim(),
-      status:'pending', source:'phone', createdAt:new Date().toISOString()
-    });
-    await loadLeaves(); render();
-    alert('신청되었습니다.\n실장님 또는 파트장님이 확인하면 승인됩니다.');
+    if(EDIT){
+      payload.status='pending';           // 수정하면 다시 승인 대기
+      payload.approvedBy=''; payload.approvedAt='';
+      payload.updatedAt=new Date().toISOString();
+      await db.collection('leave_requests').doc(EDIT._id).update(payload);
+      EDIT=null; MODE='one';
+      await loadLeaves(); render();
+      alert('수정되었습니다.\n다시 승인 대기 상태가 됩니다.');
+    } else {
+      payload.empId=ME.id||ME.name; payload.name=ME.name; payload.part=ME.part||'';
+      payload.status='pending'; payload.source='phone';
+      payload.createdAt=new Date().toISOString();
+      await db.collection('leave_requests').add(payload);
+      await loadLeaves(); render();
+      alert('신청되었습니다.\n실장님 또는 파트장님이 확인하면 승인됩니다.');
+    }
   }catch(e){
     console.error(e); err.textContent='보내지 못했습니다. 다시 눌러 주세요.';
-    btn.disabled=false; btn.textContent='신청하기';
+    btn.disabled=false; btn.textContent=EDIT?'수정 저장':'신청하기';
   }
 }
 async function cancelLeave(id){
   if(!confirm('신청을 취소할까요?')) return;
-  try{ await db.collection('leave_requests').doc(id).delete(); await loadLeaves(); render(); }
+  try{
+    await db.collection('leave_requests').doc(id).delete();
+    if(EDIT&&EDIT._id===id){ EDIT=null; MODE='one'; }
+    await loadLeaves(); render();
+  }
   catch(e){ alert('취소하지 못했습니다. 다시 시도해 주세요.'); }
 }
 
