@@ -271,6 +271,7 @@ function _applyLeaveRequests(date){
   if(!_leaveCache || !_leaveCache.length) return;
   _leaveCache.forEach(function(lv){
     if(!lv || !lv.name) return;
+    if((lv.status||'approved')!=='approved') return;   // ★ 승인된 것만 반영 (대기/반려 제외)
     if(_leaveWorkDates(lv.from, lv.to).indexOf(date) < 0) return;
     var r=_attRecs[lv.name];
     var tags=(r&&r.tags)||[];
@@ -289,6 +290,27 @@ function _applyLeaveRequests(date){
 async function _attShowLeave(){
   await _leaveLoad();
   _renderAttLeave();
+}
+
+// 승인자 이름 — 2공장 웹은 로그인 계정명 사용
+function _leaveWho(){
+  try{ var s=JSON.parse(localStorage.getItem('ssbon_auth')); if(s&&s.u) return s.u; }catch(e){}
+  return '관리자';
+}
+
+async function attLeaveDecide(id, status){
+  var lv=(_leaveCache||[]).filter(function(x){return x._id===id;})[0]; if(!lv) return;
+  if(!confirm(lv.name+' '+lv.from+' '+(status==='approved'?'승인':'반려')+'할까요?')) return;
+  try{
+    await firebase.firestore().collection(LEAVE_COL).doc(id).update({
+      status:status, approvedBy:_leaveWho(), approvedAt:new Date().toISOString()
+    });
+    await _leaveLoad(true);
+    await _leaveSyncUsedDays();
+    _renderAttLeave();
+    if(_leaveWorkDates(lv.from,lv.to).indexOf(_attDate)>=0) await _loadAttDate(_attDate);
+    toast(status==='approved'?'승인됨 ✓':'반려됨','s');
+  }catch(err){ console.error('[연차] 승인 처리 실패', err); toast('처리 실패','e'); }
 }
 
 function attLeaveTogglePast(v){ _leaveShowPast=!!v; _renderAttLeave(); }
@@ -325,7 +347,7 @@ async function attLeaveAdd(){
   });
   if(dup.length && !confirm(name+'님은 해당 기간에 이미 신청이 있습니다.\n그래도 진행할까요?')) return;
   var e=(_attEmps||[]).filter(function(x){return x.name===name;})[0]||{};
-  var rec={ name:name, part:e.part||'', type:type, from:from, to:to,
+  var rec={ name:name, part:e.part||'', empId:e.id||name, type:type, from:from, to:to,
             days:Math.round(ds.length*_leaveTypeUnit(type)*100)/100,
             reason:reason, updatedAt:new Date().toISOString() };
   var prevDates=[];
@@ -336,6 +358,10 @@ async function attLeaveAdd(){
       await firebase.firestore().collection(LEAVE_COL).doc(_leaveEditId).update(rec);
     } else {
       rec.createdAt=new Date().toISOString();
+      rec.status='approved';                    // 관리자가 웹에서 직접 넣은 건 즉시 확정
+      rec.source='web';
+      rec.approvedBy=_leaveWho();
+      rec.approvedAt=new Date().toISOString();
       await firebase.firestore().collection(LEAVE_COL).add(rec);
     }
     await _leaveLoad(true);                 // ★ 서버에서 다시 읽어옴 (캐시 신뢰 안 함)
@@ -387,6 +413,7 @@ async function _leaveSyncUsedDays(){
   var sum={};
   (_leaveCache||[]).forEach(function(lv){
     if(!lv||!lv.name||String(lv.from||'').slice(0,4)!==yr) return;
+    if((lv.status||'approved')!=='approved') return;   // 승인된 것만 차감
     sum[lv.name]=(sum[lv.name]||0)+(lv.days||0);
   });
   var changed=false;
@@ -435,9 +462,28 @@ function _renderAttLeave(){
    + '</div>';
 
   var all=(_leaveCache||[]).slice().sort(function(a,b){ return String(a.from).localeCompare(String(b.from)); });
-  var upcoming=all.filter(function(lv){ return _leaveWorkDates(lv.from,lv.to).some(function(d){return d>=today;}); });
-  var past=all.filter(function(lv){ return upcoming.indexOf(lv)<0; }).reverse();
+  var pend=all.filter(function(lv){ return (lv.status||'approved')==='pending'; });
+  var rest=all.filter(function(lv){ return pend.indexOf(lv)<0; });
+  var upcoming=rest.filter(function(lv){ return _leaveWorkDates(lv.from,lv.to).some(function(d){return d>=today;}); });
+  var past=rest.filter(function(lv){ return upcoming.indexOf(lv)<0; }).reverse();
   var show=_leaveShowPast?past:upcoming;
+
+  // ★ 폰(leave.html)에서 올라온 승인 대기 — 실장·파트장 또는 관리자 누구든 처리 가능
+  if(pend.length){
+    h+='<div style="border:2px solid #f59e0b;border-radius:10px;overflow:hidden;margin-bottom:12px">'
+     + '<div style="padding:8px 10px;background:#fef3c7;font-size:13px;font-weight:600;color:#92400e">승인 대기 '+pend.length+'건</div>';
+    pend.forEach(function(lv,i){
+      var rng=lv.from.slice(5).replace('-','/')+(lv.to&&lv.to!==lv.from?('~'+lv.to.slice(5).replace('-','/')):'');
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;'+(i?'border-top:1px solid var(--g2);':'')+'">'
+       + '<div style="width:82px;font-size:12px;color:var(--g5)">'+rng+'</div>'
+       + '<div style="flex:1;font-size:13px;font-weight:500">'+lv.name+' <span style="font-size:11px;color:var(--g4);font-weight:400">'+(lv.part||'')+(lv.reason?(' · '+lv.reason):'')+'</span></div>'
+       + '<div style="font-size:11px;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#1e40af;white-space:nowrap">'+_leaveTypeLabel(lv.type)+' '+lv.days+'일</div>'
+       + '<button class="btn bp" style="padding:2px 10px;font-size:11px" onclick="attLeaveDecide(\''+lv._id+'\',\'approved\')">승인</button>'
+       + '<button class="btn" style="padding:2px 10px;font-size:11px;color:#dc2626" onclick="attLeaveDecide(\''+lv._id+'\',\'rejected\')">반려</button>'
+       + '</div>';
+    });
+    h+='</div>';
+  }
 
   h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
    + '<button class="btn'+(_leaveShowPast?'':' bp')+'" style="padding:4px 12px;font-size:12px" onclick="attLeaveTogglePast(false)">예정 '+upcoming.length+'</button>'
@@ -453,9 +499,11 @@ function _renderAttLeave(){
     show.forEach(function(lv,i){
       var rng=lv.from.slice(5).replace('-','/')+(lv.to&&lv.to!==lv.from?('~'+lv.to.slice(5).replace('-','/')):'');
       var editing=(lv._id===_leaveEditId);
+      var rej=(lv.status==='rejected');
       h+='<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;'+(i?'border-top:1px solid var(--g2);':'')+(_leaveShowPast?'opacity:.55;':'')+(editing?'background:#fef9c3':'')+'">'
        + '<div style="width:82px;font-size:12px;color:var(--g5)">'+rng+'</div>'
-       + '<div style="flex:1;font-size:13px;font-weight:500">'+lv.name+' <span style="font-size:11px;color:var(--g4);font-weight:400">'+(lv.part||'')+'</span></div>'
+       + '<div style="flex:1;font-size:13px;font-weight:500'+(rej?';text-decoration:line-through;color:var(--g4)':'')+'">'+lv.name+' <span style="font-size:11px;color:var(--g4);font-weight:400">'+(lv.part||'')+'</span></div>'
+       + (rej?'<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#991b1b">반려</span>':'')
        + '<div style="font-size:11px;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#1e40af;white-space:nowrap">'+_leaveTypeLabel(lv.type)+' '+lv.days+'일</div>'
        + '<button class="btn" style="padding:2px 8px;font-size:11px" onclick="attLeaveEdit(\''+lv._id+'\')">수정</button>'
        + '<button class="btn" style="padding:2px 8px;font-size:11px;color:#dc2626" onclick="attLeaveDelete(\''+lv._id+'\')">삭제</button>'

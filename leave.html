@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#1b2a44">
+<title>순수본 2공장 연차 신청</title>
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<style>
+  :root{--bg:#fff;--g1:#f4f6f9;--g2:#e2e8f0;--g3:#cbd5e1;--g4:#94a3b8;--g5:#64748b;--tx:#1e293b;--p:#2b57c5;--d:#dc2626;--ok:#15803d;--wa:#b45309}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--g1);color:var(--tx);font-size:16px}
+  .wrap{max-width:520px;margin:0 auto;padding:0 0 40px}
+  .top{background:#1b2a44;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+  .top .t{font-size:16px;font-weight:700;flex:1}
+  .top .me{font-size:12px;opacity:.85}
+  .card{background:var(--bg);margin:12px;border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .lb{font-size:13px;color:var(--g5);margin-bottom:6px}
+  select,input{width:100%;height:52px;font-size:17px;border:1px solid var(--g3);border-radius:10px;padding:0 12px;background:var(--bg);color:var(--tx)}
+  select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%2364748b' stroke-width='2'><path d='M5 8l5 5 5-5'/></svg>");background-repeat:no-repeat;background-position:right 12px center}
+  .btn{width:100%;height:54px;font-size:17px;font-weight:700;border:none;border-radius:10px;background:var(--p);color:#fff;cursor:pointer}
+  .btn:disabled{opacity:.5}
+  .btn.sub{background:var(--bg);color:var(--tx);border:1px solid var(--g3);font-weight:500}
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;height:48px;font-size:15px;border:1px solid var(--g3);border-radius:10px;background:var(--bg);color:var(--g5);cursor:pointer}
+  .seg button.on{background:var(--p);color:#fff;border-color:var(--p);font-weight:700}
+  .info{background:#eff6ff;color:#1e40af;border-radius:10px;padding:12px;font-size:14px;line-height:1.5}
+  .err{color:var(--d);font-size:14px;min-height:20px;margin:8px 2px 0}
+  .row{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--g2)}
+  .row:first-child{border-top:none}
+  .pill{font-size:12px;padding:3px 9px;border-radius:7px;white-space:nowrap}
+  .p-wait{background:#fef3c7;color:#92400e}
+  .p-ok{background:#dcfce7;color:#166534}
+  .p-no{background:#fee2e2;color:#991b1b}
+  .tabs{display:flex;background:var(--bg);border-bottom:1px solid var(--g2)}
+  .tabs button{flex:1;height:48px;font-size:15px;border:none;background:none;color:var(--g5);cursor:pointer;border-bottom:3px solid transparent}
+  .tabs button.on{color:var(--p);font-weight:700;border-bottom-color:var(--p)}
+  .mut{color:var(--g4);font-size:14px;text-align:center;padding:28px 0}
+  .sm{font-size:13px;color:var(--g5)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="t">연차 신청</div><div class="me" id="meTag"></div></div>
+  <div id="app"><div class="mut">불러오는 중…</div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyA0Y6VK8EOahDE607LEWtyG9-U8YP3yqDE",
+  authDomain:"ssbon-factory.firebaseapp.com",
+  projectId:"ssbon-factory",
+  storageBucket:"ssbon-factory.firebasestorage.app",
+  messagingSenderId:"815013258298",
+  appId:"1:815013258298:web:a80156143cf742ece8c103"
+});
+var db=firebase.firestore();
+if(firebase.auth) firebase.auth().signInAnonymously().catch(function(e){ console.warn('[auth]',e&&e.message); });
+
+var LS='ssbon_leave_me';
+var TYPES=[{v:'annual',l:'연차 (하루 종일)',u:1},{v:'half-am',l:'반차 (오전)',u:.5},{v:'half-pm',l:'반차 (오후)',u:.5},{v:'quarter',l:'반반차',u:.25}];
+var PART_ORDER=['실장·파트장','해동/전처리','자숙/소스','파쇄','내포장','외포장','물류','OP','공정QC','기술직선임','AR/도급'];
+var EMPS=[], LEAVES=[], HOLI={}, ME=null, TAB='new', MODE='one';
+
+function $(i){return document.getElementById(i);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function tod(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function typeLabel(t){for(var i=0;i<TYPES.length;i++)if(TYPES[i].v===t)return TYPES[i].l;return t;}
+function typeUnit(t){for(var i=0;i<TYPES.length;i++)if(TYPES[i].v===t)return TYPES[i].u;return 1;}
+function isMgr(e){return e && (e.position==='실장'||e.position==='파트장');}
+function fmtK(ds){var w=['일','월','화','수','목','금','토'];var p=ds.split('-');return parseInt(p[1],10)+'월 '+parseInt(p[2],10)+'일 ('+w[new Date(ds).getDay()]+')';}
+
+// 주말·공휴일 제외한 실제 차감 날짜
+function workDates(from,to){
+  var out=[]; if(!from) return out;
+  var d=new Date(from), end=new Date(to||from);
+  if(isNaN(d)||isNaN(end)||d>end) return out;
+  var g=0;
+  while(d<=end && g++<400){
+    var ds=ymd(d), dw=d.getDay();
+    if(dw!==0 && dw!==6 && !HOLI[ds]) out.push(ds);
+    d.setDate(d.getDate()+1);
+  }
+  return out;
+}
+
+async function boot(){
+  try{
+    var em=await db.doc('_config/attendance_employees').get();
+    EMPS=((em.exists&&em.data().employees)||[]).filter(function(e){return e&&e.name;});
+    try{
+      var hs=await db.doc('_config/holidays').get();
+      var mp=(hs.exists&&hs.data()&&hs.data().map)||{};
+      Object.keys(mp).forEach(function(d){ HOLI[d]=1; });
+    }catch(e){}
+    await loadLeaves();
+    var saved=null; try{ saved=JSON.parse(localStorage.getItem(LS)); }catch(e){}
+    if(saved&&saved.id){
+      var f=EMPS.filter(function(e){return e.id===saved.id;})[0];
+      if(f) ME=f;
+    }
+    render();
+  }catch(e){
+    console.error(e);
+    $('app').innerHTML='<div class="card"><div class="err">연결에 실패했습니다. 인터넷 확인 후 새로고침해 주세요.</div></div>';
+  }
+}
+
+async function loadLeaves(){
+  LEAVES=[];
+  var s=await db.collection('leave_requests').get();
+  s.forEach(function(d){ var o=d.data()||{}; o._id=d.id; LEAVES.push(o); });
+}
+
+function render(){
+  $('meTag').textContent = ME ? (ME.name+(ME.position?(' '+ME.position):'')) : '';
+  if(!ME){ renderLogin(); return; }
+  var mgr=isMgr(ME);
+  var h='';
+  if(mgr){
+    var pend=LEAVES.filter(function(l){return (l.status||'pending')==='pending';}).length;
+    h+='<div class="tabs">'
+     + '<button class="'+(TAB==='new'?'on':'')+'" onclick="setTab(\'new\')">내 신청</button>'
+     + '<button class="'+(TAB==='appr'?'on':'')+'" onclick="setTab(\'appr\')">승인'+(pend?' ('+pend+')':'')+'</button>'
+     + '</div>';
+  } else if(TAB!=='new'){ TAB='new'; }
+  h+= (TAB==='appr'&&mgr) ? viewApprove() : viewNew();
+  $('app').innerHTML=h;
+  if(TAB==='new') preview();
+}
+function setTab(t){ TAB=t; render(); }
+
+// ─── 본인 확인 ───
+function renderLogin(){
+  var opts=EMPS.slice().sort(function(a,b){
+    var ai=PART_ORDER.indexOf(a.part||''), bi=PART_ORDER.indexOf(b.part||'');
+    if(ai!==bi) return (ai<0?99:ai)-(bi<0?99:bi);
+    return String(a.name).localeCompare(String(b.name),'ko');
+  }).map(function(e){
+    return '<option value="'+esc(e.id||e.name)+'">'+esc(e.name)+' ('+esc(e.part||'미배치')+')</option>';
+  }).join('');
+  $('app').innerHTML=
+    '<div class="card">'
+   + '<div class="info" style="margin-bottom:16px">처음 한 번만 확인하면 됩니다.<br>다음부터는 바로 열립니다.</div>'
+   + '<div class="lb">이름</div><select id="inName">'+opts+'</select>'
+   + '<div class="lb" style="margin-top:14px">생년월일 6자리 <span class="sm">예) 1975년 5월 11일 → 750511</span></div>'
+   + '<input id="inBirth" type="tel" inputmode="numeric" maxlength="6" placeholder="750511">'
+   + '<div class="err" id="loginErr"></div>'
+   + '<button class="btn" style="margin-top:10px" onclick="doLogin()">확인</button>'
+   + '</div>';
+}
+function doLogin(){
+  var key=$('inName').value, b=($('inBirth').value||'').replace(/[^0-9]/g,'');
+  var e=EMPS.filter(function(x){return (x.id||x.name)===key;})[0];
+  if(!e){ $('loginErr').textContent='이름을 선택해 주세요.'; return; }
+  if(b.length!==6){ $('loginErr').textContent='생년월일 6자리를 입력해 주세요.'; return; }
+  if(!e.birth){ $('loginErr').textContent='생년월일이 아직 등록되지 않았습니다. 실장님께 문의해 주세요.'; return; }
+  if(e.birth.slice(2).replace(/-/g,'')!==b){ $('loginErr').textContent='생년월일이 맞지 않습니다.'; return; }
+  ME=e;
+  try{ localStorage.setItem(LS, JSON.stringify({id:e.id||e.name})); }catch(x){}
+  render();
+}
+function logout(){ try{ localStorage.removeItem(LS); }catch(e){} ME=null; TAB='new'; render(); }
+
+// ─── 신청 화면 ───
+function setMode(m){ MODE=m; render(); }
+function viewNew(){
+  var t=tod();
+  var mine=LEAVES.filter(function(l){return l.empId===(ME.id||ME.name)||l.name===ME.name;})
+    .sort(function(a,b){return String(b.from).localeCompare(String(a.from));});
+  var rem=(ME.annualDays||0)-(ME.usedDays||0);
+  var h='<div class="card">'
+   + '<div style="font-size:15px;margin-bottom:4px"><b>'+esc(ME.name)+'</b> <span class="sm">'+esc(ME.part||'')+'</span></div>'
+   + '<div class="sm" style="margin-bottom:14px">남은 연차 <b style="color:var(--p);font-size:15px">'+rem+'일</b></div>'
+   + '<div class="lb">언제 쉬시나요</div>'
+   + '<div class="seg" style="margin-bottom:14px">'
+   +   '<button class="'+(MODE==='one'?'on':'')+'" onclick="setMode(\'one\')">하루</button>'
+   +   '<button class="'+(MODE==='many'?'on':'')+'" onclick="setMode(\'many\')">여러 날</button>'
+   +   '<button class="'+(MODE==='half'?'on':'')+'" onclick="setMode(\'half\')">반차</button>'
+   + '</div>'
+   + '<div class="lb">'+(MODE==='many'?'시작일':'날짜')+'</div>'
+   + '<input id="lvFrom" type="date" value="'+t+'" onchange="onFrom()">';
+  if(MODE==='many') h+='<div class="lb" style="margin-top:12px">종료일</div><input id="lvTo" type="date" value="'+t+'" onchange="preview()">';
+  if(MODE==='half') h+='<div class="lb" style="margin-top:12px">오전·오후</div>'
+   + '<select id="lvHalf" onchange="preview()"><option value="half-am">오전 반차</option><option value="half-pm">오후 반차</option><option value="quarter">반반차</option></select>';
+  h+= '<div class="lb" style="margin-top:12px">사유 <span class="sm">(안 써도 됩니다)</span></div>'
+   + '<input id="lvReason" placeholder="예) 병원">'
+   + '<div class="info" id="pv" style="margin-top:14px"></div>'
+   + '<div class="err" id="addErr"></div>'
+   + '<button class="btn" id="addBtn" style="margin-top:10px" onclick="submitLeave()">신청하기</button>'
+   + '</div>';
+
+  h+='<div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">내 신청 내역</div>';
+  if(!mine.length) h+='<div class="mut">아직 신청한 내역이 없습니다.</div>';
+  else mine.slice(0,20).forEach(function(l){
+    var st=l.status||'pending';
+    var cls=st==='approved'?'p-ok':(st==='rejected'?'p-no':'p-wait');
+    var txt=st==='approved'?'승인':(st==='rejected'?'반려':'대기');
+    var rng=l.from.slice(5).replace('-','/')+(l.to&&l.to!==l.from?('~'+l.to.slice(5).replace('-','/')):'');
+    h+='<div class="row"><div style="flex:1"><div>'+esc(rng)+' <span class="sm">'+esc(typeLabel(l.type))+' '+l.days+'일</span></div>'
+     + (st==='approved'&&l.approvedBy?'<div class="sm">'+esc(l.approvedBy)+' 승인</div>':'')
+     + (st==='rejected'&&l.approvedBy?'<div class="sm">'+esc(l.approvedBy)+' 반려</div>':'')
+     + '</div><span class="pill '+cls+'">'+txt+'</span>'
+     + (st==='pending'?'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px" onclick="cancelLeave(\''+l._id+'\')">취소</button>':'')
+     + '</div>';
+  });
+  h+='</div><div style="padding:0 12px"><button class="btn sub" onclick="logout()">다른 사람으로 바꾸기</button></div>';
+  return h;
+}
+function onFrom(){
+  var f=$('lvFrom'), t=$('lvTo');
+  if(f&&t&&(!t.value||t.value<f.value)) t.value=f.value;
+  preview();
+}
+function curType(){ return MODE==='half' ? (($('lvHalf')||{}).value||'half-am') : 'annual'; }
+function curDates(){
+  var f=($('lvFrom')||{}).value||'';
+  var t=(MODE==='many'?(($('lvTo')||{}).value||f):f);
+  return workDates(f,t);
+}
+function preview(){
+  var el=$('pv'); if(!el)return;
+  var ds=curDates();
+  if(!ds.length){ el.textContent='쉬는 날(주말·공휴일)은 신청하지 않아도 됩니다. 다른 날짜를 골라 주세요.'; return; }
+  var days=Math.round(ds.length*typeUnit(curType())*100)/100;
+  var rem=(ME.annualDays||0)-(ME.usedDays||0);
+  el.innerHTML='<b>'+esc(fmtK(ds[0]))+(ds.length>1?(' 외 '+(ds.length-1)+'일'):'')+'</b><br>'
+   + typeLabel(curType())+' · <b>'+days+'일</b> 차감 · 남은 연차 '+rem+' → '+Math.round((rem-days)*100)/100+'일';
+}
+
+async function submitLeave(){
+  var btn=$('addBtn'), err=$('addErr');
+  var ds=curDates();
+  if(!ds.length){ err.textContent='날짜를 다시 골라 주세요.'; return; }
+  var dup=LEAVES.filter(function(l){
+    return (l.empId===(ME.id||ME.name)||l.name===ME.name) && (l.status||'pending')!=='rejected'
+        && workDates(l.from,l.to).some(function(d){return ds.indexOf(d)>=0;});
+  });
+  if(dup.length){ err.textContent='그 날짜에는 이미 신청한 내역이 있습니다.'; return; }
+  err.textContent=''; btn.disabled=true; btn.textContent='보내는 중…';
+  var f=($('lvFrom')||{}).value, t=(MODE==='many'?(($('lvTo')||{}).value||f):f);
+  try{
+    await db.collection('leave_requests').add({
+      empId:ME.id||ME.name, name:ME.name, part:ME.part||'', type:curType(),
+      from:f, to:t, days:Math.round(ds.length*typeUnit(curType())*100)/100,
+      reason:(($('lvReason')||{}).value||'').trim(),
+      status:'pending', source:'phone', createdAt:new Date().toISOString()
+    });
+    await loadLeaves(); render();
+    alert('신청되었습니다.\n실장님 또는 파트장님이 확인하면 승인됩니다.');
+  }catch(e){
+    console.error(e); err.textContent='보내지 못했습니다. 다시 눌러 주세요.';
+    btn.disabled=false; btn.textContent='신청하기';
+  }
+}
+async function cancelLeave(id){
+  if(!confirm('신청을 취소할까요?')) return;
+  try{ await db.collection('leave_requests').doc(id).delete(); await loadLeaves(); render(); }
+  catch(e){ alert('취소하지 못했습니다. 다시 시도해 주세요.'); }
+}
+
+// ─── 승인 화면 (실장·파트장만) ───
+function viewApprove(){
+  var pend=LEAVES.filter(function(l){return (l.status||'pending')==='pending';})
+    .sort(function(a,b){return String(a.from).localeCompare(String(b.from));});
+  var done=LEAVES.filter(function(l){return (l.status||'pending')!=='pending';})
+    .sort(function(a,b){return String(b.from).localeCompare(String(a.from));}).slice(0,15);
+  var h='<div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">승인 대기 '+pend.length+'건</div>';
+  if(!pend.length) h+='<div class="mut">처리할 신청이 없습니다.</div>';
+  else pend.forEach(function(l){
+    var rng=l.from.slice(5).replace('-','/')+(l.to&&l.to!==l.from?('~'+l.to.slice(5).replace('-','/')):'');
+    var same=LEAVES.filter(function(o){
+      return o._id!==l._id && (o.status||'pending')!=='rejected'
+        && workDates(o.from,o.to).some(function(d){return workDates(l.from,l.to).indexOf(d)>=0;});
+    }).length;
+    h+='<div class="row"><div style="flex:1">'
+     + '<div><b>'+esc(l.name)+'</b> <span class="sm">'+esc(l.part||'')+'</span></div>'
+     + '<div class="sm">'+esc(rng)+' · '+esc(typeLabel(l.type))+' '+l.days+'일'+(l.reason?(' · '+esc(l.reason)):'')+'</div>'
+     + (same?'<div class="sm" style="color:var(--d)">같은 날 다른 신청 '+same+'건</div>':'')
+     + '</div>'
+     + '<button class="btn" style="width:auto;height:40px;padding:0 14px;font-size:14px" onclick="decide(\''+l._id+'\',\'approved\')">승인</button>'
+     + '<button class="btn sub" style="width:auto;height:40px;padding:0 12px;font-size:14px;color:var(--d)" onclick="decide(\''+l._id+'\',\'rejected\')">반려</button>'
+     + '</div>';
+  });
+  h+='</div><div class="card"><div style="font-size:15px;font-weight:700;margin-bottom:6px">최근 처리</div>';
+  if(!done.length) h+='<div class="mut">없음</div>';
+  else done.forEach(function(l){
+    var st=l.status;
+    var rng=l.from.slice(5).replace('-','/')+(l.to&&l.to!==l.from?('~'+l.to.slice(5).replace('-','/')):'');
+    h+='<div class="row"><div style="flex:1"><div>'+esc(l.name)+' <span class="sm">'+esc(rng)+'</span></div>'
+     + '<div class="sm">'+esc(l.approvedBy||'')+' '+(st==='approved'?'승인':'반려')+'</div></div>'
+     + '<span class="pill '+(st==='approved'?'p-ok':'p-no')+'">'+(st==='approved'?'승인':'반려')+'</span></div>';
+  });
+  h+='</div><div style="padding:0 12px"><button class="btn sub" onclick="logout()">다른 사람으로 바꾸기</button></div>';
+  return h;
+}
+async function decide(id,status){
+  var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
+  if(!confirm(l.name+' '+l.from+' '+(status==='approved'?'승인':'반려')+'할까요?')) return;
+  try{
+    await db.collection('leave_requests').doc(id).update({
+      status:status, approvedBy:ME.name, approvedAt:new Date().toISOString()
+    });
+    await loadLeaves(); render();
+  }catch(e){ alert('처리하지 못했습니다. 다시 시도해 주세요.'); }
+}
+
+boot();
+</script>
+</body>
+</html>
