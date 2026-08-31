@@ -218,11 +218,14 @@ function viewNew(){
     var cls=st==='approved'?'p-ok':(st==='rejected'?'p-no':'p-wait');
     var txt=st==='approved'?'승인':(st==='rejected'?'반려':'대기');
     var rng=l.from.slice(5).replace('-','/')+(l.to&&l.to!==l.from?('~'+l.to.slice(5).replace('-','/')):'');
+    var future=workDates(l.from,l.to).some(function(d){return d>=t;});
+    var canEdit=(st==='pending')||(st==='approved'&&future);
     h+='<div class="row"'+(EDIT&&EDIT._id===l._id?' style="background:#fef9c3"':'')+'><div style="flex:1"><div>'+esc(rng)+' <span class="sm">'+esc(typeLabel(l.type))+' '+l.days+'일</span></div>'
      + (st!=='pending'&&l.approvedBy?'<div class="sm">'+esc(l.approvedBy)+' '+(st==='approved'?'승인':'반려')+'</div>':'')
+     + (st==='approved'&&!future?'<div class="sm">지난 날짜는 바꿀 수 없습니다</div>':'')
      + '</div><span class="pill '+cls+'">'+txt+'</span>'
-     + (st==='pending'?'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px" onclick="startEdit(\''+l._id+'\')">수정</button>'
-                      +'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px;color:var(--d)" onclick="cancelLeave(\''+l._id+'\')">취소</button>':'')
+     + (canEdit?'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px" onclick="startEdit(\''+l._id+'\')">수정</button>':'')
+     + (st==='pending'?'<button class="btn sub" style="width:auto;height:36px;padding:0 12px;font-size:13px;color:var(--d)" onclick="cancelLeave(\''+l._id+'\')">취소</button>':'')
      + '</div>';
   });
   h+='</div><div style="padding:0 12px"><button class="btn sub" onclick="logout()">다른 사람으로 바꾸기</button></div>';
@@ -326,13 +329,34 @@ function viewApprove(){
   else done.forEach(function(l){
     var st=l.status;
     var rng=l.from.slice(5).replace('-','/')+(l.to&&l.to!==l.from?('~'+l.to.slice(5).replace('-','/')):'');
-    h+='<div class="row"><div style="flex:1"><div>'+esc(l.name)+' <span class="sm">'+esc(rng)+'</span></div>'
+    h+='<div class="row"><div style="flex:1"><div>'+esc(l.name)+' <span class="sm">'+esc(rng)+' · '+esc(typeLabel(l.type))+' '+l.days+'일</span></div>'
      + '<div class="sm">'+esc(l.approvedBy||'')+' '+(st==='approved'?'승인':'반려')+'</div></div>'
-     + '<span class="pill '+(st==='approved'?'p-ok':'p-no')+'">'+(st==='approved'?'승인':'반려')+'</span></div>';
+     + '<span class="pill '+(st==='approved'?'p-ok':'p-no')+'">'+(st==='approved'?'승인':'반려')+'</span>'
+     + '<button class="btn sub" style="width:auto;height:36px;padding:0 10px;font-size:13px" onclick="unapprove(\''+l._id+'\')">되돌리기</button>'
+     + '<button class="btn sub" style="width:auto;height:36px;padding:0 10px;font-size:13px;color:var(--d)" onclick="removeLeave(\''+l._id+'\')">삭제</button>'
+     + '</div>';
   });
   h+='</div><div style="padding:0 12px"><button class="btn sub" onclick="logout()">다른 사람으로 바꾸기</button></div>';
   return h;
 }
+async function unapprove(id){
+  var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
+  if(!confirm(l.name+' '+l.from+'\n다시 대기 상태로 되돌릴까요?')) return;
+  try{
+    await db.collection('leave_requests').doc(id).update({status:'pending', approvedBy:'', approvedAt:''});
+    await loadLeaves(); render();
+  }catch(e){ alert('되돌리지 못했습니다. 다시 시도해 주세요.'); }
+}
+async function removeLeave(id){
+  var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
+  if(!confirm(l.name+' '+l.from+'\n완전히 삭제할까요? 되돌릴 수 없습니다.')) return;
+  try{
+    await db.collection('leave_requests').doc(id).delete();
+    if(EDIT&&EDIT._id===id){ EDIT=null; MODE='one'; }
+    await loadLeaves(); render();
+  }catch(e){ alert('삭제하지 못했습니다. 다시 시도해 주세요.'); }
+}
+
 async function decide(id,status){
   var l=LEAVES.filter(function(x){return x._id===id;})[0]; if(!l) return;
   if(!confirm(l.name+' '+l.from+' '+(status==='approved'?'승인':'반려')+'할까요?')) return;

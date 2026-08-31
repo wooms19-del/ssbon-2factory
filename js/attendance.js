@@ -313,6 +313,21 @@ async function attLeaveDecide(id, status){
   }catch(err){ console.error('[연차] 승인 처리 실패', err); toast('처리 실패','e'); }
 }
 
+async function attLeaveUnapprove(id){
+  var lv=(_leaveCache||[]).filter(function(x){return x._id===id;})[0]; if(!lv) return;
+  if(!confirm(lv.name+' '+lv.from+'\n승인을 취소하고 다시 대기로 되돌릴까요?')) return;
+  try{
+    await firebase.firestore().collection(LEAVE_COL).doc(id).update({
+      status:'pending', approvedBy:'', approvedAt:''
+    });
+    await _leaveLoad(true);
+    await _leaveSyncUsedDays();
+    _renderAttLeave();
+    if(_leaveWorkDates(lv.from,lv.to).indexOf(_attDate)>=0) await _loadAttDate(_attDate);
+    toast('대기로 되돌림','s');
+  }catch(err){ console.error('[연차] 승인 취소 실패', err); toast('처리 실패','e'); }
+}
+
 function attLeaveTogglePast(v){ _leaveShowPast=!!v; _renderAttLeave(); }
 
 function attLeavePreview(){
@@ -506,6 +521,7 @@ function _renderAttLeave(){
        + (rej?'<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#991b1b">반려</span>':'')
        + '<div style="font-size:11px;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#1e40af;white-space:nowrap">'+_leaveTypeLabel(lv.type)+' '+lv.days+'일</div>'
        + '<button class="btn" style="padding:2px 8px;font-size:11px" onclick="attLeaveEdit(\''+lv._id+'\')">수정</button>'
+       + (lv.status==='approved'&&lv.source==='phone'?'<button class="btn" style="padding:2px 8px;font-size:11px;color:#b45309" onclick="attLeaveUnapprove(\''+lv._id+'\')">승인취소</button>':'')
        + '<button class="btn" style="padding:2px 8px;font-size:11px;color:#dc2626" onclick="attLeaveDelete(\''+lv._id+'\')">삭제</button>'
        + '</div>';
       if(lv.reason) h+='<div style="padding:0 10px 8px 100px;font-size:11px;color:var(--g5)">'+lv.reason+'</div>';
