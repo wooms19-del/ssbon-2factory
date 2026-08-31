@@ -333,6 +333,12 @@ async function attLeaveUnapprove(id){
 //   승인된 건만 인쇄. 결재란 실장 칸에 승인자 이름이 들어감.
 // ============================================================
 function _lvPrintBox(on){ return on ? '<span style="font-family:serif">&#9745;</span>' : '&#9633;'; }
+// 결재란 직책 — 승인자 이름으로 마스터를 찾아 실장/파트장, 못 찾으면 관리자
+function _lvApproverTitle(lv){
+  var n=(lv&&lv.approvedBy)||'';
+  var e=(_attEmps||[]).filter(function(x){return x.name===n;})[0];
+  return (e&&e.position) ? e.position : '관리자';
+}
 function attLeavePrint(id){
   var lv=(_leaveCache||[]).filter(function(x){return x._id===id;})[0];
   if(!lv){ toast('신청을 찾을 수 없습니다','w'); return; }
@@ -361,12 +367,10 @@ function attLeavePrint(id){
    +'<div style="text-align:right;font-size:22px;font-weight:700;margin-bottom:10px">순수본㈜</div>'
    +'<div style="display:flex;align-items:flex-start;gap:16px">'
    +  '<div style="flex:1;padding-top:8px"><div class="ttl">연차/반차 신청서</div></div>'
-   +  '<table style="width:260px"><tr>'
+   +  '<table style="width:180px"><tr>'
    +    '<td rowspan="2" style="'+cell+';width:42px;text-align:center;font-weight:700;padding:8px 4px">결<br>재</td>'
-   +    '<td style="'+cell+';text-align:center;font-size:14px;padding:8px">실장</td>'
-   +    '<td style="'+cell+';text-align:center;font-size:14px;padding:8px">팀장</td></tr>'
-   +  '<tr><td style="'+cell+';height:68px;text-align:center;font-size:15px">'+(lv.approvedBy||'')+'</td>'
-   +      '<td style="'+cell+';height:68px"></td></tr></table>'
+   +    '<td style="'+cell+';text-align:center;font-size:14px;padding:8px">'+_lvApproverTitle(lv)+'</td></tr>'
+   +  '<tr><td style="'+cell+';height:68px;text-align:center;font-size:16px">'+(lv.approvedBy||'')+'</td></tr></table>'
    +'</div>'
    +'<div class="sec">1. 신청인</div>'
    +'<table>'
