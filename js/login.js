@@ -7,6 +7,33 @@
   var API_KEY='AIzaSyA0Y6VK8EOahDE607LEWtyG9-U8YP3yqDE';
   var AUTH_URL='https://firestore.googleapis.com/v1/projects/ssbon-factory/databases/(default)/documents/_config/auth?key='+API_KEY;
 
+  // ★ Firestore 규칙을 request.auth != null 로 잠그면 키만 붙인 REST 요청은 차단됨.
+  //   익명 로그인 토큰을 Authorization 헤더로 실어 보내야 통과. (2026-08-31)
+  //   토큰을 못 얻으면 예전처럼 그냥 보냄 — 규칙 잠그기 전에는 동작 동일.
+  function _authToken(){
+    try{
+      if(!firebase || !firebase.auth) return Promise.resolve(null);
+      var u=firebase.auth().currentUser;
+      if(u) return u.getIdToken().catch(function(){ return null; });
+      return new Promise(function(res){
+        var off=firebase.auth().onAuthStateChanged(function(usr){
+          off();
+          if(!usr) return res(null);
+          usr.getIdToken().then(res).catch(function(){ res(null); });
+        });
+        setTimeout(function(){ res(null); }, 4000);
+      });
+    }catch(e){ return Promise.resolve(null); }
+  }
+  function authFetch(url, opts){
+    opts=opts||{};
+    return _authToken().then(function(tok){
+      var h=Object.assign({}, opts.headers||{});
+      if(tok) h['Authorization']='Bearer '+tok;
+      return fetch(url, Object.assign({}, opts, {headers:h}));
+    });
+  }
+
   function sha256(str){
     return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function(buf){
       return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
@@ -97,7 +124,7 @@
       if(nw.length<4){ msg.textContent='새 비밀번호는 4자 이상이어야 합니다'; return; }
       if(nw!==nw2){ msg.textContent='새 비밀번호가 서로 다릅니다'; return; }
       msg.textContent='확인 중...'; msg.style.color='#78808c';
-      fetch(AUTH_URL).then(function(r){return r.json();}).then(function(doc){
+      authFetch(AUTH_URL).then(function(r){return r.json();}).then(function(doc){
         var users=(doc.fields&&doc.fields.users&&doc.fields.users.mapValue&&doc.fields.users.mapValue.fields)||{};
         var uKey=Object.keys(users).find(function(k){return k.toLowerCase()===s.u.toLowerCase();});
         var rec=uKey&&users[uKey].mapValue&&users[uKey].mapValue.fields;
@@ -106,7 +133,7 @@
           if(hCur!==(rec.h&&rec.h.stringValue)){ msg.textContent='현재 비밀번호가 다릅니다'; msg.style.color='#b03933'; return; }
           sha256(nw).then(function(hNew){
             users[uKey]={mapValue:{fields:{h:{stringValue:hNew}, role:rec.role}}};
-            fetch(AUTH_URL+'&updateMask.fieldPaths=users',{
+            authFetch(AUTH_URL+'&updateMask.fieldPaths=users',{
               method:'PATCH', headers:{'Content-Type':'application/json'},
               body:JSON.stringify({fields:{users:{mapValue:{fields:users}}}})
             }).then(function(r){
@@ -140,7 +167,7 @@
       var msg=document.getElementById('lgMsg');
       if(!u||!p){ msg.textContent='아이디와 비밀번호를 입력하세요'; return; }
       msg.textContent='확인 중...'; msg.style.color='#78808c';
-      fetch(AUTH_URL).then(function(r){return r.json();}).then(function(doc){
+      authFetch(AUTH_URL).then(function(r){return r.json();}).then(function(doc){
         var users=(doc.fields&&doc.fields.users&&doc.fields.users.mapValue&&doc.fields.users.mapValue.fields)||{};
         var uKey=Object.keys(users).find(function(k){return k.toLowerCase()===u.toLowerCase();});
         var rec=uKey&&users[uKey].mapValue&&users[uKey].mapValue.fields;
