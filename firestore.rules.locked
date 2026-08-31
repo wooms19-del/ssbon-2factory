@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// 순수본 2공장 — Firebase Firestore 보안 룰 (잠금본)
+// 작성일: 2026-08-31
+// 정책: 익명 로그인 통행증이 있는 요청만 허용.
+//       2공장 웹(index.html)과 연차 신청 페이지(leave.html)는
+//       시작 시 자동으로 익명 로그인하므로 사용자는 아무것도 하지 않음.
+//       통행증 없는 외부 요청(주소만 아는 사람)은 전부 차단됨.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
