@@ -19,12 +19,25 @@ function _rtViewRecs(){ const d=_rtViewDate(); return (L.retort||[]).filter(r=>S
 // ── 수정 가능 기간 ── (현장 규칙 바뀔 수 있어 여기 숫자만 조절)
 //   0 = 당일만, 1 = 어제까지, 2 = 이틀 전까지, -1 = 제한 없음
 var RT_EDIT_MAX_DAYS = 0;
+// ★ 조건테스트 회차 — 온도·시간 조건을 바꿔가며 돌리는 검증 회차 (2026-09-01)
+//   정규 CCP 기준으로 재면 전부 부적합으로 찍히므로 판정을 '테스트'로 둠.
+//   부적합이 아니라 애초에 판정 대상이 아님. 경고창도 뜨지 않음.
+//   조건 정리에 시간이 걸리므로 3일간 수정 가능. 정규 회차는 종전대로 당일만.
+var RT_TEST_EDIT_DAYS = 3;
+function _rtIsTest(rec){ return !!(rec && rec.test); }
+// 판정 — 조건테스트면 '테스트'
+function _rtJudgeRec(rec){
+  if(!rec) return null;
+  if(_rtIsTest(rec)) return (rec.t2&&rec.t3) ? '테스트' : null;
+  return _rtJudge(rec.ccp, _rtMin(rec.t2, rec.t3), rec.temp);
+}
 function _rtEditable(rec){
   if(RT_EDIT_MAX_DAYS < 0) return true;
   if(!rec) return false;
   function _toDt(s){ var p=String(s||'').slice(0,10).split('-'); return new Date(+p[0], (+p[1]||1)-1, +p[2]||1); }
   var diff = Math.floor((_toDt(tod()) - _toDt(rec.date)) / 86400000);
-  return diff >= 0 && diff <= RT_EDIT_MAX_DAYS;
+  var lim = _rtIsTest(rec) ? RT_TEST_EDIT_DAYS : RT_EDIT_MAX_DAYS;
+  return diff >= 0 && diff <= lim;
 }
 // 수정/삭제 전 가드 — 기간 지난 기록이면 안내 후 차단
 function _rtGuard(fbId){
@@ -143,9 +156,11 @@ async function renderRetort(){
     else action=`<button class="btn bp bblk" onclick="rtMark('${cur.fbId}','t4')">④ 배출 완료</button>`;
 
     const ccpMin=_rtMin(cur.t2,cur.t3);
-    const judge=cur.t3 ? _rtJudge(cur.ccp, ccpMin, cur.temp) : null;
+    const judge=cur.t3 ? _rtJudgeRec(cur) : null;
     const judgeHtml = judge==null ? '' :
-      judge==='적합'
+      judge==='테스트'
+        ? `<div style="font-size:12px;color:#92400e;background:#fffbeb;padding:5px 9px;border-radius:6px;margin-top:8px">조건테스트 ${ccpMin}분 · ${cur.temp}℃ — 판정 대상 아님</div>`
+      : judge==='적합'
         ? `<div style="font-size:12px;color:#047857;background:#ecfdf5;padding:5px 9px;border-radius:6px;margin-top:8px">CCP ${ccpMin}분 · ${cur.temp}℃ — 적합</div>`
         : `<div style="font-size:12px;color:#b91c1c;background:#fef2f2;padding:5px 9px;border-radius:6px;margin-top:8px">CCP ${ccpMin}분 · ${cur.temp}℃ — 부적합 (기준 ${ccpStd.temp}℃·${ccpStd.min}분↑) — HACCP팀장 보고</div>`;
 
@@ -171,21 +186,23 @@ async function renderRetort(){
     </tr>
     ${rows.map(r=>{
       const min=_rtMin(r.t2,r.t3);
-      const judge=_rtJudge(r.ccp,min,r.temp);
+      const judge=_rtJudgeRec(r);
       const bad=judge==='부적합';
+      const tst=judge==='테스트';
       const ed=k=>`title="클릭하여 수정" style="cursor:pointer" onclick="rtEditTime('${r.fbId}','${k}')"`;
       const tCell=k=> r[k] ? `<span ${ed(k)}>${r[k]}</span>` : `<span ${ed(k)} style="cursor:pointer;color:var(--g3)">—</span>`;
       return `<tr style="border-top:1px solid var(--g2)">
         <td style="padding:7px 10px">${r.machine}호기 ${r.round||'?'}회차</td>
         <td style="padding:7px 6px;cursor:pointer" title="클릭하여 수정" onclick="rtEditProd('${r.fbId}')">${r.product||''}</td>
         <td style="padding:7px 6px;cursor:pointer" title="클릭하여 수정" onclick="rtEditEa('${r.fbId}')">${r.ea?Number(r.ea).toLocaleString():'—'}</td>
-        <td style="padding:7px 6px;font-size:11.5px;color:var(--g5);cursor:pointer" title="클릭하여 수정" onclick="rtEditCcp('${r.fbId}')">${(_rtIs3B(r.ccp)?'3B':(r.ccp||''))+(r.batch?' · '+r.batch:'')}</td>
+        <td style="padding:7px 6px;font-size:11.5px;color:var(--g5);cursor:pointer" title="클릭하여 수정" onclick="rtEditCcp('${r.fbId}')">${(_rtIs3B(r.ccp)?'3B':(r.ccp||''))+(r.batch?' · '+r.batch:'')}${_rtIsTest(r)?' <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;font-size:10px">테스트</span>':''}</td>
         <td style="padding:7px 6px">${tCell('t1')}</td>
         <td style="padding:7px 6px">${tCell('t2')}→${tCell('t3')}${min!=null?` · <span style="${bad?'color:#b91c1c;font-weight:600':''}">${min}분</span>`:''}</td>
         <td style="padding:7px 6px">${tCell('t4')}</td>
         <td style="padding:7px 6px;cursor:pointer" title="클릭하여 수정" onclick="rtEditTemp('${r.fbId}')">${r.temp?r.temp+'℃':'—'}</td>
-        <td style="padding:7px 6px;${bad?'color:#b91c1c;font-weight:600':judge?'color:#047857':''}">${judge||'진행중'}</td>
+        <td style="padding:7px 6px;${bad?'color:#b91c1c;font-weight:600':tst?'color:#92400e;font-weight:600':judge?'color:#047857':''}">${judge||'진행중'}</td>
         <td style="padding:7px 6px;text-align:right;white-space:nowrap">
+          <span style="cursor:pointer;margin-right:8px;font-size:13px;opacity:${_rtIsTest(r)?1:.35}" title="조건테스트 전환" onclick="rtToggleTest('${r.fbId}')">🧪</span>
           <span style="cursor:pointer;color:var(--g4)" title="삭제" onclick="rtDelete('${r.fbId}')">✕</span>
         </td>
       </tr>`;
@@ -276,7 +293,7 @@ async function rtMark(fbId, step){
   if(ok===false){ toast('저장 실패','d'); return; }
   Object.assign(rec, patch);
   // ③ 시점 자동 판정 — 미달이면 즉시 경고
-  if(step==='t3'){
+  if(step==='t3' && !_rtIsTest(rec)){
     const min=_rtMin(rec.t2,rec.t3);
     const judge=_rtJudge(rec.ccp,min,rec.temp);
     if(judge==='부적합'){
@@ -338,6 +355,18 @@ async function rtEditCcp(fbId){
   if(await fbUpdate('retort',fbId,patch)===false){ toast('저장 실패','d'); return; }
   Object.assign(rec,patch); renderRetort();
 }
+// 조건테스트 전환 — 켜면 정규 CCP 판정 대신 '테스트'로 기록되고 점검표에서 빠짐
+async function rtToggleTest(fbId){
+  if(!_rtGuard(fbId)) return;
+  const rec=(L.retort||[]).find(r=>r.fbId===fbId); if(!rec) return;
+  const on=!_rtIsTest(rec);
+  if(on && !confirm('이 회차를 조건테스트로 표시할까요?\n\n· 적합/부적합 판정을 하지 않습니다\n· CCP 점검표(엑셀)에서 제외됩니다\n· '+RT_TEST_EDIT_DAYS+'일간 수정할 수 있습니다')) return;
+  if(!on && !confirm('조건테스트 표시를 해제할까요?\n정규 CCP 기준으로 다시 판정됩니다.')) return;
+  if(await fbUpdate('retort',fbId,{test:on})===false){ toast('저장 실패','d'); return; }
+  rec.test=on; renderRetort();
+  toast(on?'조건테스트로 표시됨':'정규 회차로 되돌림','s');
+}
+
 async function rtEditEa(fbId){
   if(!_rtGuard(fbId)) return;   // 당일만 수정 (지나면 차단)
   const rec=(L.retort||[]).find(r=>r.fbId===fbId); if(!rec) return;
@@ -396,7 +425,7 @@ async function _rtFillTemplate(tplPath, outName, rows, is3B, dateTxt){
   rows.forEach((r,i)=>{
     const R=24+i; if(R>34) return;
     const min=_rtMin(r.t2,r.t3);
-    const judge=_rtJudge(r.ccp,min,r.temp);
+    const judge=_rtJudgeRec(r);
     xml=_rtXset(xml,'A'+R,r.machine||'');
     if(is3B){
       // 구분 = 살균 조건 A/B (해당 조건에 동그라미). 배치는 시스템 데이터로만 보관
@@ -426,8 +455,12 @@ async function rtDownloadCcp(){
     const dEl=document.getElementById('rt_ccp_date');
     const dateStr=(dEl&&dEl.value)||tod();
     toast('점검표 생성중...','i');
-    const recs=(await fbGetByDate('retort', dateStr)).filter(r=>r.t2&&r.t3)
+    const _all=(await fbGetByDate('retort', dateStr)).filter(r=>r.t2&&r.t3);
+    // ★ 조건테스트 회차는 공식 CCP 점검표에서 제외 (정규 기준 판정 대상이 아님)
+    const _tst=_all.filter(_rtIsTest);
+    const recs=_all.filter(r=>!_rtIsTest(r))
       .sort((a,b)=>String(a.t2||'').localeCompare(String(b.t2||'')));
+    if(_tst.length) toast('조건테스트 '+_tst.length+'회차는 점검표에서 제외됨','i');
     const r2b=recs.filter(r=>!_rtIs3B(r.ccp));
     const r3b=recs.filter(r=>_rtIs3B(r.ccp));
     if(!r2b.length && !r3b.length){ toast('해당 날짜에 완료된 회차가 없습니다','d'); return; }
