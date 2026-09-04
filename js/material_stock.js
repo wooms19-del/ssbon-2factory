@@ -508,18 +508,29 @@ function _msSysQty(code){
   var u = parseFloat((_msUse||{})[code])||0;
   return b + i - u;
 }
+// 전산 박스 = 기준 박스 + 입고 박스 − 사용 박스
+function _msSysBox(part){
+  var b = parseFloat((_msBase.boxes||{})[part]);
+  if(isNaN(b)) b = 0;
+  var i = parseFloat((_msBoxIn||{})[part])||0;
+  var u = parseFloat((_msBoxUse||{})[part])||0;
+  return b + i - u;
+}
 function _msTakeRows(){
   var rows = [];
   Object.keys(_msBase.items||{}).forEach(function(code){
     var m = _msMaster[code] || {};
     var cat = m.category || '기타';
     if(_msCat !== '전체' && cat !== _msCat) return;
-    var sys = _msSysQty(code);
+    var part = MS_CODE2PART[code];
+    // 원육은 현장에서 박스로 세므로 실사 단위가 박스다
+    var sys = part ? _msSysBox(part) : _msSysQty(code);
     var act = _msTakeVals[code];
     var has = (act !== undefined && act !== null && act !== '');
     var diff = has ? (parseFloat(act) - sys) : null;
     var rate = (has && sys !== 0) ? Math.abs(diff / sys * 100) : null;
-    rows.push({ code:code, name:m.name||code, unit:m.unit||'', cat:cat,
+    rows.push({ code:code, name:m.name||code, unit: part ? '박스' : (m.unit||''), cat:cat,
+                part:part, sysKg: part ? _msSysQty(code) : null,
                 sys:sys, act:has?parseFloat(act):null, diff:diff, rate:rate });
   });
   rows.sort(function(a,b){
@@ -593,11 +604,14 @@ function _msPaintTake(){
     var dc = (r.diff === null) ? 'var(--g4)' : (_msSame(r) ? '#1d4ed8' : '#dc2626');
     h += '<tr style="border-bottom:0.5px solid var(--g2);' + (over ? 'background:#fef2f2' : '') + '">';
     h += '<td style="padding:8px 10px">' + r.name + '<span style="font-size:11px;color:var(--g4);margin-left:6px">' + r.code + '</span></td>';
-    h += '<td style="padding:8px 10px;text-align:right;color:var(--g5)">' + _msN(r.sys) + '</td>';
+    h += '<td style="padding:8px 10px;text-align:right;color:var(--g5)">' + _msN(r.sys)
+       + (r.part ? '<span style="font-size:11px;color:var(--g4)"> 박스</span>'
+                   + '<div style="font-size:11px;color:var(--g4)">' + _msN(r.sysKg) + ' kg</div>' : '') + '</td>';
     h += '<td style="padding:8px 10px;text-align:center">'
-       + '<input type="number" step="any" value="' + (r.act !== null ? r.act : '') + '" placeholder="입력"'
+       + '<input type="number" step="' + (r.part ? '1' : 'any') + '" value="' + (r.act !== null ? r.act : '') + '" placeholder="' + (r.part ? '박스' : '입력') + '"'
        + ' oninput="msSetTakeVal(\'' + r.code + '\',this.value)"'
-       + ' style="width:96px;height:30px;text-align:right;font-size:13px;padding:0 8px;border:0.5px solid var(--g3);border-radius:6px"></td>';
+       + ' style="width:96px;height:30px;text-align:right;font-size:13px;padding:0 8px;border:0.5px solid var(--g3);border-radius:6px">'
+       + (r.part ? '<div style="font-size:11px;color:var(--g4);margin-top:2px">박스</div>' : '') + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;color:' + dc + '">'
        + (r.diff === null ? '−' : (r.diff > 0 ? '+' : '') + _msN(r.diff)) + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;font-size:12px;color:' + (over ? '#dc2626' : 'var(--g5)') + '">'
@@ -607,6 +621,7 @@ function _msPaintTake(){
   h += '</tbody></table></div>';
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
      + '입력값은 자동 임시저장됩니다. 다른 기기에서 이어서 작업할 수 있습니다.<br>'
+     + '원육은 현장에서 세는 대로 <strong>박스 수</strong>를 입력하세요. kg은 박스 비율에 맞춰 자동 환산됩니다.<br>'
      + '확정하면 실사값이 새 기준재고가 되고, 이후 생산은 이 값에서 차감됩니다. 직전 기준은 stocktake 이력에 보관됩니다.'
      + '</div>';
   el.innerHTML = h;
@@ -675,6 +690,8 @@ function msDownloadForm(){
   rows.forEach(function(r){
     aoa.push([r.code, r.name, r.cat, r.unit, Math.round(r.sys*100)/100, (r.act!==null?r.act:'')]);
   });
+  aoa.push([]);
+  aoa.push(['※ 원육(홍두깨·설도·우둔)은 박스 수로 입력하세요. 나머지는 각 품목 단위(KG/EA)입니다.']);
   var ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [{wch:10},{wch:34},{wch:11},{wch:6},{wch:12},{wch:12}];
   var wb = XLSX.utils.book_new();
@@ -741,16 +758,34 @@ async function msConfirmTake(){
       confirmedAt: new Date().toISOString()
     });
     // 새 기준 = 실사값(없으면 전산재고)
-    var items = {};
+    //   원육은 박스로 실사하므로 boxes를 실사값으로 두고,
+    //   kg은 전산 kg에 (실사박스 ÷ 전산박스) 비율을 적용해 박스당 실제 평균중량을 유지한다.
+    var items = {}, boxes = {};
+    Object.keys(_msBase.boxes||{}).forEach(function(p){ boxes[p] = _msSysBox(p); });
     Object.keys(_msBase.items||{}).forEach(function(code){
       var v = _msTakeVals[code];
-      items[code] = (v !== undefined && v !== null && v !== '') ? parseFloat(v) : _msSysQty(code);
+      var has = (v !== undefined && v !== null && v !== '');
+      var part = MS_CODE2PART[code];
+      if(part){
+        var sysBox = _msSysBox(part);
+        var sysKg  = _msSysQty(code);
+        if(has){
+          var actBox = parseFloat(v);
+          boxes[part] = actBox;
+          items[code] = (sysBox > 0) ? (sysKg * actBox / sysBox) : 0;
+        }else{
+          boxes[part] = sysBox;
+          items[code] = sysKg;
+        }
+      }else{
+        items[code] = has ? parseFloat(v) : _msSysQty(code);
+      }
     });
     await db.doc('_config/stock_baseline').set({
       date: _msTakeDate,
       note: _msTakeDate + ' 재고조사 확정',
       items: items,
-      boxes: _msBase.boxes || {},
+      boxes: boxes,
       updatedAt: new Date().toISOString()
     });
     await db.doc('_config/stocktake_draft').set({ date:'', vals:{}, updatedAt:new Date().toISOString() });
