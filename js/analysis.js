@@ -2703,7 +2703,19 @@ function renderDailyFromLocal_(d){
   // 포장: 제품+원육타입 조합별
   const pkMap = {};
   pk.forEach(r => {
-    const rawType = getPkType(r);
+    // 부위 라벨: 그 제품이 받은 대차를 배출한 파쇄 기록 기준(정확).
+    // 자숙까지 거슬러 올라가는 getPkType은 대차를 공유하는 부위가 섞여 fallback으로만 쓴다.
+    let rawType = '';
+    const wdKeys = (r.wagonDist && typeof r.wagonDist === 'object') ? Object.keys(r.wagonDist) : [];
+    if(wdKeys.length){
+      const ts = [];
+      wdKeys.forEach(wn => {
+        const t = _shTypeOfWagon(wn, parseFloat(r.wagonDist[wn])||0, r.start);
+        if(t && ts.indexOf(t) < 0) ts.push(t);
+      });
+      if(ts.length) rawType = ts.join(', ');
+    }
+    if(!rawType) rawType = getPkType(r);
     const key = (rawType||r.product||'기타') + '__' + (r.product||'기타');
     if(!pkMap[key]) pkMap[key]={type:rawType, product:r.product||'기타', kg:0, mh:0, h:0};
     const p = L.products.find(x=>x.name===r.product);
@@ -2918,14 +2930,8 @@ function renderDailyFromLocal_(d){
     const oYldW = (hasW && p.origKg>0) ? p.outWashed/p.origKg*100 : null;
     const pYldW = (hasW && p.in>0) ? p.outWashed/p.in*100 : null;
     const washInc = (hasW && p.out>0) ? (p.outWashed - p.out)/p.out*100 : null;
-    // 포장: 세척후 원육수율 (= 포장산출 ÷ 실제 원육, 다른 공정과 같은 원육 기준). 현재 포장 원육이 세척후 비율만큼 부풀어 있어 그만큼 보정
-    let pkOYldW = null;
-    if(p.name==='포장' && !p.noMeat && p.origKg>0){
-      const _mt = String(p.type||'').split('·')[0].trim();
-      const _sg = shGroup[_mt];
-      const _wr = (_sg && _sg.kgWashed>0 && _sg.kg>0) ? _sg.kgWashed/_sg.kg : null;
-      if(_wr) pkOYldW = (p.out/p.origKg*100) * _wr;
-    }
+    // 포장 원육이 세척후 기준으로 정확히 배분되므로 별도 보정(세척후 원육수율)은 쓰지 않는다.
+    const pkOYldW = null;
     const pkYldRise = (pkOYldW!==null && oYld!==null) ? (pkOYldW - oYld) : null;
     const borderTop = showName && procRows.indexOf(p)>0 ? 'border-top:2px solid var(--g2);' : '';
     // 생산성: 공정별 측정 기준 (작업자가 통제하는 것 기준)
