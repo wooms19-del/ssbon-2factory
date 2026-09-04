@@ -2720,6 +2720,23 @@ function renderDailyFromLocal_(d){
     if(!wd || typeof wd !== 'object') return 0;
     return Object.values(wd).reduce(function(s,v){return s + (parseFloat(v)||0);}, 0);
   }
+  // 포장 레코드의 특정 부위 투입 kg.
+  // typeKgs(부위별 실투입)가 있으면 그 값을, 없으면 wagonDist 합을 부위 수로 나눈다.
+  // 복수 부위 제품(FC 3KG 등)에서 wagonDist 전체를 부위마다 더해 이중계산되던 문제를 막는다.
+  function _pkTypeKg(recs, type, typeCount){
+    let hasTk = false, tot = 0;
+    (recs||[]).forEach(r => {
+      const tk = r.typeKgs;
+      if(tk && typeof tk === 'object' && Object.keys(tk).length){
+        hasTk = true;
+        tot += parseFloat(tk[type]) || 0;
+      }
+    });
+    if(hasTk) return tot;
+    const wd = (recs||[]).reduce((s,r)=>s+_sumWagonDist(r), 0);
+    return typeCount > 1 ? wd / typeCount : wd;
+  }
+
   const pkInKgMap = {}; // key별 투입KG 누적
   const pkOrigMap = {}; // key별 원육KG 누적
   const pkMapEntries = Object.entries(pkMap);
@@ -2733,7 +2750,8 @@ function renderDailyFromLocal_(d){
     const wdEntries = []; // {k, vv, wdSum}
     const noWdEntries = []; // [k, vv]
     relEntries.forEach(([k,vv]) => {
-      const wdSum = (vv._recs||[]).reduce((s,r)=>s+_sumWagonDist(r), 0);
+      const types = (vv.type||'').split(',').map(t=>t.trim()).filter(Boolean);
+      const wdSum = _pkTypeKg(vv._recs, shType, types.length);
       if(wdSum > 0){
         wdEntries.push({k:k, vv:vv, wdSum:wdSum});
       } else {
@@ -2766,7 +2784,8 @@ function renderDailyFromLocal_(d){
     const wdEntries = []; const noWdEntries = [];
     let totalWdKg = 0;
     relEntries.forEach(([k,vv]) => {
-      const wdSum = (vv._recs||[]).reduce((s,r)=>s+_sumWagonDist(r), 0);
+      const types = (vv.type||'').split(',').map(t=>t.trim()).filter(Boolean);
+      const wdSum = _pkTypeKg(vv._recs, rmType, types.length);
       if(wdSum > 0){ wdEntries.push({k:k, vv:vv, wdSum:wdSum}); totalWdKg += wdSum; }
       else { noWdEntries.push([k, vv]); }
     });
