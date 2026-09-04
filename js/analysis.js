@@ -2810,8 +2810,9 @@ function renderDailyFromLocal_(d){
       pkInKgMap[e.k] = r2((pkInKgMap[e.k]||0) + e.wdSum);
       usedKg += e.wdSum;
     });
-    // wagonDist 없는 것: 잔여 파쇄량을 EA 비율로
-    const remainingKg = Math.max(0, shGroup[shType].kg - usedKg);
+    // wagonDist 없는 것: 잔여 파쇄량을 EA 비율로 (usedKg가 세척 후이므로 분모도 세척 후)
+    const _shGs = shGroup[shType];
+    const remainingKg = Math.max(0, ((_shGs && (_shGs.kgWashed || _shGs.kg)) || 0) - usedKg);
     if(noWdEntries.length > 0 && remainingKg > 0){
       const totalRelEa = noWdEntries.reduce((s,[,vv])=>s+(vv.ea||0),0);
       noWdEntries.forEach(([k,vv]) => {
@@ -2839,7 +2840,10 @@ function renderDailyFromLocal_(d){
     // wagonDist 있는 것: wagonDist 비율로 원육 분배
     let usedRm = 0;
     if(totalWdKg > 0){
-      const totalShKg = (shGroup[rmType] && shGroup[rmType].kg) || totalWdKg;
+      // 포장이 받은 양(wdSum)은 세척 후 무게이므로 분모도 세척 후(kgWashed)로 맞춘다.
+      // 세척 전(kg)을 쓰면 비율이 1을 넘어 원육이 부풀려진다.
+      const _shG = shGroup[rmType];
+      const totalShKg = (_shG && (_shG.kgWashed || _shG.kg)) || totalWdKg;
       // 원육 = 그 type 전체 원육 × (wd합 / 그 type 파쇄총합)
       wdEntries.forEach(e => {
         const ratio = e.wdSum / totalShKg;
