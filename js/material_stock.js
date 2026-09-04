@@ -332,12 +332,14 @@ function _msPaintIn(){
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:14px">';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">입고일</div>'
      + '<input type="date" id="msInDate" class="fc" value="' + msTod() + '" style="padding:7px 8px"></div>';
-  h += '<div style="flex:1;min-width:220px"><div style="font-size:12px;color:var(--g5);margin-bottom:4px">품목</div>'
+  h += '<div style="flex:1;min-width:200px"><div style="font-size:12px;color:var(--g5);margin-bottom:4px">품목</div>'
      + '<select id="msInCode" class="fc" style="width:100%;padding:7px 8px">' + opts + '</select></div>';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">수량</div>'
-     + '<input type="number" step="any" id="msInQty" class="fc" placeholder="0" style="width:110px;padding:7px 8px;text-align:right"></div>';
-  h += '<div style="flex:1;min-width:140px"><div style="font-size:12px;color:var(--g5);margin-bottom:4px">비고</div>'
-     + '<input type="text" id="msInNote" class="fc" placeholder="거래처·로트 등" style="width:100%;padding:7px 8px"></div>';
+     + '<input type="number" step="any" id="msInQty" class="fc" placeholder="0" style="width:100px;padding:7px 8px;text-align:right"></div>';
+  h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">제조일자</div>'
+     + '<input type="date" id="msInMade" class="fc" style="padding:7px 8px"></div>';
+  h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">소비기한</div>'
+     + '<input type="date" id="msInExp" class="fc" style="padding:7px 8px"></div>';
   h += '<button class="btn bp" onclick="msSaveIn()" style="padding:8px 18px">등록</button>';
   h += '</div></div>';
 
@@ -347,20 +349,23 @@ function _msPaintIn(){
      + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:100px">입고일</th>'
      + '<th style="padding:9px 10px;text-align:left;font-size:12px;color:var(--g6)">품목</th>'
      + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:110px">수량</th>'
-     + '<th style="padding:9px 10px;text-align:left;font-size:12px;color:var(--g6);width:160px">비고</th>'
+     + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:100px">제조일자</th>'
+     + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:130px">소비기한</th>'
      + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:60px"></th>'
      + '</tr></thead><tbody>';
   if(!_msInList.length){
-    h += '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--g5)">' + _msAddDay(_msBase.date,1) + ' 이후 등록된 자재 입고가 없습니다.</td></tr>';
+    h += '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--g5)">' + _msAddDay(_msBase.date,1) + ' 이후 등록된 자재 입고가 없습니다.</td></tr>';
   }
   _msInList.forEach(function(r){
     var m = _msMaster[r.code] || {};
-    h += '<tr style="border-bottom:0.5px solid var(--g2)">';
+    var ex = _msExpInfo(r.exp);
+    h += '<tr style="border-bottom:0.5px solid var(--g2);' + (ex.over ? 'background:#fef2f2' : '') + '">';
     h += '<td style="padding:8px 10px;text-align:center;color:var(--g5)">' + (r.date||'') + '</td>';
     h += '<td style="padding:8px 10px">' + (m.name||r.code) + '<span style="font-size:11px;color:var(--g4);margin-left:6px">' + r.code + '</span></td>';
     h += '<td style="padding:8px 10px;text-align:right;font-weight:600;color:#1d4ed8">+' + _msN(r.qty)
        + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> ' + (m.unit||'') + '</span></td>';
-    h += '<td style="padding:8px 10px;font-size:12px;color:var(--g5)">' + (r.note||'') + '</td>';
+    h += '<td style="padding:8px 10px;text-align:center;font-size:12px;color:var(--g5)">' + (r.made || '−') + '</td>';
+    h += '<td style="padding:8px 10px;text-align:center;font-size:12px;color:' + ex.color + '">' + ex.text + '</td>';
     h += '<td style="padding:8px 10px;text-align:center">'
        + '<button class="btn bo bsm" style="padding:3px 9px;color:#dc2626" onclick="msDelIn(\'' + r.id + '\')">삭제</button></td>';
     h += '</tr>';
@@ -372,23 +377,40 @@ function _msPaintIn(){
   el.innerHTML = h;
 }
 
+// 소비기한 표시 — 남은 일수와 색상. 지났으면 강조, 30일 이내면 경고.
+function _msExpInfo(exp){
+  if(!exp) return { text:'−', color:'var(--g4)', over:false };
+  var d = Math.round((new Date(exp + 'T00:00:00') - new Date(msTod() + 'T00:00:00')) / 86400000);
+  if(d < 0)  return { text: exp + ' <span style="font-size:11px">(' + Math.abs(d) + '일 경과)</span>', color:'#dc2626', over:true };
+  if(d === 0) return { text: exp + ' <span style="font-size:11px">(오늘)</span>', color:'#dc2626', over:true };
+  if(d <= 30) return { text: exp + ' <span style="font-size:11px">(D−' + d + ')</span>', color:'#dc2626', over:false };
+  return { text: exp + ' <span style="font-size:11px;color:var(--g5)">(D−' + d + ')</span>', color:'var(--g6)', over:false };
+}
+
 async function msSaveIn(){
   var g = function(id){ var e = document.getElementById(id); return e ? e.value : ''; };
-  var date = g('msInDate'), code = g('msInCode'), qty = parseFloat(g('msInQty')), note = g('msInNote');
+  var date = g('msInDate'), code = g('msInCode'), qty = parseFloat(g('msInQty'));
+  var made = g('msInMade'), exp = g('msInExp');
   if(!date){ if(typeof toast==='function') toast('입고일을 선택하세요','w'); return; }
   if(!code){ if(typeof toast==='function') toast('품목을 선택하세요','w'); return; }
   if(isNaN(qty) || qty === 0){ if(typeof toast==='function') toast('수량을 입력하세요','w'); return; }
+  if(made && exp && made > exp){ if(typeof toast==='function') toast('소비기한이 제조일자보다 빠릅니다','w'); return; }
+  if(exp && exp < date){
+    if(!confirm('소비기한이 입고일보다 이전입니다.\n그래도 등록할까요?')) return;
+  }
   if(MS_CODE2PART[code]){
     if(!confirm('원육은 바코드 스캔으로 이미 입고가 잡힙니다.\n그래도 등록하면 이중 반영됩니다.\n\n계속할까요?')) return;
   }
   var id = 'mi_' + date.replace(/-/g,'') + '_' + Date.now();
   try{
     await firebase.firestore().collection('materialIn').doc(id).set({
-      id: id, date: date, code: code, qty: qty, note: note || '',
+      id: id, date: date, code: code, qty: qty,
+      made: made || '', exp: exp || '',
       _createdAt: new Date().toISOString()
     });
-    var qEl = document.getElementById('msInQty'); if(qEl) qEl.value = '';
-    var nEl = document.getElementById('msInNote'); if(nEl) nEl.value = '';
+    ['msInQty','msInMade','msInExp'].forEach(function(x){
+      var e = document.getElementById(x); if(e) e.value = '';
+    });
     if(typeof fbClearCache === 'function') fbClearCache('materialIn');
     if(typeof toast==='function') toast('입고 등록 완료','s');
     await _msLoadInList(); _msPaintIn();
