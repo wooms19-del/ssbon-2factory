@@ -2721,20 +2721,33 @@ function renderDailyFromLocal_(d){
     return Object.values(wd).reduce(function(s,v){return s + (parseFloat(v)||0);}, 0);
   }
   // 포장 레코드의 특정 부위 투입 kg.
-  // typeKgs(부위별 실투입)가 있으면 그 값을, 없으면 wagonDist 합을 부위 수로 나눈다.
-  // 복수 부위 제품(FC 3KG 등)에서 wagonDist 전체를 부위마다 더해 이중계산되던 문제를 막는다.
-  function _pkTypeKg(recs, type, typeCount){
-    let hasTk = false, tot = 0;
+  // 대차(wagonDist)별로 그 대차를 배출한 파쇄 레코드의 부위를 찾아 합산한다.
+  // typeKgs는 현장 수동 입력이라 실제 대차 흐름과 어긋날 수 있어 쓰지 않는다.
+  // 반환: {kg, traced} — traced=true면 대차 추적이 성립한 것(그 부위가 0이면 정말 0)
+  function _shTypeOfWagon(wNum){
+    const shRec = sh.find(r => (r.wagonOut||'').split(',').map(w=>w.trim()).includes(String(wNum).trim()));
+    if(!shRec) return '';
+    if(shRec.type) return shRec.type.split(',')[0].trim();
+    const wIns = (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean);
+    for(const wIn of wIns){
+      const ckRec = ck.find(c2 => (c2.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
+      if(ckRec && ckRec.type) return ckRec.type.split(',')[0].trim();
+    }
+    return '';
+  }
+  function _pkTypeKg(recs, type){
+    let tot = 0, traced = false;
     (recs||[]).forEach(r => {
-      const tk = r.typeKgs;
-      if(tk && typeof tk === 'object' && Object.keys(tk).length){
-        hasTk = true;
-        tot += parseFloat(tk[type]) || 0;
-      }
+      const wd = r.wagonDist;
+      if(!wd || typeof wd !== 'object') return;
+      Object.keys(wd).forEach(wn => {
+        const t = _shTypeOfWagon(wn);
+        if(!t) return;
+        traced = true;
+        if(t === type) tot += parseFloat(wd[wn]) || 0;
+      });
     });
-    if(hasTk) return tot;
-    const wd = (recs||[]).reduce((s,r)=>s+_sumWagonDist(r), 0);
-    return typeCount > 1 ? wd / typeCount : wd;
+    return { kg: tot, traced: traced };
   }
 
   const pkInKgMap = {}; // key별 투입KG 누적
@@ -2750,10 +2763,11 @@ function renderDailyFromLocal_(d){
     const wdEntries = []; // {k, vv, wdSum}
     const noWdEntries = []; // [k, vv]
     relEntries.forEach(([k,vv]) => {
-      const types = (vv.type||'').split(',').map(t=>t.trim()).filter(Boolean);
-      const wdSum = _pkTypeKg(vv._recs, shType, types.length);
-      if(wdSum > 0){
-        wdEntries.push({k:k, vv:vv, wdSum:wdSum});
+      const t = _pkTypeKg(vv._recs, shType);
+      if(t.kg > 0){
+        wdEntries.push({k:k, vv:vv, wdSum:t.kg});
+      } else if(t.traced){
+        // 대차 추적이 됐는데 이 부위가 0 → 이 제품은 이 부위를 안 썼다
       } else {
         noWdEntries.push([k, vv]);
       }
@@ -2784,9 +2798,9 @@ function renderDailyFromLocal_(d){
     const wdEntries = []; const noWdEntries = [];
     let totalWdKg = 0;
     relEntries.forEach(([k,vv]) => {
-      const types = (vv.type||'').split(',').map(t=>t.trim()).filter(Boolean);
-      const wdSum = _pkTypeKg(vv._recs, rmType, types.length);
-      if(wdSum > 0){ wdEntries.push({k:k, vv:vv, wdSum:wdSum}); totalWdKg += wdSum; }
+      const t = _pkTypeKg(vv._recs, rmType);
+      if(t.kg > 0){ wdEntries.push({k:k, vv:vv, wdSum:t.kg}); totalWdKg += t.kg; }
+      else if(t.traced){ /* 이 부위 미사용 */ }
       else { noWdEntries.push([k, vv]); }
     });
     const totalRmKg = rmByType[rmType] || 0;
