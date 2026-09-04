@@ -3,10 +3,16 @@
 
 var _msBase = null;      // {date, items:{code:qty}, boxes:{part:qty}}
 var _msMaster = null;    // {code:{name,unit,category}}
+var _msSauce = null;     // {소스코드:{원료코드:kg당비율}}
 var _msUse = null;       // {code:qty}
 var _msBoxUse = null;    // {part:qty}
 var _msTo = '';          // 조회 종료일
 var _msCat = '전체';
+
+// 소스 코드 — FC 제품은 FC소스, 나머지는 FP소스
+var MS_SAUCE_FC = '200009';
+var MS_SAUCE_FP = '200011';
+var MS_WATER = '199999';   // 정제수 — 재고 관리 대상 아님
 
 // 부위 → 냉동 원육 코드
 var MS_PART = { '홍두깨':'100000', '홍두께':'100000', '설도':'100001', '우둔':'100025' };
@@ -29,12 +35,14 @@ var MS_CATS = ['전체','원육','원료부자재','파우치','포장재'];
 function msTod(){ return (typeof tod === 'function') ? tod() : new Date().toISOString().slice(0,10); }
 
 async function _msLoadMaster(){
-  if(_msBase && _msMaster) return;
+  if(_msBase && _msMaster && _msSauce) return;
   var db = firebase.firestore();
   var b = await db.doc('_config/stock_baseline').get();
   var m = await db.doc('_config/item_master').get();
+  var s = await db.doc('_config/sauce_recipe').get();
   _msBase = b.exists ? b.data() : null;
   _msMaster = (m.exists && m.data() && m.data().items) ? m.data().items : {};
+  _msSauce = (s.exists && s.data() && s.data().recipes) ? s.data().recipes : {};
 }
 
 // 기준일 다음날 ~ to 까지의 실적을 모아 자재 사용량 집계
@@ -62,13 +70,24 @@ async function _msCollectUse(from, to){
     if(pk2 && nb) add(boxUse, pk2, nb);
   });
 
-  // 내포장 → 파우치(실측 pouch), 부재료(subKg)
+  // 내포장 → 파우치(실측 pouch), 부재료(subKg), 소스(sauceKg → 배합비로 원료 환산)
   pk.forEach(function(r){
     var pc = MS_POUCH[r.product];
     var pouch = parseFloat(r.pouch)||0;
     if(pc && pouch) add(use, pc, pouch);
     var sub = parseFloat(r.subKg)||0;
     if(sub) add(use, '100015', sub);
+    var sauce = parseFloat(r.sauceKg)||0;
+    if(sauce){
+      var sc = (String(r.product||'').indexOf('FC') >= 0) ? MS_SAUCE_FC : MS_SAUCE_FP;
+      var mix = _msSauce[sc];
+      if(mix){
+        Object.keys(mix).forEach(function(code){
+          if(code === MS_WATER) return;           // 정제수는 재고 품목 아님
+          add(use, code, sauce * (parseFloat(mix[code])||0));
+        });
+      }
+    }
   });
 
   // 외포장 → 포장재(실측 actual)
@@ -206,7 +225,7 @@ function _msPaint(){
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
      + '집계 기간 ' + _msAddDay(_msBase.date,1) + ' ~ ' + _msTo + ' (' + days + '일) · 사용 품목 ' + usedCnt + '건<br>'
      + '차감 근거는 현장 실측 기록입니다. 원육=해동 투입중량, 파우치=내포장 pouch, 포장재=외포장 실사용수량.<br>'
-     + '소스(sauceKg)는 배합비가 없어 조미료 원료로 아직 환산되지 않습니다.'
+     + '조미료는 내포장 sauceKg에 소스 배합비(FC/FP)를 적용해 환산했습니다. 정제수는 재고 대상이 아니라 제외했습니다.'
      + '</div>';
   el.innerHTML = h;
 }
