@@ -629,6 +629,26 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       if(t) pkTypes.add(t);
     });
 
+    // packing.type이 비어 있으면(FC 3KG 등) 그 제품이 받은 대차를 배출한 파쇄 기록의 부위를 쓴다.
+    // 대차 → 파쇄는 직접 연결이라 정확하다. 자숙까지 거슬러 올라가면 부위가 대차를 공유해 섞인다.
+    if(pkTypes.size === 0){
+      var _pkW0 = new Set(), _pkC0 = new Set();
+      pkD.forEach(function(r){
+        _perfSplit(r.wagon).forEach(function(w){ _pkW0.add(w); });
+        _perfSplit(r.cart).forEach(function(c){ _pkC0.add(c); });
+      });
+      if(_pkW0.size || _pkC0.size){
+        sh.forEach(function(r){
+          if(d(r) !== date) return;
+          var hit = _perfSplit(r.wagonOut).some(function(w){ return _pkW0.has(w); }) ||
+                    _perfSplit(r.cartOut).some(function(c){ return _pkC0.has(c); });
+          if(!hit) return;
+          var t = String(r.type||'').trim();
+          if(t) pkTypes.add(t);
+        });
+      }
+    }
+
     // packing.type 명시되어 있으면 그 type만 thawing에서 가져옴
     if(pkTypes.size > 0){
       // thawing.date = 입고일이므로 date 만 보면 당일 입고됐지만 아직 안 풀린 박스도 매칭됨.
