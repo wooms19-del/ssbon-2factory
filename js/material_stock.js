@@ -6,6 +6,8 @@ var _msMaster = null;    // {code:{name,unit,category}}
 var _msSauce = null;     // {소스코드:{원료코드:kg당비율}}
 var _msUse = null;       // {code:qty}
 var _msBoxUse = null;    // {part:qty}
+var _msIn = null;        // {code:qty} 입고
+var _msBoxIn = null;     // {part:qty} 입고 박스
 var _msTo = '';          // 조회 종료일
 var _msCat = '전체';
 var _msView = 'status';  // 'status'(현황) | 'take'(재고조사)
@@ -110,6 +112,32 @@ async function _msCollectUse(from, to){
   return { use: use, boxUse: boxUse };
 }
 
+// 기준일 다음날 ~ to 까지의 입고 (원육=바코드 스캔 자동, 그 외=materialIn 수기)
+async function _msCollectIn(from, to){
+  var inQty = {}, inBox = {};
+  var add = function(o,k,v){ if(!k) return; o[k] = (o[k]||0) + v; };
+  var R = await Promise.all([
+    fbGetRange('barcode', from, to).catch(function(){return [];}),
+    fbGetRange('materialIn', from, to).catch(function(){return [];})
+  ]);
+  (R[0]||[]).forEach(function(r){
+    var code = MS_PART[String(r.part||'').trim()];
+    if(!code) return;
+    add(inQty, code, parseFloat(r.weightKg)||0);
+    var pk = MS_CODE2PART[code];
+    if(pk) add(inBox, pk, 1);
+  });
+  (R[1]||[]).forEach(function(r){
+    if(!r.code) return;
+    add(inQty, String(r.code), parseFloat(r.qty)||0);
+    if(r.boxes){
+      var pk2 = MS_CODE2PART[String(r.code)];
+      if(pk2) add(inBox, pk2, parseFloat(r.boxes)||0);
+    }
+  });
+  return { inQty: inQty, inBox: inBox };
+}
+
 async function renderMaterialStock(){
   var el = document.getElementById('p-mstock');
   if(!el) return;
@@ -128,6 +156,8 @@ async function renderMaterialStock(){
   var from = _msAddDay(_msBase.date, 1);
   var got = await _msCollectUse(from, _msTo);
   _msUse = got.use; _msBoxUse = got.boxUse;
+  var gotIn = await _msCollectIn(from, _msTo);
+  _msIn = gotIn.inQty; _msBoxIn = gotIn.inBox;
   _msPaint();
 }
 
@@ -139,6 +169,7 @@ function _msAddDay(d, n){
 
 function _msPaint(){
   if(_msView === 'take') return _msPaintTake();
+  if(_msView === 'in') return _msPaintIn();
   var el = document.getElementById('p-mstock');
   if(!el) return;
   var base = _msBase.items || {}, use = _msUse || {};
@@ -149,16 +180,18 @@ function _msPaint(){
     if(_msCat !== '전체' && cat !== _msCat) return;
     var b = parseFloat(base[code])||0;
     var u = parseFloat(use[code])||0;
+    var i = parseFloat((_msIn||{})[code])||0;
     var part = MS_CODE2PART[code];
-    var bxB = null, bxU = null;
+    var bxB = null, bxU = null, bxI = null;
     if(part){
       var bxAll = _msBase.boxes || {};
       bxB = parseFloat(bxAll[part]);
       if(isNaN(bxB)) bxB = null;
       bxU = parseFloat((_msBoxUse||{})[part]) || 0;
+      bxI = parseFloat((_msBoxIn||{})[part]) || 0;
     }
-    rows.push({ code:code, name:m.name||code, unit:m.unit||'', cat:cat, base:b, use:u, cur:b-u,
-                part:part, bxBase:bxB, bxUse:bxU });
+    rows.push({ code:code, name:m.name||code, unit:m.unit||'', cat:cat, base:b, use:u, inq:i, cur:b+i-u,
+                part:part, bxBase:bxB, bxUse:bxU, bxIn:bxI });
   });
   rows.sort(function(a,b){
     if(a.cat !== b.cat) return MS_CATS.indexOf(a.cat) - MS_CATS.indexOf(b.cat);
@@ -176,6 +209,7 @@ function _msPaint(){
   h += '<div style="display:flex;align-items:center;gap:8px">'
      + '<span style="font-size:12px;color:var(--g5)">기준일 다음날 ~</span>'
      + '<input type="date" id="msTo" class="fc" value="' + _msTo + '" onchange="msSetTo(this.value)" style="padding:6px 8px">'
+     + '<button class="btn bo bsm" onclick="msGoIn()" style="padding:6px 12px">입고 등록</button>'
      + '<button class="btn bo bsm" onclick="msGoTake()" style="padding:6px 12px">재고조사</button>'
      + '</div></div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
@@ -195,11 +229,11 @@ function _msPaint(){
       h += '<div style="font-size:13px;font-weight:600;margin-bottom:10px">원육 박스</div>';
       h += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
       bkeys.forEach(function(p){
-        var b = parseFloat(bx[p])||0, u = parseFloat((_msBoxUse||{})[p])||0;
+        var b = parseFloat(bx[p])||0, u = parseFloat((_msBoxUse||{})[p])||0, i = parseFloat((_msBoxIn||{})[p])||0;
         h += '<div style="flex:1;min-width:150px;background:var(--g1);border-radius:8px;padding:10px 12px">'
            + '<div style="font-size:12px;color:var(--g5)">' + p + '</div>'
-           + '<div style="font-size:20px;font-weight:600;margin-top:2px">' + (b-u).toLocaleString() + '<span style="font-size:12px;font-weight:400;color:var(--g5)"> 박스</span></div>'
-           + '<div style="font-size:11px;color:var(--g5);margin-top:2px">' + b.toLocaleString() + ' − ' + u.toLocaleString() + '</div>'
+           + '<div style="font-size:20px;font-weight:600;margin-top:2px">' + (b+i-u).toLocaleString() + '<span style="font-size:12px;font-weight:400;color:var(--g5)"> 박스</span></div>'
+           + '<div style="font-size:11px;color:var(--g5);margin-top:2px">' + b.toLocaleString() + ' + ' + i.toLocaleString() + ' − ' + u.toLocaleString() + '</div>'
            + '</div>';
       });
       h += '</div></div>';
@@ -212,6 +246,7 @@ function _msPaint(){
      + '<th style="padding:9px 10px;text-align:left;font-size:12px;color:var(--g6)">품목</th>'
      + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:80px">분류</th>'
      + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:110px">' + _msBase.date + '</th>'
+     + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:105px">입고</th>'
      + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:110px">사용</th>'
      + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:120px">현재고</th>'
      + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:100px">일평균</th>'
@@ -224,18 +259,20 @@ function _msPaint(){
     var left = per > 0 ? Math.floor(r.cur / per) : null;
     var curColor = r.cur < 0 ? '#dc2626' : (left !== null && left < 14 ? '#dc2626' : 'inherit');
     if(r.cat !== lastCat){
-      h += '<tr><td colspan="7" style="padding:7px 10px;background:var(--g1);font-size:11px;font-weight:600;color:var(--g6)">' + r.cat + '</td></tr>';
+      h += '<tr><td colspan="8" style="padding:7px 10px;background:var(--g1);font-size:11px;font-weight:600;color:var(--g6)">' + r.cat + '</td></tr>';
       lastCat = r.cat;
     }
     h += '<tr style="border-bottom:0.5px solid var(--g2)">';
     h += '<td style="padding:8px 10px">' + r.name + '<span style="font-size:11px;color:var(--g4);margin-left:6px">' + r.code + '</span></td>';
     h += '<td style="padding:8px 10px;text-align:center;font-size:11px;color:var(--g5)">' + r.cat + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;color:var(--g5)">' + _msN(r.base) + _msBox(r.bxBase) + '</td>';
+    h += '<td style="padding:8px 10px;text-align:right;' + (r.inq > 0 ? 'color:#1d4ed8' : 'color:var(--g4)') + '">'
+       + (r.inq > 0 ? '+' + _msN(r.inq) : '−') + (r.part && r.bxIn > 0 ? _msBox(r.bxIn, '+') : '') + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;' + (r.use > 0 ? 'color:#dc2626' : 'color:var(--g4)') + '">'
        + (r.use > 0 ? '−' + _msN(r.use) : '−') + (r.bxUse > 0 ? _msBox(r.bxUse, '−') : (r.part ? _msBox(0) : '')) + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;font-weight:600;color:' + curColor + '">' + _msN(r.cur)
        + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> ' + r.unit + '</span>'
-       + (r.bxBase !== null && r.bxBase !== undefined ? _msBox(r.bxBase - r.bxUse) : '') + '</td>';
+       + (r.bxBase !== null && r.bxBase !== undefined ? _msBox(r.bxBase + r.bxIn - r.bxUse) : '') + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;font-size:12px;color:var(--g5)">' + (per > 0 ? _msN(per) : '−') + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;font-size:12px;color:' + (left !== null && left < 14 ? '#dc2626' : 'var(--g5)') + '">' + (left !== null ? left + '일' : '−') + '</td>';
     h += '</tr>';
@@ -244,10 +281,131 @@ function _msPaint(){
 
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
      + '집계 기간 ' + _msAddDay(_msBase.date,1) + ' ~ ' + _msTo + ' (' + days + '일) · 사용 품목 ' + usedCnt + '건<br>'
+     + '현재고 = 기준 실사 + 입고 − 사용. 입고는 원육=바코드 스캔 중량, 그 외=입고 등록분.<br>'
      + '차감 근거는 현장 실측 기록입니다. 원육=해동 투입중량, 파우치=내포장 pouch, 포장재=외포장 실사용수량.<br>'
      + '조미료는 내포장 sauceKg에 소스 배합비(FC/FP)를 적용해 환산했습니다. 정제수는 재고 대상이 아니라 제외했습니다.'
      + '</div>';
   el.innerHTML = h;
+}
+
+/* ===== 자재 입고 등록 ===== */
+var _msInList = [];
+
+function msGoIn(){
+  _msView = 'in';
+  _msLoadInList().then(function(){ _msPaintIn(); });
+}
+async function _msLoadInList(){
+  var from = _msAddDay(_msBase.date, 1);
+  _msInList = await fbGetRange('materialIn', from, _msTo || msTod()).catch(function(){ return []; });
+  _msInList.sort(function(a,b){ return String(b.date) < String(a.date) ? -1 : 1; });
+}
+
+function _msPaintIn(){
+  var el = document.getElementById('p-mstock');
+  if(!el) return;
+  var opts = '';
+  var byCat = {};
+  Object.keys(_msBase.items||{}).forEach(function(code){
+    var m = _msMaster[code] || {};
+    var cat = m.category || '기타';
+    if(!byCat[cat]) byCat[cat] = [];
+    byCat[cat].push({ code:code, name:m.name||code, unit:m.unit||'' });
+  });
+  MS_CATS.slice(1).concat(['기타']).forEach(function(cat){
+    if(!byCat[cat]) return;
+    opts += '<optgroup label="' + cat + '">';
+    byCat[cat].forEach(function(x){
+      opts += '<option value="' + x.code + '">' + x.name + ' (' + x.unit + ')</option>';
+    });
+    opts += '</optgroup>';
+  });
+
+  var h = '';
+  h += '<div class="card" style="padding:14px 16px;margin-bottom:10px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">';
+  h += '<div><div style="font-size:16px;font-weight:600">자재 입고 등록</div>'
+     + '<div style="font-size:12px;color:var(--g5);margin-top:3px">원육은 바코드 스캔으로 자동 반영됩니다. 여기서는 부자재·파우치·포장재를 등록하세요.</div></div>';
+  h += '<button class="btn bo bsm" onclick="msGoStatus()" style="padding:6px 12px">현황으로</button>';
+  h += '</div>';
+
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:14px">';
+  h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">입고일</div>'
+     + '<input type="date" id="msInDate" class="fc" value="' + msTod() + '" style="padding:7px 8px"></div>';
+  h += '<div style="flex:1;min-width:220px"><div style="font-size:12px;color:var(--g5);margin-bottom:4px">품목</div>'
+     + '<select id="msInCode" class="fc" style="width:100%;padding:7px 8px">' + opts + '</select></div>';
+  h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">수량</div>'
+     + '<input type="number" step="any" id="msInQty" class="fc" placeholder="0" style="width:110px;padding:7px 8px;text-align:right"></div>';
+  h += '<div style="flex:1;min-width:140px"><div style="font-size:12px;color:var(--g5);margin-bottom:4px">비고</div>'
+     + '<input type="text" id="msInNote" class="fc" placeholder="거래처·로트 등" style="width:100%;padding:7px 8px"></div>';
+  h += '<button class="btn bp" onclick="msSaveIn()" style="padding:8px 18px">등록</button>';
+  h += '</div></div>';
+
+  h += '<div class="card" style="padding:0;overflow-x:auto">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+  h += '<thead><tr style="background:var(--g1)">'
+     + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:100px">입고일</th>'
+     + '<th style="padding:9px 10px;text-align:left;font-size:12px;color:var(--g6)">품목</th>'
+     + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:110px">수량</th>'
+     + '<th style="padding:9px 10px;text-align:left;font-size:12px;color:var(--g6);width:160px">비고</th>'
+     + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:60px"></th>'
+     + '</tr></thead><tbody>';
+  if(!_msInList.length){
+    h += '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--g5)">' + _msAddDay(_msBase.date,1) + ' 이후 등록된 자재 입고가 없습니다.</td></tr>';
+  }
+  _msInList.forEach(function(r){
+    var m = _msMaster[r.code] || {};
+    h += '<tr style="border-bottom:0.5px solid var(--g2)">';
+    h += '<td style="padding:8px 10px;text-align:center;color:var(--g5)">' + (r.date||'') + '</td>';
+    h += '<td style="padding:8px 10px">' + (m.name||r.code) + '<span style="font-size:11px;color:var(--g4);margin-left:6px">' + r.code + '</span></td>';
+    h += '<td style="padding:8px 10px;text-align:right;font-weight:600;color:#1d4ed8">+' + _msN(r.qty)
+       + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> ' + (m.unit||'') + '</span></td>';
+    h += '<td style="padding:8px 10px;font-size:12px;color:var(--g5)">' + (r.note||'') + '</td>';
+    h += '<td style="padding:8px 10px;text-align:center">'
+       + '<button class="btn bo bsm" style="padding:3px 9px;color:#dc2626" onclick="msDelIn(\'' + r.id + '\')">삭제</button></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
+     + '원육(홍두깨·설도·우둔)은 바코드 스캔 중량이 그대로 입고로 잡히므로 여기서 다시 넣지 마세요. 이중 반영됩니다.'
+     + '</div>';
+  el.innerHTML = h;
+}
+
+async function msSaveIn(){
+  var g = function(id){ var e = document.getElementById(id); return e ? e.value : ''; };
+  var date = g('msInDate'), code = g('msInCode'), qty = parseFloat(g('msInQty')), note = g('msInNote');
+  if(!date){ if(typeof toast==='function') toast('입고일을 선택하세요','w'); return; }
+  if(!code){ if(typeof toast==='function') toast('품목을 선택하세요','w'); return; }
+  if(isNaN(qty) || qty === 0){ if(typeof toast==='function') toast('수량을 입력하세요','w'); return; }
+  if(MS_CODE2PART[code]){
+    if(!confirm('원육은 바코드 스캔으로 이미 입고가 잡힙니다.\n그래도 등록하면 이중 반영됩니다.\n\n계속할까요?')) return;
+  }
+  var id = 'mi_' + date.replace(/-/g,'') + '_' + Date.now();
+  try{
+    await firebase.firestore().collection('materialIn').doc(id).set({
+      id: id, date: date, code: code, qty: qty, note: note || '',
+      _createdAt: new Date().toISOString()
+    });
+    var qEl = document.getElementById('msInQty'); if(qEl) qEl.value = '';
+    var nEl = document.getElementById('msInNote'); if(nEl) nEl.value = '';
+    if(typeof fbClearCache === 'function') fbClearCache('materialIn');
+    if(typeof toast==='function') toast('입고 등록 완료','s');
+    await _msLoadInList(); _msPaintIn();
+  }catch(e){
+    if(typeof toast==='function') toast('등록에 실패했습니다','w');
+  }
+}
+async function msDelIn(id){
+  if(!confirm('이 입고 기록을 삭제할까요?')) return;
+  try{
+    await firebase.firestore().collection('materialIn').doc(id).delete();
+    if(typeof fbClearCache === 'function') fbClearCache('materialIn');
+    if(typeof toast==='function') toast('삭제됨','s');
+    await _msLoadInList(); _msPaintIn();
+  }catch(e){
+    if(typeof toast==='function') toast('삭제에 실패했습니다','w');
+  }
 }
 
 /* ===== 재고조사 ===== */
@@ -277,11 +435,12 @@ function _msSaveDraft(){
   }, 1500);
 }
 
-// 전산재고 = 기준 실사 − 그 이후 사용
+// 전산재고 = 기준 실사 + 입고 − 사용
 function _msSysQty(code){
   var b = parseFloat((_msBase.items||{})[code])||0;
+  var i = parseFloat((_msIn||{})[code])||0;
   var u = parseFloat((_msUse||{})[code])||0;
-  return b - u;
+  return b + i - u;
 }
 function _msTakeRows(){
   var rows = [];
