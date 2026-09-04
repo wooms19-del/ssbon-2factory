@@ -63,9 +63,10 @@ async function _msCollectUse(from, to){
   var R = await Promise.all([
     fbGetRange('thawing', from, to).catch(function(){return [];}),
     fbGetRange('packing', from, to).catch(function(){return [];}),
-    fbGetRange('outerpacking', from, to).catch(function(){return [];})
+    fbGetRange('outerpacking', from, to).catch(function(){return [];}),
+    fbGetRange('sauce', from, to).catch(function(){return [];})
   ]);
-  var th = R[0]||[], pk = R[1]||[], op = R[2]||[];
+  var th = R[0]||[], pk = R[1]||[], op = R[2]||[], sc = R[3]||[];
 
   // 해동 → 냉동 원육 차감 (부위별 kg, 박스는 importCodes 길이)
   th.forEach(function(r){
@@ -78,24 +79,27 @@ async function _msCollectUse(from, to){
     if(pk2 && nb) add(boxUse, pk2, nb);
   });
 
-  // 내포장 → 파우치(실측 pouch), 부재료(subKg), 소스(sauceKg → 배합비로 원료 환산)
+  // 내포장 → 파우치(실측 pouch), 부재료(subKg)
+  // 소스 원료는 여기서 빼지 않는다. 원료가 실제로 나가는 시점은 소스 제조(sauce)다.
   pk.forEach(function(r){
     var pc = MS_POUCH[r.product];
     var pouch = parseFloat(r.pouch)||0;
     if(pc && pouch) add(use, pc, pouch);
     var sub = parseFloat(r.subKg)||0;
     if(sub) add(use, '100015', sub);
-    var sauce = parseFloat(r.sauceKg)||0;
-    if(sauce){
-      var sc = (String(r.product||'').indexOf('FC') >= 0) ? MS_SAUCE_FC : MS_SAUCE_FP;
-      var mix = _msSauce[sc];
-      if(mix){
-        Object.keys(mix).forEach(function(code){
-          if(code === MS_WATER) return;           // 정제수는 재고 품목 아님
-          add(use, code, sauce * (parseFloat(mix[code])||0));
-        });
-      }
-    }
+  });
+
+  // 소스 제조 → 배합비로 조미료 원료 차감
+  sc.forEach(function(r){
+    var kg = parseFloat(r.kg)||0;
+    if(!kg) return;
+    var code = (String(r.name||'').indexOf('FC') >= 0) ? MS_SAUCE_FC : MS_SAUCE_FP;
+    var mix = _msSauce[code];
+    if(!mix) return;
+    Object.keys(mix).forEach(function(c){
+      if(c === MS_WATER) return;          // 정제수는 재고 품목 아님
+      add(use, c, kg * (parseFloat(mix[c])||0));
+    });
   });
 
   // 외포장 → 포장재(실측 actual)
@@ -283,7 +287,7 @@ function _msPaint(){
      + '집계 기간 ' + _msAddDay(_msBase.date,1) + ' ~ ' + _msTo + ' (' + days + '일) · 사용 품목 ' + usedCnt + '건<br>'
      + '현재고 = 기준 실사 + 입고 − 사용. 입고는 원육=바코드 스캔 중량, 그 외=입고 등록분.<br>'
      + '차감 근거는 현장 실측 기록입니다. 원육=해동 투입중량, 파우치=내포장 pouch, 포장재=외포장 실사용수량.<br>'
-     + '조미료는 내포장 sauceKg에 소스 배합비(FC/FP)를 적용해 환산했습니다. 정제수는 재고 대상이 아니라 제외했습니다.'
+     + '조미료는 소스 제조(입력 → 소스) 기록에 배합비를 적용해 환산했습니다. 정제수는 재고 대상이 아니라 제외했습니다.'
      + '</div>';
   el.innerHTML = h;
 }
