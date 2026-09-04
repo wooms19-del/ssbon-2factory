@@ -116,27 +116,19 @@ async function _msCollectUse(from, to){
   return { use: use, boxUse: boxUse };
 }
 
-// 기준일 다음날 ~ to 까지의 입고 (원육=바코드 스캔 자동, 그 외=materialIn 수기)
+// 기준일 다음날 ~ to 까지의 입고 (materialIn 등록분)
+// 주의: barcode는 창고 입고가 아니라 '해동기 투입'이므로 입고로 잡지 않는다.
+//       원육 입고는 냉동창고로 들어올 때이며, 현재 그 기록이 없어 수기 등록으로 받는다.
 async function _msCollectIn(from, to){
   var inQty = {}, inBox = {};
   var add = function(o,k,v){ if(!k) return; o[k] = (o[k]||0) + v; };
-  var R = await Promise.all([
-    fbGetRange('barcode', from, to).catch(function(){return [];}),
-    fbGetRange('materialIn', from, to).catch(function(){return [];})
-  ]);
-  (R[0]||[]).forEach(function(r){
-    var code = MS_PART[String(r.part||'').trim()];
-    if(!code) return;
-    add(inQty, code, parseFloat(r.weightKg)||0);
-    var pk = MS_CODE2PART[code];
-    if(pk) add(inBox, pk, 1);
-  });
-  (R[1]||[]).forEach(function(r){
+  var rows = await fbGetRange('materialIn', from, to).catch(function(){return [];});
+  (rows||[]).forEach(function(r){
     if(!r.code) return;
     add(inQty, String(r.code), parseFloat(r.qty)||0);
     if(r.boxes){
-      var pk2 = MS_CODE2PART[String(r.code)];
-      if(pk2) add(inBox, pk2, parseFloat(r.boxes)||0);
+      var pk = MS_CODE2PART[String(r.code)];
+      if(pk) add(inBox, pk, parseFloat(r.boxes)||0);
     }
   });
   return { inQty: inQty, inBox: inBox };
@@ -285,7 +277,7 @@ function _msPaint(){
 
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
      + '집계 기간 ' + _msAddDay(_msBase.date,1) + ' ~ ' + _msTo + ' (' + days + '일) · 사용 품목 ' + usedCnt + '건<br>'
-     + '현재고 = 기준 실사 + 입고 − 사용. 입고는 원육=바코드 스캔 중량, 그 외=입고 등록분.<br>'
+     + '현재고 = 기준 실사 + 입고 − 사용. 입고는 입고 등록분입니다.<br>'
      + '차감 근거는 현장 실측 기록입니다. 원육=해동 투입중량, 파우치=내포장 pouch, 포장재=외포장 실사용수량.<br>'
      + '조미료는 소스 제조(입력 → 소스) 기록에 배합비를 적용해 환산했습니다. 정제수는 재고 대상이 아니라 제외했습니다.'
      + '</div>';
@@ -332,7 +324,7 @@ function _msPaintIn(){
   h += '<div class="card" style="padding:14px 16px;margin-bottom:10px">';
   h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">';
   h += '<div><div style="font-size:16px;font-weight:600">자재 입고 등록</div>'
-     + '<div style="font-size:12px;color:var(--g5);margin-top:3px">원육은 바코드 스캔으로 자동 반영됩니다. 여기서는 부자재·파우치·포장재를 등록하세요.</div></div>';
+     + '<div style="font-size:12px;color:var(--g5);margin-top:3px">냉동창고로 들어온 자재를 등록하세요. 원육 입고도 여기서 등록합니다.</div></div>';
   h += '<button class="btn bo bsm" onclick="msGoStatus()" style="padding:6px 12px">현황으로</button>';
   h += '</div>';
 
@@ -346,6 +338,9 @@ function _msPaintIn(){
      + '<input type="number" step="any" id="msInQty" class="fc" placeholder="0" style="width:120px;padding:7px 34px 7px 8px;text-align:right">'
      + '<span id="msInUnitSuf" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--g5);pointer-events:none">' + firstUnit + '</span>'
      + '</div></div>';
+  h += '<div id="msInBoxWrap" style="display:' + (MS_CODE2PART[firstCode] ? 'block' : 'none') + '">'
+     + '<div style="font-size:12px;color:var(--g5);margin-bottom:4px">박스 수</div>'
+     + '<input type="number" step="1" id="msInBoxes" class="fc" placeholder="0" style="width:90px;padding:7px 8px;text-align:right"></div>';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">제조일자</div>'
      + '<input type="date" id="msInMade" class="fc" style="padding:7px 8px"></div>';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">소비기한</div>'
@@ -373,7 +368,8 @@ function _msPaintIn(){
     h += '<td style="padding:8px 10px;text-align:center;color:var(--g5)">' + (r.date||'') + '</td>';
     h += '<td style="padding:8px 10px">' + (m.name||r.code) + '<span style="font-size:11px;color:var(--g4);margin-left:6px">' + r.code + '</span></td>';
     h += '<td style="padding:8px 10px;text-align:right;font-weight:600;color:#1d4ed8">+' + _msN(r.qty)
-       + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> ' + (m.unit||'') + '</span></td>';
+       + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> ' + (m.unit||'') + '</span>'
+       + (r.boxes ? '<div style="font-size:11px;font-weight:400;color:var(--g5)">' + _msN(r.boxes) + ' 박스</div>' : '') + '</td>';
     h += '<td style="padding:8px 10px;text-align:center;font-size:12px;color:var(--g5)">' + (r.made || '−') + '</td>';
     h += '<td style="padding:8px 10px;text-align:center;font-size:12px;color:' + ex.color + '">' + ex.text + '</td>';
     h += '<td style="padding:8px 10px;text-align:center">'
@@ -382,7 +378,8 @@ function _msPaintIn(){
   });
   h += '</tbody></table></div>';
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
-     + '원육(홍두깨·설도·우둔)은 바코드 스캔 중량이 그대로 입고로 잡히므로 여기서 다시 넣지 마세요. 이중 반영됩니다.'
+     + '해동기 바코드 스캔은 창고에서 꺼내 쓰는 기록이라 입고가 아닙니다. 원육이 창고로 들어올 때 여기에 등록하세요.<br>'
+     + '원육은 수량(kg)과 함께 박스 수도 넣으면 박스 재고에 반영됩니다.'
      + '</div>';
   el.innerHTML = h;
 }
@@ -398,6 +395,8 @@ function msInUnitSync(){
   if(suf) suf.textContent = u;
   var q = document.getElementById('msInQty');
   if(q) q.step = (u === 'EA') ? '1' : 'any';
+  var bw = document.getElementById('msInBoxWrap');
+  if(bw) bw.style.display = MS_CODE2PART[sel.value] ? 'block' : 'none';
 }
 
 // 소비기한 표시 — 남은 일수와 색상. 지났으면 강조, 30일 이내면 경고.
@@ -425,17 +424,16 @@ async function msSaveIn(){
   if(exp && exp < date){
     if(!confirm('소비기한이 입고일보다 이전입니다.\n그래도 등록할까요?')) return;
   }
-  if(MS_CODE2PART[code]){
-    if(!confirm('원육은 바코드 스캔으로 이미 입고가 잡힙니다.\n그래도 등록하면 이중 반영됩니다.\n\n계속할까요?')) return;
-  }
+  var boxes = parseFloat(g('msInBoxes'));
   var id = 'mi_' + date.replace(/-/g,'') + '_' + Date.now();
   try{
     await firebase.firestore().collection('materialIn').doc(id).set({
       id: id, date: date, code: code, qty: qty,
+      boxes: (MS_CODE2PART[code] && !isNaN(boxes)) ? boxes : 0,
       made: made || '', exp: exp || '',
       _createdAt: new Date().toISOString()
     });
-    ['msInQty','msInMade','msInExp'].forEach(function(x){
+    ['msInQty','msInMade','msInExp','msInBoxes'].forEach(function(x){
       var e = document.getElementById(x); if(e) e.value = '';
     });
     if(typeof fbClearCache === 'function') fbClearCache('materialIn');
