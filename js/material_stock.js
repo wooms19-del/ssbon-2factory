@@ -8,6 +8,10 @@ var _msUse = null;       // {code:qty}
 var _msBoxUse = null;    // {part:qty}
 var _msTo = '';          // 조회 종료일
 var _msCat = '전체';
+var _msView = 'status';  // 'status'(현황) | 'take'(재고조사)
+var _msTakeDate = '';    // 재고조사 기준일
+var _msTakeVals = {};    // {code: 실사값} — 입력 중 값
+var _msDraftTimer = null;
 
 // 소스 코드 — FC 제품은 FC소스, 나머지는 FP소스
 var MS_SAUCE_FC = '200009';
@@ -134,6 +138,7 @@ function _msAddDay(d, n){
 }
 
 function _msPaint(){
+  if(_msView === 'take') return _msPaintTake();
   var el = document.getElementById('p-mstock');
   if(!el) return;
   var base = _msBase.items || {}, use = _msUse || {};
@@ -171,6 +176,7 @@ function _msPaint(){
   h += '<div style="display:flex;align-items:center;gap:8px">'
      + '<span style="font-size:12px;color:var(--g5)">기준일 다음날 ~</span>'
      + '<input type="date" id="msTo" class="fc" value="' + _msTo + '" onchange="msSetTo(this.value)" style="padding:6px 8px">'
+     + '<button class="btn bo bsm" onclick="msGoTake()" style="padding:6px 12px">재고조사</button>'
      + '</div></div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
   MS_CATS.forEach(function(c){
@@ -242,6 +248,294 @@ function _msPaint(){
      + '조미료는 내포장 sauceKg에 소스 배합비(FC/FP)를 적용해 환산했습니다. 정제수는 재고 대상이 아니라 제외했습니다.'
      + '</div>';
   el.innerHTML = h;
+}
+
+/* ===== 재고조사 ===== */
+function msGoTake(){
+  _msView = 'take';
+  if(!_msTakeDate) _msTakeDate = _msTo || msTod();
+  _msLoadDraft().then(function(){ _msPaint(); });
+}
+function msGoStatus(){ _msView = 'status'; _msPaint(); }
+
+// 입력 중인 실사값은 Firestore 임시저장 — 다른 기기에서 이어서 작업 가능
+async function _msLoadDraft(){
+  try{
+    var d = await firebase.firestore().doc('_config/stocktake_draft').get();
+    if(d.exists && d.data()){
+      var v = d.data();
+      if(v.date === _msTakeDate && v.vals) _msTakeVals = v.vals;
+    }
+  }catch(e){}
+}
+function _msSaveDraft(){
+  if(_msDraftTimer) clearTimeout(_msDraftTimer);
+  _msDraftTimer = setTimeout(function(){
+    firebase.firestore().doc('_config/stocktake_draft').set({
+      date: _msTakeDate, vals: _msTakeVals, updatedAt: new Date().toISOString()
+    }).catch(function(){});
+  }, 1500);
+}
+
+// 전산재고 = 기준 실사 − 그 이후 사용
+function _msSysQty(code){
+  var b = parseFloat((_msBase.items||{})[code])||0;
+  var u = parseFloat((_msUse||{})[code])||0;
+  return b - u;
+}
+function _msTakeRows(){
+  var rows = [];
+  Object.keys(_msBase.items||{}).forEach(function(code){
+    var m = _msMaster[code] || {};
+    var cat = m.category || '기타';
+    if(_msCat !== '전체' && cat !== _msCat) return;
+    var sys = _msSysQty(code);
+    var act = _msTakeVals[code];
+    var has = (act !== undefined && act !== null && act !== '');
+    var diff = has ? (parseFloat(act) - sys) : null;
+    var rate = (has && sys !== 0) ? Math.abs(diff / sys * 100) : null;
+    rows.push({ code:code, name:m.name||code, unit:m.unit||'', cat:cat,
+                sys:sys, act:has?parseFloat(act):null, diff:diff, rate:rate });
+  });
+  rows.sort(function(a,b){
+    if(a.cat !== b.cat) return MS_CATS.indexOf(a.cat) - MS_CATS.indexOf(b.cat);
+    return a.code < b.code ? -1 : 1;
+  });
+  return rows;
+}
+
+// 일치 판정 — 소수 반올림 수준(0.05 또는 0.01%)의 차이는 같은 것으로 본다
+function _msSame(r){
+  if(r.diff === null) return false;
+  if(Math.abs(r.diff) < 0.05) return true;
+  return (r.sys !== 0 && Math.abs(r.diff / r.sys) < 0.0001);
+}
+function _msPaintTake(){
+  var el = document.getElementById('p-mstock');
+  if(!el) return;
+  var rows = _msTakeRows();
+  var done = rows.filter(function(r){ return r.act !== null; }).length;
+  var gap  = rows.filter(function(r){ return r.diff !== null && !_msSame(r); }).length;
+  var big  = rows.filter(function(r){ return r.rate !== null && r.rate > 5; }).length;
+  var same = done - gap;
+
+  var h = '';
+  h += '<div class="card" style="padding:14px 16px;margin-bottom:10px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">';
+  h += '<div><div style="font-size:16px;font-weight:600">재고조사</div>'
+     + '<div style="font-size:12px;color:var(--g5);margin-top:3px">전산재고 = ' + _msBase.date + ' 실사 − 이후 생산 차감</div></div>';
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+     + '<span style="font-size:12px;color:var(--g5)">기준일</span>'
+     + '<input type="date" class="fc" value="' + _msTakeDate + '" onchange="msSetTakeDate(this.value)" style="padding:6px 8px">'
+     + '<button class="btn bo bsm" onclick="msDownloadForm()" style="padding:6px 12px">양식 받기</button>'
+     + '<label class="btn bo bsm" style="padding:6px 12px;cursor:pointer;margin:0">업로드'
+     + '<input type="file" accept=".xlsx,.xls" onchange="msUploadForm(this)" style="display:none"></label>'
+     + '<button class="btn bp bsm" onclick="msConfirmTake()" style="padding:6px 14px">확정</button>'
+     + '<button class="btn bo bsm" onclick="msGoStatus()" style="padding:6px 12px">현황으로</button>'
+     + '</div></div>';
+
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-top:12px">';
+  h += _msStat('입력 완료', done + '<span style="font-size:13px;color:var(--g4);font-weight:400"> / ' + rows.length + '</span>', '');
+  h += _msStat('차이 발생', gap + '<span style="font-size:13px;color:var(--g4);font-weight:400"> 품목</span>', gap ? '#dc2626' : '');
+  h += _msStat('5% 초과', big + '<span style="font-size:13px;color:var(--g4);font-weight:400"> 품목</span>', big ? '#dc2626' : '');
+  h += _msStat('일치', same + '<span style="font-size:13px;color:var(--g4);font-weight:400"> 품목</span>', same ? '#1d4ed8' : '');
+  h += '</div>';
+
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
+  MS_CATS.forEach(function(c){
+    var on = (c === _msCat);
+    h += '<button class="btn bsm" onclick="msSetCat(\'' + c + '\')" style="padding:5px 12px;'
+       + (on ? 'background:#1d4ed8;color:#fff;border-color:#1d4ed8' : '') + '">' + c + '</button>';
+  });
+  h += '</div></div>';
+
+  h += '<div class="card" style="padding:0;overflow-x:auto">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:640px">';
+  h += '<thead><tr style="background:var(--g1)">'
+     + '<th style="padding:9px 10px;text-align:left;font-size:12px;color:var(--g6)">품목</th>'
+     + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:110px">전산재고</th>'
+     + '<th style="padding:9px 10px;text-align:center;font-size:12px;color:var(--g6);width:120px">실사</th>'
+     + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:100px">차이</th>'
+     + '<th style="padding:9px 10px;text-align:right;font-size:12px;color:var(--g6);width:80px">차이율</th>'
+     + '</tr></thead><tbody>';
+  var lastCat = '';
+  rows.forEach(function(r){
+    if(r.cat !== lastCat){
+      h += '<tr><td colspan="5" style="padding:7px 10px;background:var(--g1);font-size:11px;font-weight:600;color:var(--g6)">' + r.cat + '</td></tr>';
+      lastCat = r.cat;
+    }
+    var over = (r.rate !== null && r.rate > 5);
+    var dc = (r.diff === null) ? 'var(--g4)' : (_msSame(r) ? '#1d4ed8' : '#dc2626');
+    h += '<tr style="border-bottom:0.5px solid var(--g2);' + (over ? 'background:#fef2f2' : '') + '">';
+    h += '<td style="padding:8px 10px">' + r.name + '<span style="font-size:11px;color:var(--g4);margin-left:6px">' + r.code + '</span></td>';
+    h += '<td style="padding:8px 10px;text-align:right;color:var(--g5)">' + _msN(r.sys) + '</td>';
+    h += '<td style="padding:8px 10px;text-align:center">'
+       + '<input type="number" step="any" value="' + (r.act !== null ? r.act : '') + '" placeholder="입력"'
+       + ' oninput="msSetTakeVal(\'' + r.code + '\',this.value)"'
+       + ' style="width:96px;height:30px;text-align:right;font-size:13px;padding:0 8px;border:0.5px solid var(--g3);border-radius:6px"></td>';
+    h += '<td style="padding:8px 10px;text-align:right;color:' + dc + '">'
+       + (r.diff === null ? '−' : (r.diff > 0 ? '+' : '') + _msN(r.diff)) + '</td>';
+    h += '<td style="padding:8px 10px;text-align:right;font-size:12px;color:' + (over ? '#dc2626' : 'var(--g5)') + '">'
+       + (r.rate === null ? '−' : r.rate.toFixed(1) + '%') + '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
+     + '입력값은 자동 임시저장됩니다. 다른 기기에서 이어서 작업할 수 있습니다.<br>'
+     + '확정하면 실사값이 새 기준재고가 되고, 이후 생산은 이 값에서 차감됩니다. 직전 기준은 stocktake 이력에 보관됩니다.'
+     + '</div>';
+  el.innerHTML = h;
+}
+
+function _msStat(label, val, color){
+  return '<div style="background:var(--g1);border-radius:8px;padding:10px 12px">'
+       + '<div style="font-size:12px;color:var(--g5)">' + label + '</div>'
+       + '<div style="font-size:20px;font-weight:600;margin-top:2px;' + (color ? 'color:' + color : '') + '">' + val + '</div></div>';
+}
+function msSetTakeVal(code, v){
+  if(v === '' || v === null) delete _msTakeVals[code];
+  else _msTakeVals[code] = parseFloat(v);
+  _msSaveDraft();
+  _msRepaintDiff(code);
+}
+// 입력 중 전체 다시 그리면 포커스가 날아가므로 해당 행만 갱신
+function _msRepaintDiff(code){
+  var rows = _msTakeRows();
+  var r = null;
+  for(var i=0;i<rows.length;i++){ if(rows[i].code===code){ r=rows[i]; break; } }
+  if(!r) return;
+  var tds = document.querySelectorAll('#p-mstock tbody tr');
+  for(var j=0;j<tds.length;j++){
+    var inp = tds[j].querySelector('input');
+    if(!inp || inp.getAttribute('oninput').indexOf("'"+code+"'") < 0) continue;
+    var cells = tds[j].querySelectorAll('td');
+    var over = (r.rate !== null && r.rate > 5);
+    var dc = (r.diff === null) ? 'var(--g4)' : (_msSame(r) ? '#1d4ed8' : '#dc2626');
+    cells[3].style.color = dc;
+    cells[3].textContent = (r.diff === null ? '−' : (r.diff > 0 ? '+' : '') + _msN(r.diff));
+    cells[4].style.color = over ? '#dc2626' : 'var(--g5)';
+    cells[4].textContent = (r.rate === null ? '−' : r.rate.toFixed(1) + '%');
+    tds[j].style.background = over ? '#fef2f2' : '';
+    break;
+  }
+  _msUpdateStats();
+}
+function _msUpdateStats(){
+  var rows = _msTakeRows();
+  var done = rows.filter(function(r){ return r.act !== null; }).length;
+  var gap  = rows.filter(function(r){ return r.diff !== null && !_msSame(r); }).length;
+  var big  = rows.filter(function(r){ return r.rate !== null && r.rate > 5; }).length;
+  var boxes = document.querySelectorAll('#p-mstock .card:first-child div[style*="grid-template-columns"] > div');
+  if(boxes.length < 4) return;
+  var set = function(i, v, color){
+    var d = boxes[i].querySelectorAll('div')[1];
+    if(d){ d.innerHTML = v; d.style.color = color || ''; }
+  };
+  set(0, done + '<span style="font-size:13px;color:var(--g4);font-weight:400"> / ' + rows.length + '</span>');
+  set(1, gap + '<span style="font-size:13px;color:var(--g4);font-weight:400"> 품목</span>', gap ? '#dc2626' : '');
+  set(2, big + '<span style="font-size:13px;color:var(--g4);font-weight:400"> 품목</span>', big ? '#dc2626' : '');
+  set(3, (done-gap) + '<span style="font-size:13px;color:var(--g4);font-weight:400"> 품목</span>', (done-gap) ? '#1d4ed8' : '');
+}
+function msSetTakeDate(v){
+  if(!v) return;
+  _msTakeDate = v; _msTo = v; _msTakeVals = {};
+  renderMaterialStock().then(function(){ _msLoadDraft().then(function(){ _msPaint(); }); });
+}
+
+/* 엑셀 양식 다운로드 */
+function msDownloadForm(){
+  if(typeof XLSX === 'undefined'){ if(typeof toast==='function') toast('엑셀 모듈을 불러오지 못했습니다','w'); return; }
+  var rows = _msTakeRows();
+  var aoa = [['품목코드','품목명','분류','단위','전산재고','실사']];
+  rows.forEach(function(r){
+    aoa.push([r.code, r.name, r.cat, r.unit, Math.round(r.sys*100)/100, (r.act!==null?r.act:'')]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:10},{wch:34},{wch:11},{wch:6},{wch:12},{wch:12}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '재고조사');
+  XLSX.writeFile(wb, '재고조사_' + _msTakeDate + '.xlsx');
+}
+
+/* 엑셀 업로드 — 품목코드 + 실사 열만 읽음 */
+function msUploadForm(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ if(typeof toast==='function') toast('엑셀 모듈을 불러오지 못했습니다','w'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var aoa = XLSX.utils.sheet_to_json(ws, {header:1});
+      var head = (aoa[0]||[]).map(function(x){ return String(x||'').trim(); });
+      var ci = head.indexOf('품목코드'), vi = head.indexOf('실사');
+      if(ci < 0 || vi < 0){
+        if(typeof toast==='function') toast('양식이 다릅니다. 품목코드·실사 열이 필요합니다','w');
+        input.value=''; return;
+      }
+      var n = 0, skip = 0;
+      for(var i=1;i<aoa.length;i++){
+        var row = aoa[i]; if(!row) continue;
+        var code = String(row[ci]||'').trim();
+        var v = row[vi];
+        if(!code) continue;
+        if(v === '' || v === null || v === undefined) continue;
+        var num = parseFloat(String(v).replace(/,/g,''));
+        if(isNaN(num)){ skip++; continue; }
+        if(!(_msBase.items||{}).hasOwnProperty(code)){ skip++; continue; }
+        _msTakeVals[code] = num; n++;
+      }
+      _msSaveDraft();
+      _msPaint();
+      if(typeof toast==='function') toast(n + '건 반영' + (skip ? ' · ' + skip + '건 건너뜀' : ''), 's');
+    }catch(err){
+      if(typeof toast==='function') toast('엑셀을 읽지 못했습니다','w');
+    }
+    input.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* 확정 — 실사값을 새 기준재고로 */
+async function msConfirmTake(){
+  var rows = _msTakeRows();
+  var filled = rows.filter(function(r){ return r.act !== null; });
+  if(!filled.length){ if(typeof toast==='function') toast('입력된 실사값이 없습니다','w'); return; }
+  var all = Object.keys(_msBase.items||{}).length;
+  var msg = _msTakeDate + ' 기준으로 확정합니다.\n\n입력 ' + Object.keys(_msTakeVals).length + ' / ' + all + '건'
+          + '\n입력하지 않은 품목은 전산재고 값을 그대로 씁니다.\n\n확정하면 이 값이 새 기준재고가 됩니다.';
+  if(!confirm(msg)) return;
+  var db = firebase.firestore();
+  try{
+    // 직전 기준 백업
+    await db.collection('stocktake').doc('st_' + _msTakeDate).set({
+      date: _msTakeDate,
+      prevBase: _msBase,
+      actual: _msTakeVals,
+      confirmedAt: new Date().toISOString()
+    });
+    // 새 기준 = 실사값(없으면 전산재고)
+    var items = {};
+    Object.keys(_msBase.items||{}).forEach(function(code){
+      var v = _msTakeVals[code];
+      items[code] = (v !== undefined && v !== null && v !== '') ? parseFloat(v) : _msSysQty(code);
+    });
+    await db.doc('_config/stock_baseline').set({
+      date: _msTakeDate,
+      note: _msTakeDate + ' 재고조사 확정',
+      items: items,
+      boxes: _msBase.boxes || {},
+      updatedAt: new Date().toISOString()
+    });
+    await db.doc('_config/stocktake_draft').set({ date:'', vals:{}, updatedAt:new Date().toISOString() });
+    _msTakeVals = {}; _msBase = null; _msMaster = null; _msSauce = null;
+    _msView = 'status'; _msTo = '';
+    if(typeof toast==='function') toast('재고조사 확정 완료', 's');
+    renderMaterialStock();
+  }catch(e){
+    if(typeof toast==='function') toast('확정에 실패했습니다', 'w');
+  }
 }
 
 // 원육 행의 박스 수량 — kg 아래에 작게 병기
