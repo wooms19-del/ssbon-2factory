@@ -565,7 +565,9 @@
       var prod = r.product||'';
       if(!dt||!prod) return;
       var k = dt+'|'+prod;
-      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0, mins:[], types:{}, pouch:0, sauceKg:0, subKg:0, subName:''};
+      if(!byDP[k]) byDP[k] = {date:dt, product:prod, ea:0, hours:0, personHours:0, workers:0, mins:[], types:{}, pouch:0, sauceKg:0, subKg:0, subName:'', _wg:{}, _ct:{}};
+      String(r.wagon||'').split(',').forEach(function(w){ w=w.trim(); if(w) byDP[k]._wg[w]=1; });
+      String(r.cart||'').split(',').forEach(function(c){ c=c.trim(); if(c) byDP[k]._ct[c]=1; });
       byDP[k].ea += _num(r.ea);
       var h = _hoursFromSE(r.start, r.end);
       var w = _num(r.workers);
@@ -604,7 +606,21 @@
       var isNoMeat = _prodNoMeat(p.product);
       // 1) packing 자체의 type — kg(EA) 큰 순으로 모두 typeList에 포함
       var typeList = Object.keys(p.types).sort(function(a,b){return (p.types[b]||0)-(p.types[a]||0);});
-      // 2) packing에 type 없으면 → 그날 thawing 부위들 자동 추론 (noMeat 제외)
+      // 2-0) packing에 type 없으면 → 그 제품이 받은 대차를 배출한 파쇄 기록의 부위 (정확)
+      if(typeList.length === 0 && !isNoMeat){
+        var _shT = {};
+        shTagged.forEach(function(r){
+          if(String(r.date||'').slice(0,10) !== p.date) return;
+          var hit = String(r.wagonOut||'').split(',').some(function(w){ return p._wg[w.trim()]; }) ||
+                    String(r.cartOut||'').split(',').some(function(c){ return p._ct[c.trim()]; });
+          if(!hit) return;
+          var t2 = String(r._type||'').trim();
+          if(t2 && t2 !== '_') _shT[t2] = (_shT[t2]||0) + (_num(r.kgWashed)||_num(r.kg)||0);
+        });
+        var _shKeys = Object.keys(_shT);
+        if(_shKeys.length) typeList = _shKeys.sort(function(a,b){ return _shT[b]-_shT[a]; });
+      }
+      // 2) 그래도 없으면 → 그날 thawing 부위들 자동 추론 (noMeat 제외)
       if(typeList.length === 0 && !isNoMeat){
         var thTypes = {};
         Object.keys(thByDateType).forEach(function(thk){
