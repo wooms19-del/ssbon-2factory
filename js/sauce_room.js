@@ -13,8 +13,9 @@ var _srEditing = false;
 
 function srTod(){ return (typeof tod === 'function') ? tod() : new Date().toISOString().slice(0,10); }
 function _srAddDay(d, n){
-  var t = new Date(d + 'T00:00:00');
-  t.setDate(t.getDate() + n);
+  var p = String(d).split('-');
+  var t = new Date(Date.UTC(+p[0], (+p[1])-1, +p[2]));
+  t.setUTCDate(t.getUTCDate() + n);
   return t.toISOString().slice(0,10);
 }
 

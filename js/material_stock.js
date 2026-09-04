@@ -173,9 +173,11 @@ async function renderMaterialStock(){
   _msPaint();
 }
 
+// 날짜 ±n일. toISOString()은 UTC 기준이라 KST에서 하루 밀리므로 UTC로 계산한다.
 function _msAddDay(d, n){
-  var t = new Date(d + 'T00:00:00');
-  t.setDate(t.getDate() + n);
+  var p = String(d).split('-');
+  var t = new Date(Date.UTC(+p[0], (+p[1])-1, +p[2]));
+  t.setUTCDate(t.getUTCDate() + n);
   return t.toISOString().slice(0,10);
 }
 
