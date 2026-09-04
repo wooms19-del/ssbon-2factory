@@ -334,6 +334,7 @@ function _renderStockShell(){
         + '<button type="button" onclick="document.getElementById(\'stIn_type\').value=\'설도\'" style="padding:7px 10px;background:#fff;border:1px solid #d1d5db;border-radius:5px;font-size:12px;cursor:pointer">설도</button>'
         + '<input type="text" id="stIn_type" placeholder="직접입력" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px;width:100px"></div></div>'
       + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">박스 수</label><input type="number" id="stIn_boxes" min="1" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px;width:90px;text-align:right"></div>'
+      + '<div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">중량(kg)</label><input type="number" step="0.01" id="stIn_kg" placeholder="명세서 기준" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px;width:110px;text-align:right"></div>'
       + '<div style="flex:1;min-width:160px"><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px">메모</label><input type="text" id="stIn_note" placeholder="원산지/로트 등" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13px;width:100%"></div>'
       + '<button onclick="stockAdd()" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer">저장</button>'
     + '</div></div>';
@@ -486,11 +487,14 @@ async function stockAdd(){
   var date = document.getElementById('stIn_date').value;
   var type = String(document.getElementById('stIn_type').value||'').trim();
   var boxes = parseInt(document.getElementById('stIn_boxes').value, 10);
+  var kgEl = document.getElementById('stIn_kg');
+  var kg = kgEl ? parseFloat(kgEl.value) : NaN;
   var note = String(document.getElementById('stIn_note').value||'').trim();
   if(!date){ toast && toast('입고일','d'); return; }
   if(!type){ toast && toast('부위','d'); return; }
   if(!boxes || boxes<=0){ toast && toast('박스 수','d'); return; }
   var rec = { id: (typeof gid==='function')?gid():('stk_'+Date.now()), date:date, type:type, boxes:boxes, note:note };
+  if(!isNaN(kg) && kg > 0) rec.kg = kg;
   toast && toast('저장 중...','i');
   try {
     var fbId = await fbSave('stockIn', rec);

@@ -8,6 +8,7 @@ var _msUse = null;       // {code:qty}
 var _msBoxUse = null;    // {part:qty}
 var _msIn = null;        // {code:qty} 입고
 var _msBoxIn = null;     // {part:qty} 입고 박스
+var _msNoKg = [];        // 입고관리에 kg 없이 박스만 등록된 건
 var _msTo = '';          // 조회 종료일
 var _msCat = '전체';
 var _msView = 'status';  // 'status'(현황) | 'take'(재고조사)
@@ -116,22 +117,37 @@ async function _msCollectUse(from, to){
   return { use: use, boxUse: boxUse };
 }
 
-// 기준일 다음날 ~ to 까지의 입고 (materialIn 등록분)
+// 기준일 다음날 ~ to 까지의 입고
+//   원육  : stockIn(입고관리 탭) — 부위별 kg과 박스
+//   그 외 : materialIn(입고 등록)
 // 주의: barcode는 창고 입고가 아니라 '해동기 투입'이므로 입고로 잡지 않는다.
-//       원육 입고는 냉동창고로 들어올 때이며, 현재 그 기록이 없어 수기 등록으로 받는다.
 async function _msCollectIn(from, to){
   var inQty = {}, inBox = {};
   var add = function(o,k,v){ if(!k) return; o[k] = (o[k]||0) + v; };
-  var rows = await fbGetRange('materialIn', from, to).catch(function(){return [];});
-  (rows||[]).forEach(function(r){
+  var R = await Promise.all([
+    fbGetRange('stockIn', from, to).catch(function(){return [];}),
+    fbGetRange('materialIn', from, to).catch(function(){return [];})
+  ]);
+  var noKg = [];
+  (R[0]||[]).forEach(function(r){
+    var code = MS_PART[String(r.type||'').trim()];
+    if(!code) return;
+    var bx = parseFloat(r.boxes)||0;
+    var kg = parseFloat(r.kg)||0;
+    if(kg > 0) add(inQty, code, kg);
+    else if(bx > 0) noKg.push({ date:r.date, type:r.type, boxes:bx });
+    var pk = MS_CODE2PART[code];
+    if(pk && bx) add(inBox, pk, bx);
+  });
+  (R[1]||[]).forEach(function(r){
     if(!r.code) return;
     add(inQty, String(r.code), parseFloat(r.qty)||0);
     if(r.boxes){
-      var pk = MS_CODE2PART[String(r.code)];
-      if(pk) add(inBox, pk, parseFloat(r.boxes)||0);
+      var pk2 = MS_CODE2PART[String(r.code)];
+      if(pk2) add(inBox, pk2, parseFloat(r.boxes)||0);
     }
   });
-  return { inQty: inQty, inBox: inBox };
+  return { inQty: inQty, inBox: inBox, noKg: noKg };
 }
 
 async function renderMaterialStock(){
@@ -153,7 +169,7 @@ async function renderMaterialStock(){
   var got = await _msCollectUse(from, _msTo);
   _msUse = got.use; _msBoxUse = got.boxUse;
   var gotIn = await _msCollectIn(from, _msTo);
-  _msIn = gotIn.inQty; _msBoxIn = gotIn.inBox;
+  _msIn = gotIn.inQty; _msBoxIn = gotIn.inBox; _msNoKg = gotIn.noKg || [];
   _msPaint();
 }
 
@@ -214,7 +230,17 @@ function _msPaint(){
     h += '<button class="btn bsm" onclick="msSetCat(\'' + c + '\')" style="padding:5px 12px;'
        + (on ? 'background:#1d4ed8;color:#fff;border-color:#1d4ed8' : '') + '">' + c + '</button>';
   });
-  h += '</div></div>';
+  h += '</div>';
+  if(_msNoKg && _msNoKg.length){
+    var nbx = _msNoKg.reduce(function(s,x){ return s + x.boxes; }, 0);
+    h += '<div style="margin-top:12px;padding:9px 12px;background:#fffbeb;border-radius:8px;font-size:12px;color:#92400e">'
+       + '입고관리에 <strong>중량(kg) 없이 박스만</strong> 등록된 원육 입고가 ' + _msNoKg.length + '건(' + nbx.toLocaleString() + '박스) 있습니다. '
+       + 'kg이 없으면 재고 수량에 반영되지 않습니다.'
+       + '<div style="margin-top:5px;color:#a16207">'
+       + _msNoKg.slice(0,5).map(function(x){ return x.date + ' ' + x.type + ' ' + x.boxes.toLocaleString() + '박스'; }).join(' · ')
+       + (_msNoKg.length > 5 ? ' 외 ' + (_msNoKg.length-5) + '건' : '') + '</div></div>';
+  }
+  h += '</div>';
 
   // 원육 박스
   if(_msCat === '전체' || _msCat === '원육'){
@@ -277,7 +303,7 @@ function _msPaint(){
 
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
      + '집계 기간 ' + _msAddDay(_msBase.date,1) + ' ~ ' + _msTo + ' (' + days + '일) · 사용 품목 ' + usedCnt + '건<br>'
-     + '현재고 = 기준 실사 + 입고 − 사용. 입고는 입고 등록분입니다.<br>'
+     + '현재고 = 기준 실사 + 입고 − 사용. 입고는 원육=입고관리 탭, 그 외=입고 등록분입니다.<br>'
      + '차감 근거는 현장 실측 기록입니다. 원육=해동 투입중량, 파우치=내포장 pouch, 포장재=외포장 실사용수량.<br>'
      + '조미료는 소스 제조(입력 → 소스) 기록에 배합비를 적용해 환산했습니다. 정제수는 재고 대상이 아니라 제외했습니다.'
      + '</div>';
@@ -310,6 +336,7 @@ function _msPaintIn(){
   });
   var firstCode = '';
   MS_CATS.slice(1).concat(['기타']).forEach(function(cat){
+    if(cat === '원육') return;   // 원육은 입고관리 탭에서 등록
     if(!byCat[cat]) return;
     opts += '<optgroup label="' + cat + '">';
     byCat[cat].forEach(function(x){
@@ -324,7 +351,7 @@ function _msPaintIn(){
   h += '<div class="card" style="padding:14px 16px;margin-bottom:10px">';
   h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">';
   h += '<div><div style="font-size:16px;font-weight:600">자재 입고 등록</div>'
-     + '<div style="font-size:12px;color:var(--g5);margin-top:3px">냉동창고로 들어온 자재를 등록하세요. 원육 입고도 여기서 등록합니다.</div></div>';
+     + '<div style="font-size:12px;color:var(--g5);margin-top:3px">부자재·파우치·포장재 입고를 등록하세요. 원육은 실적관리 → 입고관리 탭에서 등록합니다.</div></div>';
   h += '<button class="btn bo bsm" onclick="msGoStatus()" style="padding:6px 12px">현황으로</button>';
   h += '</div>';
 
@@ -338,9 +365,6 @@ function _msPaintIn(){
      + '<input type="number" step="any" id="msInQty" class="fc" placeholder="0" style="width:120px;padding:7px 34px 7px 8px;text-align:right">'
      + '<span id="msInUnitSuf" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--g5);pointer-events:none">' + firstUnit + '</span>'
      + '</div></div>';
-  h += '<div id="msInBoxWrap" style="display:' + (MS_CODE2PART[firstCode] ? 'block' : 'none') + '">'
-     + '<div style="font-size:12px;color:var(--g5);margin-bottom:4px">박스 수</div>'
-     + '<input type="number" step="1" id="msInBoxes" class="fc" placeholder="0" style="width:90px;padding:7px 8px;text-align:right"></div>';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">제조일자</div>'
      + '<input type="date" id="msInMade" class="fc" style="padding:7px 8px"></div>';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">소비기한</div>'
@@ -378,8 +402,7 @@ function _msPaintIn(){
   });
   h += '</tbody></table></div>';
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
-     + '해동기 바코드 스캔은 창고에서 꺼내 쓰는 기록이라 입고가 아닙니다. 원육이 창고로 들어올 때 여기에 등록하세요.<br>'
-     + '원육은 수량(kg)과 함께 박스 수도 넣으면 박스 재고에 반영됩니다.'
+     + '원육(홍두깨·설도·우둔)은 입고관리 탭의 입고 기록에서 자동 반영됩니다. 여기서는 등록하지 않습니다.'
      + '</div>';
   el.innerHTML = h;
 }
@@ -395,8 +418,6 @@ function msInUnitSync(){
   if(suf) suf.textContent = u;
   var q = document.getElementById('msInQty');
   if(q) q.step = (u === 'EA') ? '1' : 'any';
-  var bw = document.getElementById('msInBoxWrap');
-  if(bw) bw.style.display = MS_CODE2PART[sel.value] ? 'block' : 'none';
 }
 
 // 소비기한 표시 — 남은 일수와 색상. 지났으면 강조, 30일 이내면 경고.
@@ -424,16 +445,14 @@ async function msSaveIn(){
   if(exp && exp < date){
     if(!confirm('소비기한이 입고일보다 이전입니다.\n그래도 등록할까요?')) return;
   }
-  var boxes = parseFloat(g('msInBoxes'));
   var id = 'mi_' + date.replace(/-/g,'') + '_' + Date.now();
   try{
     await firebase.firestore().collection('materialIn').doc(id).set({
       id: id, date: date, code: code, qty: qty,
-      boxes: (MS_CODE2PART[code] && !isNaN(boxes)) ? boxes : 0,
       made: made || '', exp: exp || '',
       _createdAt: new Date().toISOString()
     });
-    ['msInQty','msInMade','msInExp','msInBoxes'].forEach(function(x){
+    ['msInQty','msInMade','msInExp'].forEach(function(x){
       var e = document.getElementById(x); if(e) e.value = '';
     });
     if(typeof fbClearCache === 'function') fbClearCache('materialIn');
