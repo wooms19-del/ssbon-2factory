@@ -379,7 +379,21 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     if(!opMap[key]) opMap[key]={ea:0,boxes:0,tray:0,trayDef:0,unitCnt:0,boxDef:0};
     opMap[key].ea += opEa(r);
     opMap[key].boxes += parseInt(r.outerBoxes)||0;
-    opMap[key].tray += parseInt(r.trayUsed||r.tray)||0;
+    // 트레이: trayUsed 필드(코스트코·마트용) 우선, 없으면 자재 목록의 트레이 항목(맥스용 등)
+    // 주의: '트레이더스 장조림 460g'은 제품명이므로 트레이 자재가 아니다.
+    var _tray = parseFloat(r.trayUsed||r.tray)||0;
+    if(!_tray && Array.isArray(r.materials)){
+      r.materials.forEach(function(m){
+        if(!m) return;
+        var nm = String(m.name||'');
+        if(nm.indexOf('트레이') < 0) return;
+        if(nm.indexOf('트레이더스') >= 0) return;   // 제품명
+        if(nm === r.product) return;                // 제품 행
+        var v = (m.actual === null || m.actual === undefined || m.actual === '') ? m.theory : m.actual;
+        _tray += parseFloat(v)||0;
+      });
+    }
+    opMap[key].tray += _tray;
     opMap[key].trayDef += parseInt(r.trayDefect)||0;
     opMap[key].unitCnt += parseInt(r.unitCount||r.remainEa)||0;
     opMap[key].boxDef += parseInt(r.boxDefect)||0;
