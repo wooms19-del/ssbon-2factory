@@ -1,5 +1,4 @@
 // 소스저장실: 탱크별 잔량 = 실사 기준 + 제조(sauce) − 사용(packing.sauceTanks)
-// 상태: 사용중(오늘 출고 있음) / 대기중(잔량 있고 오늘 출고 없음) / 비어있음
 
 var SR_TANKS = ['1번탱크','2번탱크','3번탱크','4번탱크','5번탱크','6번탱크','7번탱크'];
 var SR_CAP = 2000;          // 탱크 1대 용량(kg) — 게이지 기준
@@ -8,9 +7,7 @@ var SR_EMPTY = 30;          // 이 값 이하면 비어있음으로 본다
 var _srBase = null;         // {date, tanks:{탱크:kg}}
 var _srMake = null;         // {탱크:kg} 기준일 이후 제조
 var _srUse = null;          // {탱크:kg} 기준일 이후 사용
-var _srToday = null;        // {탱크:kg} 오늘 사용 — 사용중 판정
 var _srName = null;         // {탱크:소스명}
-var _srManual = null;       // {탱크:'사용중'|'대기중'} 현장 수동 지정
 var _srVals = {};           // 실사 입력 중 값
 var _srEditing = false;
 
@@ -29,10 +26,8 @@ async function renderSauceRoom(){
   try{
     var b = await db.doc('_config/sauce_tank_baseline').get();
     _srBase = (b.exists && b.data()) ? b.data() : { date: '', tanks: {} };
-    var s = await db.doc('_config/sauce_tank_status').get();
-    _srManual = (s.exists && s.data() && s.data().status) ? s.data().status : {};
   }catch(e){
-    _srBase = { date: '', tanks: {} }; _srManual = {};
+    _srBase = { date: '', tanks: {} };
   }
   var today = srTod();
   var from = _srBase.date ? _srAddDay(_srBase.date, 1) : _srAddDay(today, -60);
@@ -41,7 +36,7 @@ async function renderSauceRoom(){
     fbGetRange('sauce', from, today).catch(function(){ return []; }),
     fbGetRange('packing', from, today).catch(function(){ return []; })
   ]);
-  var mk = {}, us = {}, td = {}, nm = {};
+  var mk = {}, us = {}, nm = {};
   (R[0]||[]).forEach(function(r){
     var t = r.tank; if(!t) return;
     mk[t] = (mk[t]||0) + (parseFloat(r.kg)||0);
@@ -50,12 +45,10 @@ async function renderSauceRoom(){
   (R[1]||[]).forEach(function(r){
     (r.sauceTanks||[]).forEach(function(x){
       if(!x || !x.tank) return;
-      var v = parseFloat(x.kg)||0;
-      us[x.tank] = (us[x.tank]||0) + v;
-      if(String(r.date).slice(0,10) === today) td[x.tank] = (td[x.tank]||0) + v;
+      us[x.tank] = (us[x.tank]||0) + (parseFloat(x.kg)||0);
     });
   });
-  _srMake = mk; _srUse = us; _srToday = td; _srName = nm;
+  _srMake = mk; _srUse = us; _srName = nm;
   _srPaint();
 }
 
@@ -65,13 +58,8 @@ function _srRows(){
     if(isNaN(base)) base = 0;
     var mk = _srMake[t]||0, us = _srUse[t]||0;
     var qty = base + mk - us;
-    var st;
-    if(_srManual[t] === '사용중' || _srManual[t] === '대기중') st = _srManual[t];
-    else if((_srToday[t]||0) > 0) st = '사용중';
-    else if(qty > SR_EMPTY) st = '대기중';
-    else st = '비어있음';
     return { tank:t, no:t.replace('번탱크',''), base:base, mk:mk, us:us, qty:qty,
-             name:_srName[t] || '', st:st, manual: !!_srManual[t] };
+             name:_srName[t] || '' };
   });
 }
 
@@ -81,7 +69,6 @@ function _srPaint(){
   var rows = _srRows();
   var total = rows.reduce(function(s,r){ return s + Math.max(0, r.qty); }, 0);
   var neg = rows.filter(function(r){ return r.qty < -SR_EMPTY; });
-  var using = rows.filter(function(r){ return r.st === '사용중'; }).length;
 
   var h = '';
   h += '<div class="card" style="padding:14px 16px;margin-bottom:10px">';
@@ -90,7 +77,7 @@ function _srPaint(){
      + '<div style="font-size:12px;color:var(--g5);margin-top:3px">잔량 = 실사 + 제조 − 사용'
      + (_srBase.date ? ' · 마지막 실사 ' + _srBase.date : ' · 실사 기록 없음') + '</div></div>';
   h += '<div style="display:flex;align-items:center;gap:10px">'
-     + '<span style="font-size:13px;color:var(--g5)">사용중 <strong style="color:var(--p)">' + using + '</strong>대 · 총 <strong style="color:var(--g7)">' + Math.round(total).toLocaleString() + '</strong> kg</span>'
+     + '<span style="font-size:13px;color:var(--g5)">총 <strong style="color:var(--g7)">' + Math.round(total).toLocaleString() + '</strong> kg</span>'
      + (_srEditing
         ? '<button class="btn bp bsm" onclick="srSaveCount()" style="padding:6px 14px">실사 저장</button>'
           + '<button class="btn bo bsm" onclick="srCancelCount()" style="padding:6px 12px">취소</button>'
@@ -115,8 +102,7 @@ function _srPaint(){
   h += '</div></div>';
 
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
-     + '제조는 소스 탭, 사용은 포장 탭의 소스 탱크 기록에서 자동 반영됩니다.<br>'
-     + '상태는 오늘 출고가 있으면 사용중, 소스가 남아 있으면 대기중으로 자동 판정합니다. 배지를 눌러 직접 바꿀 수 있습니다.'
+     + '제조는 소스 탭, 사용은 포장 탭의 소스 탱크 기록에서 자동 반영됩니다. 내포장이 종료될 때 해당 탱크에서 차감됩니다.'
      + '</div>';
   el.innerHTML = h;
 }
@@ -124,24 +110,17 @@ function _srPaint(){
 function _srCard(r){
   var low = (r.qty > SR_EMPTY && r.qty < SR_CAP * 0.15);
   var isNeg = (r.qty < -SR_EMPTY);
-  var empty = (r.st === '비어있음');
+  var empty = (r.qty <= SR_EMPTY && r.qty >= -SR_EMPTY);
   var pct = Math.max(0, Math.min(100, r.qty / SR_CAP * 100));
   var qtyColor = isNeg ? '#dc2626' : (low ? '#dc2626' : (empty ? 'var(--g4)' : 'var(--g7)'));
   var barColor = isNeg ? '#dc2626' : (low ? '#dc2626' : (empty ? 'var(--g3)' : '#1d4ed8'));
-  var stStyle = {
-    '사용중': 'background:#1d4ed8;color:#fff',
-    '대기중': 'background:#e0e7ff;color:#3730a3',
-    '비어있음': 'background:var(--g1);color:var(--g5)'
-  }[r.st];
   var isFC = (r.name.indexOf('FC') >= 0);
 
   var h = '<div style="background:var(--g0,#fff);border:' + (_srEditing ? '1.5px solid #1d4ed8' : '0.5px solid ' + (isNeg ? '#fecaca' : 'var(--g2)')) + ';border-radius:10px;padding:11px 12px">';
   h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">';
   h += '<span style="font-size:14px;font-weight:600">' + r.no + '번</span>';
-  h += '<button onclick="srToggle(\'' + r.tank + '\')" style="border:none;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;cursor:pointer;' + stStyle + '">'
-     + r.st + (r.manual ? '<span style="font-size:9px;margin-left:3px">고정</span>' : '') + '</button>';
+  h += (r.name ? '<span style="font-size:11px;font-weight:600;color:' + (isFC ? '#dc2626' : 'var(--p)') + '">' + (isFC ? 'FC' : 'FP') + '</span>' : '');
   h += '</div>';
-  h += '<div style="font-size:11px;color:' + (isFC ? '#dc2626' : 'var(--p)') + ';margin-top:3px;height:14px">' + (r.name ? (isFC ? 'FC' : 'FP') : '') + '</div>';
   h += '<div style="font-size:22px;font-weight:600;margin-top:2px;color:' + qtyColor + '">'
      + Math.round(r.qty).toLocaleString() + '<span style="font-size:12px;font-weight:400;color:var(--g5)"> kg</span></div>';
   h += '<div style="height:5px;background:var(--g1);border-radius:3px;margin:7px 0 6px;overflow:hidden">'
@@ -197,15 +176,3 @@ async function srSaveCount(){
   }
 }
 
-// 배지 클릭 — 자동 → 사용중 → 대기중 → 자동
-async function srToggle(tank){
-  var cur = _srManual[tank];
-  var next = (!cur) ? '사용중' : (cur === '사용중' ? '대기중' : '');
-  if(next) _srManual[tank] = next; else delete _srManual[tank];
-  _srPaint();
-  try{
-    await firebase.firestore().doc('_config/sauce_tank_status').set({
-      status: _srManual, updatedAt: new Date().toISOString()
-    });
-  }catch(e){}
-}
