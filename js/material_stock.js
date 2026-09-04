@@ -16,6 +16,8 @@ var MS_WATER = '199999';   // 정제수 — 재고 관리 대상 아님
 
 // 부위 → 냉동 원육 코드
 var MS_PART = { '홍두깨':'100000', '홍두께':'100000', '설도':'100001', '우둔':'100025' };
+// 원육 코드 → 박스 집계 키 (baseline.boxes 및 _msBoxUse의 키)
+var MS_CODE2PART = { '100000':'홍두께', '100001':'설도', '100025':'우둔' };
 // 제품 → 파우치 코드
 var MS_POUCH = {
   '코스트코 장조림 170g':'400005',
@@ -142,7 +144,16 @@ function _msPaint(){
     if(_msCat !== '전체' && cat !== _msCat) return;
     var b = parseFloat(base[code])||0;
     var u = parseFloat(use[code])||0;
-    rows.push({ code:code, name:m.name||code, unit:m.unit||'', cat:cat, base:b, use:u, cur:b-u });
+    var part = MS_CODE2PART[code];
+    var bxB = null, bxU = null;
+    if(part){
+      var bxAll = _msBase.boxes || {};
+      bxB = parseFloat(bxAll[part]);
+      if(isNaN(bxB)) bxB = null;
+      bxU = parseFloat((_msBoxUse||{})[part]) || 0;
+    }
+    rows.push({ code:code, name:m.name||code, unit:m.unit||'', cat:cat, base:b, use:u, cur:b-u,
+                part:part, bxBase:bxB, bxUse:bxU });
   });
   rows.sort(function(a,b){
     if(a.cat !== b.cat) return MS_CATS.indexOf(a.cat) - MS_CATS.indexOf(b.cat);
@@ -213,9 +224,12 @@ function _msPaint(){
     h += '<tr style="border-bottom:0.5px solid var(--g2)">';
     h += '<td style="padding:8px 10px">' + r.name + '<span style="font-size:11px;color:var(--g4);margin-left:6px">' + r.code + '</span></td>';
     h += '<td style="padding:8px 10px;text-align:center;font-size:11px;color:var(--g5)">' + r.cat + '</td>';
-    h += '<td style="padding:8px 10px;text-align:right;color:var(--g5)">' + _msN(r.base) + '</td>';
-    h += '<td style="padding:8px 10px;text-align:right;' + (r.use > 0 ? 'color:#dc2626' : 'color:var(--g4)') + '">' + (r.use > 0 ? '−' + _msN(r.use) : '−') + '</td>';
-    h += '<td style="padding:8px 10px;text-align:right;font-weight:600;color:' + curColor + '">' + _msN(r.cur) + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> ' + r.unit + '</span></td>';
+    h += '<td style="padding:8px 10px;text-align:right;color:var(--g5)">' + _msN(r.base) + _msBox(r.bxBase) + '</td>';
+    h += '<td style="padding:8px 10px;text-align:right;' + (r.use > 0 ? 'color:#dc2626' : 'color:var(--g4)') + '">'
+       + (r.use > 0 ? '−' + _msN(r.use) : '−') + (r.bxUse > 0 ? _msBox(r.bxUse, '−') : (r.part ? _msBox(0) : '')) + '</td>';
+    h += '<td style="padding:8px 10px;text-align:right;font-weight:600;color:' + curColor + '">' + _msN(r.cur)
+       + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> ' + r.unit + '</span>'
+       + (r.bxBase !== null && r.bxBase !== undefined ? _msBox(r.bxBase - r.bxUse) : '') + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;font-size:12px;color:var(--g5)">' + (per > 0 ? _msN(per) : '−') + '</td>';
     h += '<td style="padding:8px 10px;text-align:right;font-size:12px;color:' + (left !== null && left < 14 ? '#dc2626' : 'var(--g5)') + '">' + (left !== null ? left + '일' : '−') + '</td>';
     h += '</tr>';
@@ -230,6 +244,14 @@ function _msPaint(){
   el.innerHTML = h;
 }
 
+// 원육 행의 박스 수량 — kg 아래에 작게 병기
+function _msBox(v, sign){
+  if(v === null || v === undefined) return '';
+  var n = Number(v);
+  if(!isFinite(n)) return '';
+  var txt = (n === 0 && sign) ? '0' : ((sign || '') + Math.round(n).toLocaleString());
+  return '<br><span style="font-size:11px;font-weight:400;color:var(--g4)">' + txt + ' 박스</span>';
+}
 function _msN(v){
   if(v === null || v === undefined) return '−';
   var n = Number(v);
