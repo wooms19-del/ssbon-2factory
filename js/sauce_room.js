@@ -96,6 +96,10 @@ function _srPaint(){
           + '<button class="btn bo bsm" onclick="srCancelCount()" style="padding:6px 12px">취소</button>'
         : '<button class="btn bo bsm" onclick="srStartCount()" style="padding:6px 12px">잔량 실사</button>')
      + '</div></div>';
+  if(_srEditing){
+    h += '<div style="margin-top:12px;padding:10px 12px;background:#eff6ff;border-radius:8px;font-size:12px;color:#1e40af">'
+       + '탱크마다 실제로 재신 잔량을 입력하세요. 계산값이 미리 채워져 있으니 맞는 탱크는 그대로 두시면 됩니다. 다 넣으신 뒤 <strong>실사 저장</strong>을 누르세요.</div>';
+  }
   if(neg.length){
     h += '<div style="margin-top:12px;padding:9px 12px;background:#fef2f2;border-radius:8px;font-size:12px;color:#dc2626">'
        + neg.map(function(r){ return r.no + '번'; }).join(', ') + '번 탱크 잔량이 음수입니다. 실사 기준이 없거나 이전 소스가 남아 있던 경우입니다. 잔량 실사로 맞춰주세요.</div>';
@@ -131,7 +135,7 @@ function _srCard(r){
   }[r.st];
   var isFC = (r.name.indexOf('FC') >= 0);
 
-  var h = '<div style="background:var(--g0,#fff);border:0.5px solid ' + (isNeg ? '#fecaca' : 'var(--g2)') + ';border-radius:10px;padding:11px 12px">';
+  var h = '<div style="background:var(--g0,#fff);border:' + (_srEditing ? '1.5px solid #1d4ed8' : '0.5px solid ' + (isNeg ? '#fecaca' : 'var(--g2)')) + ';border-radius:10px;padding:11px 12px">';
   h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">';
   h += '<span style="font-size:14px;font-weight:600">' + r.no + '번</span>';
   h += '<button onclick="srToggle(\'' + r.tank + '\')" style="border:none;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;cursor:pointer;' + stStyle + '">'
@@ -148,8 +152,14 @@ function _srCard(r){
      + '</div>';
   if(_srEditing){
     var v = (_srVals[r.tank] !== undefined) ? _srVals[r.tank] : Math.round(r.qty);
-    h += '<input type="number" step="any" value="' + v + '" oninput="srSetVal(\'' + r.tank + '\',this.value)"'
-       + ' style="width:100%;height:30px;margin-top:8px;text-align:right;font-size:13px;padding:0 8px;border:0.5px solid var(--g3);border-radius:6px">';
+    h += '<div style="margin-top:9px;padding-top:9px;border-top:1px dashed var(--g2)">'
+       + '<div style="font-size:11px;font-weight:600;color:#1d4ed8;margin-bottom:4px">실제 잔량 입력</div>'
+       + '<div style="position:relative">'
+       + '<input type="number" step="any" inputmode="decimal" value="' + v + '" onfocus="this.select()" oninput="srSetVal(\'' + r.tank + '\',this.value)"'
+       + ' style="width:100%;height:42px;box-sizing:border-box;text-align:right;font-size:17px;font-weight:600;'
+       + 'padding:0 34px 0 10px;border:2px solid #1d4ed8;border-radius:8px;background:#fff;color:var(--g7)">'
+       + '<span style="position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--g5);pointer-events:none">kg</span>'
+       + '</div></div>';
   }
   h += '</div>';
   return h;
