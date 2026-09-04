@@ -9,6 +9,7 @@ var _srMake = null;         // {탱크:kg} 기준일 이후 제조
 var _srUse = null;          // {탱크:kg} 기준일 이후 사용
 var _srName = null;         // {탱크:소스명}
 var _srVals = {};           // 실사 입력 중 값
+var _srKinds = {};          // 실사 입력 중 소스 종류
 var _srEditing = false;
 
 function srTod(){ return (typeof tod === 'function') ? tod() : new Date().toISOString().slice(0,10); }
@@ -58,9 +59,11 @@ function _srRows(){
     var base = parseFloat((_srBase.tanks||{})[t]);
     if(isNaN(base)) base = 0;
     var mk = _srMake[t]||0, us = _srUse[t]||0;
-    var qty = base + mk - us;
-    return { tank:t, no:t.replace('번탱크',''), base:base, mk:mk, us:us, qty:qty,
-             name:_srName[t] || '' };
+    // 소스 종류: 기준일 이후 제조 기록이 있으면 그것, 없으면 실사 때 지정한 값
+    var kind = _srName[t] ? (String(_srName[t]).indexOf('FC') >= 0 ? 'FC' : 'FP')
+                          : ((_srBase.kinds||{})[t] || '');
+    return { tank:t, no:t.replace('번탱크',''), base:base, mk:mk, us:us, qty:base + mk - us,
+             kind:kind, fromMake: !!_srName[t] };
   });
 }
 
@@ -103,7 +106,8 @@ function _srPaint(){
   h += '</div></div>';
 
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
-     + '제조는 소스 탭, 사용은 포장 탭의 소스 탱크 기록에서 자동 반영됩니다. 내포장이 종료될 때 해당 탱크에서 차감됩니다.'
+     + '제조는 소스 탭, 사용은 포장 탭의 소스 탱크 기록에서 자동 반영됩니다. 내포장이 종료될 때 해당 탱크에서 차감됩니다.<br>'
+     + '소스 종류는 실사 이후 제조 기록이 있으면 그 소스로 바뀌고, 없으면 실사 때 지정한 값이 <span style="color:var(--g4)">지정</span> 표시와 함께 유지됩니다.'
      + '</div>';
   el.innerHTML = h;
 }
@@ -115,12 +119,13 @@ function _srCard(r){
   var pct = Math.max(0, Math.min(100, r.qty / SR_CAP * 100));
   var qtyColor = isNeg ? '#dc2626' : (low ? '#dc2626' : (empty ? 'var(--g4)' : 'var(--g7)'));
   var barColor = isNeg ? '#dc2626' : (low ? '#dc2626' : (empty ? 'var(--g3)' : '#1d4ed8'));
-  var isFC = (r.name.indexOf('FC') >= 0);
+  var isFC = (r.kind === 'FC');
 
   var h = '<div style="background:var(--g0,#fff);border:' + (_srEditing ? '1.5px solid #1d4ed8' : '0.5px solid ' + (isNeg ? '#fecaca' : 'var(--g2)')) + ';border-radius:10px;padding:11px 12px">';
   h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">';
   h += '<span style="font-size:14px;font-weight:600">' + r.no + '번</span>';
-  h += (r.name ? '<span style="font-size:11px;font-weight:600;color:' + (isFC ? '#dc2626' : 'var(--p)') + '">' + (isFC ? 'FC' : 'FP') + '</span>' : '');
+  h += (r.kind ? '<span style="font-size:11px;font-weight:600;color:' + (isFC ? '#dc2626' : 'var(--p)') + '">' + r.kind
+        + (r.fromMake ? '' : '<span style="font-size:9px;color:var(--g4);margin-left:2px">지정</span>') + '</span>' : '');
   h += '</div>';
   h += '<div style="font-size:22px;font-weight:600;margin-top:2px;color:' + qtyColor + '">'
      + Math.round(r.qty).toLocaleString() + '<span style="font-size:12px;font-weight:400;color:var(--g5)"> kg</span></div>';
@@ -132,7 +137,20 @@ function _srCard(r){
      + '</div>';
   if(_srEditing){
     var v = (_srVals[r.tank] !== undefined) ? _srVals[r.tank] : Math.round(r.qty);
+    var k = (_srKinds[r.tank] !== undefined) ? _srKinds[r.tank] : r.kind;
     h += '<div style="margin-top:9px;padding-top:9px;border-top:1px dashed var(--g2)">'
+       + '<div style="font-size:11px;font-weight:600;color:#1d4ed8;margin-bottom:4px">소스 종류</div>'
+       + '<div style="display:flex;gap:4px;margin-bottom:8px">'
+       + ['FP','FC',''].map(function(opt){
+           var on = (k === opt);
+           var lbl = opt || '비움';
+           var col = opt === 'FC' ? '#dc2626' : (opt === 'FP' ? '#1d4ed8' : 'var(--g5)');
+           return '<button onclick="srSetKind(\'' + r.tank + '\',\'' + opt + '\')"'
+                + ' style="flex:1;height:30px;font-size:12px;font-weight:600;cursor:pointer;border-radius:6px;'
+                + (on ? 'background:' + col + ';color:#fff;border:1.5px solid ' + col
+                      : 'background:#fff;color:' + col + ';border:1px solid var(--g3)') + '">' + lbl + '</button>';
+         }).join('')
+       + '</div>'
        + '<div style="font-size:11px;font-weight:600;color:#1d4ed8;margin-bottom:4px">실제 잔량 입력</div>'
        + '<div style="position:relative">'
        + '<input type="number" step="any" inputmode="decimal" value="' + v + '" onfocus="this.select()" oninput="srSetVal(\'' + r.tank + '\',this.value)"'
@@ -146,12 +164,16 @@ function _srCard(r){
 }
 
 function srStartCount(){
-  _srEditing = true; _srVals = {};
-  _srRows().forEach(function(r){ _srVals[r.tank] = Math.round(r.qty); });
+  _srEditing = true; _srVals = {}; _srKinds = {};
+  _srRows().forEach(function(r){
+    _srVals[r.tank] = Math.max(0, Math.round(r.qty));   // 음수는 0부터 시작
+    _srKinds[r.tank] = r.kind;
+  });
   _srPaint();
 }
-function srCancelCount(){ _srEditing = false; _srVals = {}; _srPaint(); }
+function srCancelCount(){ _srEditing = false; _srVals = {}; _srKinds = {}; _srPaint(); }
 function srSetVal(tank, v){ _srVals[tank] = (v === '' ? '' : parseFloat(v)); }
+function srSetKind(tank, k){ _srKinds[tank] = k; _srPaint(); }
 
 async function srSaveCount(){
   var tanks = {};
@@ -165,11 +187,16 @@ async function srSaveCount(){
   if(bad.length){ if(typeof toast==='function') toast('잔량은 0보다 작을 수 없습니다','w'); return; }
   var today = srTod();
   if(!confirm(today + ' 기준으로 탱크 잔량을 확정합니다.\n\n이 값이 새 기준이 되고, 이후 제조·사용이 여기서 가감됩니다.')) return;
+  var kinds = {};
+  SR_TANKS.forEach(function(t){
+    var k = _srKinds[t];
+    kinds[t] = (k === 'FP' || k === 'FC') ? k : '';
+  });
   try{
     await firebase.firestore().doc('_config/sauce_tank_baseline').set({
-      date: today, tanks: tanks, updatedAt: new Date().toISOString()
+      date: today, tanks: tanks, kinds: kinds, updatedAt: new Date().toISOString()
     });
-    _srEditing = false; _srVals = {};
+    _srEditing = false; _srVals = {}; _srKinds = {};
     if(typeof toast==='function') toast('탱크 잔량 실사 완료','s');
     renderSauceRoom();
   }catch(e){
