@@ -583,7 +583,8 @@ function _shipBillPv(){
         var nm=BILL_NAME[x.prod]||x.prod;
         if(x.remn) nm+=' 잔량';
         if(x.smpl) nm+=' (샘플)';
-        var unit=x.box>0?'박스':'ea', qty=x.box>0?x.box:x.ea;
+        var _useEa=!!(BILL_EA_PRODUCTS[x.prod] && x.ea>0);
+        var unit=_useEa?'ea':(x.box>0?'박스':'ea'), qty=_useEa?x.ea:(x.box>0?x.box:x.ea);
         return '<div style="display:flex;gap:8px;font-size:12px;font-family:monospace;line-height:1.8">'
           + '<span style="flex:1;min-width:0">'+nm+'</span>'
           + '<span style="width:34px;color:#6b7280">'+unit+'</span>'
@@ -826,6 +827,10 @@ var BILL_NAME = {
   '시그니처 장조림 130g 마트용':'시그니처 쇠고기장조림 130g 마트용',
   '코스트코 장조림 170g':'코스트코 장조림 170g'
 };
+// 거래명세서에 낱개(ea)로 표기할 제품 — 그 외에는 박스가 있으면 박스로 표기
+var BILL_EA_PRODUCTS = {
+  '시그니처 장조림 130g': true
+};
 // 공급자 정보 (변경 시 이 부분만 수정)
 var BILL_SUPPLIER = {
   reg:'101-87-00153', name:'순수본', ceo:'이진영',
@@ -872,8 +877,10 @@ function _shipPrint(){
     var nm=BILL_NAME[x.prod]||x.prod;
     if(x.remn) nm+=' 잔량';
     if(x.smpl) nm+=' (샘플)';
-    var unit = x.box>0 ? '박스' : 'ea';
-    var qty  = x.box>0 ? x.box : x.ea;
+    // 낱개 표기 대상은 ea 우선. ea가 없으면 기존대로 박스로 표기한다.
+    var useEa = !!(BILL_EA_PRODUCTS[x.prod] && x.ea > 0);
+    var unit = useEa ? 'ea' : (x.box > 0 ? '박스' : 'ea');
+    var qty  = useEa ? x.ea  : (x.box > 0 ? x.box : x.ea);
     tr+='<tr><td class="l">'+nm+'</td><td>'+unit+'</td><td class="r">'+qty.toLocaleString()+'</td><td>'+_billDate(x.prod, x.lot)+'</td></tr>';
   });
   tr+='<tr><td colspan="4" class="void">※　※　※　※　※　※　이　하　여　백　※　※　※　※　※　※</td></tr>';
