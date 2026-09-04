@@ -2724,8 +2724,9 @@ function renderDailyFromLocal_(d){
   // 대차(wagonDist)별로 그 대차를 배출한 파쇄 레코드의 부위를 찾아 합산한다.
   // typeKgs는 현장 수동 입력이라 실제 대차 흐름과 어긋날 수 있어 쓰지 않는다.
   // 반환: {kg, traced} — traced=true면 대차 추적이 성립한 것(그 부위가 0이면 정말 0)
-  function _shTypeOfWagon(wNum){
-    const shRec = sh.find(r => (r.wagonOut||'').split(',').map(w=>w.trim()).includes(String(wNum).trim()));
+  // 대차 번호는 한정돼 있어 하루에 재사용될 수 있다.
+  // 후보가 여럿이면 (1) 대차별 배출량이 맞는 것 (2) 포장 시작 이전에 끝난 것 중 가장 늦은 것 순으로 고른다.
+  function _shRecTypeOf(shRec){
     if(!shRec) return '';
     if(shRec.type) return shRec.type.split(',')[0].trim();
     const wIns = (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean);
@@ -2735,16 +2736,47 @@ function renderDailyFromLocal_(d){
     }
     return '';
   }
+  function _shTypeOfWagon(wNum, useKg, pkStart){
+    const w = String(wNum).trim();
+    let cands = sh.filter(r => (r.wagonOut||'').split(',').map(x=>x.trim()).includes(w));
+    if(!cands.length) return '';
+    if(cands.length === 1) return _shRecTypeOf(cands[0]);
+
+    // 1) 그 대차로 내보낸 양이 포장에서 쓴 양과 맞는 것
+    //    wagonOutDist는 세척 전 무게이고 포장이 받는 건 세척 후 무게라, 비율로 환산해 비교한다.
+    if(useKg > 0){
+      const outKgOf = function(r){
+        const od = r.wagonOutDist;
+        const washed = parseFloat(r.kgWashed) || parseFloat(r.kg) || 0;
+        if(od && typeof od === 'object' && od[w] !== undefined){
+          const sum = Object.keys(od).reduce((s,k2)=>s+(parseFloat(od[k2])||0), 0);
+          if(sum > 0) return washed * ((parseFloat(od[w])||0) / sum);
+        }
+        return washed;
+      };
+      const byKg = cands.filter(r => Math.abs(outKgOf(r) - useKg) < 0.5);
+      if(byKg.length === 1) return _shRecTypeOf(byKg[0]);
+      if(byKg.length > 1) cands = byKg;
+    }
+    // 2) 포장 시작 이전에 끝난 것 중 가장 늦은 것
+    const sorted = cands.slice().sort((a,b) => String(a.end||'').localeCompare(String(b.end||'')));
+    if(pkStart){
+      const before = sorted.filter(r => r.end && String(r.end) <= String(pkStart));
+      if(before.length) return _shRecTypeOf(before[before.length-1]);
+    }
+    return _shRecTypeOf(sorted[sorted.length-1]);
+  }
   function _pkTypeKg(recs, type){
     let tot = 0, traced = false;
     (recs||[]).forEach(r => {
       const wd = r.wagonDist;
       if(!wd || typeof wd !== 'object') return;
       Object.keys(wd).forEach(wn => {
-        const t = _shTypeOfWagon(wn);
+        const kg = parseFloat(wd[wn]) || 0;
+        const t = _shTypeOfWagon(wn, kg, r.start);
         if(!t) return;
         traced = true;
-        if(t === type) tot += parseFloat(wd[wn]) || 0;
+        if(t === type) tot += kg;
       });
     });
     return { kg: tot, traced: traced };
