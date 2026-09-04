@@ -393,7 +393,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
         _tray += parseFloat(v)||0;
       });
     }
-    opMap[key].tray += _tray;
+    opMap[key].tray += Math.ceil(_tray);
     opMap[key].trayDef += parseInt(r.trayDefect)||0;
     opMap[key].unitCnt += parseInt(r.unitCount||r.remainEa)||0;
     opMap[key].boxDef += parseInt(r.boxDefect)||0;
