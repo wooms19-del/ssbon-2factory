@@ -312,14 +312,17 @@ function _msPaintIn(){
     if(!byCat[cat]) byCat[cat] = [];
     byCat[cat].push({ code:code, name:m.name||code, unit:m.unit||'' });
   });
+  var firstCode = '';
   MS_CATS.slice(1).concat(['기타']).forEach(function(cat){
     if(!byCat[cat]) return;
     opts += '<optgroup label="' + cat + '">';
     byCat[cat].forEach(function(x){
+      if(!firstCode) firstCode = x.code;
       opts += '<option value="' + x.code + '">' + x.name + ' (' + x.unit + ')</option>';
     });
     opts += '</optgroup>';
   });
+  var firstUnit = (_msMaster[firstCode] || {}).unit || '';
 
   var h = '';
   h += '<div class="card" style="padding:14px 16px;margin-bottom:10px">';
@@ -333,9 +336,12 @@ function _msPaintIn(){
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">입고일</div>'
      + '<input type="date" id="msInDate" class="fc" value="' + msTod() + '" style="padding:7px 8px"></div>';
   h += '<div style="flex:1;min-width:200px"><div style="font-size:12px;color:var(--g5);margin-bottom:4px">품목</div>'
-     + '<select id="msInCode" class="fc" style="width:100%;padding:7px 8px">' + opts + '</select></div>';
-  h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">수량</div>'
-     + '<input type="number" step="any" id="msInQty" class="fc" placeholder="0" style="width:100px;padding:7px 8px;text-align:right"></div>';
+     + '<select id="msInCode" class="fc" onchange="msInUnitSync()" style="width:100%;padding:7px 8px">' + opts + '</select></div>';
+  h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">수량 <span id="msInUnitLbl" style="color:var(--p);font-weight:600">' + firstUnit + '</span></div>'
+     + '<div style="position:relative">'
+     + '<input type="number" step="any" id="msInQty" class="fc" placeholder="0" style="width:120px;padding:7px 34px 7px 8px;text-align:right">'
+     + '<span id="msInUnitSuf" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--g5);pointer-events:none">' + firstUnit + '</span>'
+     + '</div></div>';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">제조일자</div>'
      + '<input type="date" id="msInMade" class="fc" style="padding:7px 8px"></div>';
   h += '<div><div style="font-size:12px;color:var(--g5);margin-bottom:4px">소비기한</div>'
@@ -377,6 +383,19 @@ function _msPaintIn(){
   el.innerHTML = h;
 }
 
+// 품목을 바꾸면 수량 칸의 단위 표시도 따라간다 (원육·조미료 KG / 파우치·포장재 EA)
+function msInUnitSync(){
+  var sel = document.getElementById('msInCode');
+  if(!sel) return;
+  var u = (_msMaster[sel.value] || {}).unit || '';
+  var lbl = document.getElementById('msInUnitLbl');
+  var suf = document.getElementById('msInUnitSuf');
+  if(lbl) lbl.textContent = u;
+  if(suf) suf.textContent = u;
+  var q = document.getElementById('msInQty');
+  if(q) q.step = (u === 'EA') ? '1' : 'any';
+}
+
 // 소비기한 표시 — 남은 일수와 색상. 지났으면 강조, 30일 이내면 경고.
 function _msExpInfo(exp){
   if(!exp) return { text:'−', color:'var(--g4)', over:false };
@@ -394,6 +413,10 @@ async function msSaveIn(){
   if(!date){ if(typeof toast==='function') toast('입고일을 선택하세요','w'); return; }
   if(!code){ if(typeof toast==='function') toast('품목을 선택하세요','w'); return; }
   if(isNaN(qty) || qty === 0){ if(typeof toast==='function') toast('수량을 입력하세요','w'); return; }
+  var unit = (_msMaster[code] || {}).unit || '';
+  if(unit === 'EA' && Math.abs(qty % 1) > 0.0001){
+    if(typeof toast==='function') toast('EA 품목은 낱개 단위로 입력하세요','w'); return;
+  }
   if(made && exp && made > exp){ if(typeof toast==='function') toast('소비기한이 제조일자보다 빠릅니다','w'); return; }
   if(exp && exp < date){
     if(!confirm('소비기한이 입고일보다 이전입니다.\n그래도 등록할까요?')) return;
