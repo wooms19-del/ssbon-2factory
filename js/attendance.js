@@ -13,6 +13,25 @@ function _attHistThisMonth(){
     .sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; })
     .map(function(h){ var p=String(h.date).slice(0,10).split('-'); return (+p[1])+'/'+(+p[2])+' '+h.name+' '+h.type; });
 }
+// 입사일 = history의 '입사' 기록 날짜. 여러 건이면 가장 최근 것.
+function _attJoinDateOf(name){
+  var recs=(_attHist||[]).filter(function(h){ return h && h.name===name && h.type==='입사'; });
+  if(!recs.length) return '';
+  recs.sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; });
+  return String(recs[recs.length-1].date||'').slice(0,10);
+}
+// 입사일 저장 — 기존 '입사' 기록이 있으면 날짜 갱신, 없으면 새로 추가.
+// 이름이 바뀐 경우 history 이름도 함께 맞춰야 다음 조회가 어긋나지 않음.
+function _attSetJoinDate(oldName, newName, date){
+  var recs=(_attHist||[]).filter(function(h){ return h && h.name===oldName && h.type==='입사'; });
+  if(recs.length){
+    recs.sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; });
+    var t=recs[recs.length-1];
+    t.date=date; t.name=newName;
+  }else{
+    _attHist.push({name:newName, date:date, type:'입사'});
+  }
+}
 const DEFAULT_EMPS = ['김구식','김수영','임혜경','한채현','김정희','안남정','심현주','홍안순',
   '박수경','하대성','홍유순','정현석','김성희','김영선','배현자','김미애','이용범','게이코',
   '유혜선','레티장','김진화','드엉반담','르탄프엉','응우옌반동','응우옌민호앙',
@@ -1387,9 +1406,11 @@ function _renderAttStaff(){
   var el=document.getElementById('attStaffList');if(!el)return;
   var sc=document.getElementById('attStaffCount');if(sc)sc.textContent=_attEmps.length;
   el.innerHTML=_attEmps.map(function(e,i){
+    var _jd=_attJoinDateOf(e.name);
     return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--g2);gap:10px">'
       +'<span style="font-size:12px;color:var(--g4);width:20px;text-align:right">'+(i+1)+'</span>'
       +'<span style="flex:1;font-size:14px">'+e.name+'<span style="font-size:11px;color:var(--g5);margin-left:6px;background:var(--g1);padding:1px 6px;border-radius:4px">'+(e.part||'미배치')+'</span>'
+      +(_jd?'<span style="font-size:11px;color:var(--g5);margin-left:6px">입사 '+_jd.slice(5).replace('-','/')+'</span>':'')
       +(e.birth?'':'<span style="font-size:11px;color:#dc2626;margin-left:6px">생년월일 없음</span>')+'</span>'
       +'<span style="font-size:12px;color:var(--g5)">연차 '+e.annualDays+'일 / 잔여 <b style="color:var(--p)">'+(e.annualDays-(e.usedDays||0))+'일</b></span>'
       +'<button class="btn bo bsm" onclick="attEditStaff('+i+')">수정</button>'
@@ -1432,6 +1453,7 @@ function attEditStaff(i){
   var body='<div style="display:flex;flex-direction:column;gap:12px">'
     +fld('이름','<input class="fc" id="aes_name" value="'+(e.name||'')+'" style="width:100%;padding:8px;box-sizing:border-box">')
     +fld('생년월일 <span style="color:var(--g4)">— 연차 신청 본인 확인용</span>','<input class="fc" id="aes_birth" type="date" value="'+(e.birth||'')+'" style="width:100%;padding:8px;box-sizing:border-box">')
+    +fld('입사일 <span style="color:var(--g4)">— 이번달 인원 변동에 표시됨</span>','<input class="fc" id="aes_join" type="date" value="'+_attJoinDateOf(e.name||'')+'" style="width:100%;padding:8px;box-sizing:border-box">')
     +fld('성별','<select class="fc" id="aes_gender" style="width:100%;padding:8px;box-sizing:border-box">'+genderOpts+'</select>')
     +fld('파트 (조직도)','<select class="fc" id="aes_part" style="width:100%;padding:8px;box-sizing:border-box">'+partOpts+'</select>')
     +fld('역할','<select class="fc" id="aes_role" style="width:100%;padding:8px;box-sizing:border-box">'+roleOpts+'</select>')
@@ -1461,6 +1483,8 @@ function attSaveStaff(i){
   if(gen) upd.gender=gen;
   if(!e.id) upd.id=_attNextEmpId();
   _attEmps[i]=Object.assign({},e,upd);
+  var join=(g('aes_join')||'').trim();
+  if(join) _attSetJoinDate(e.name||name, name, join);
   _saveAttEmps();
   _attCloseModal();
   _renderAttStaff();
