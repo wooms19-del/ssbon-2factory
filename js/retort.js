@@ -386,59 +386,58 @@ function _rtAddShrink(z, dec, enc, baseIdx){
 // 양식 한 장에 들어가는 회차 수 (24~34행)
 const RT_ROWS_PER_SHEET = 11;
 
-async function _rtFillTemplate(tplPath, outName, rows, is3B, dateTxt, pageNo, pageTot){
+async function _rtFillTemplate(tplPath, outName, rows, is3B, dateTxt){
   const buf=await (await fetch(tplPath)).arrayBuffer();
   const z=fflate.unzipSync(new Uint8Array(buf));
   const dec=new TextDecoder(), enc=new TextEncoder();
-  let xml=dec.decode(z['xl/worksheets/sheet1.xml']);
   const CIRC='\u20DD';  // 글자 뒤 결합 동그라미
   // 제품명 칸 자동축소 스타일 (긴 제품명 잘림 방지)
   const prodBase = is3B ? 27 : 57;
   const shrinkIdx = _rtAddShrink(z, dec, enc, prodBase);
-  // 여러 장으로 나뉘면 날짜 옆에 장 번호를 붙인다
-  xml=_rtXset(xml,'E6', (pageTot>1) ? (dateTxt+'   ('+pageNo+' / '+pageTot+')') : dateTxt);
-  rows.forEach((r,i)=>{
-    const R=24+i; if(R>34) return;
-    const min=_rtMin(r.t2,r.t3);
-    const judge=_rtJudge(r.ccp,min,r.temp);
-    xml=_rtXset(xml,'A'+R,r.machine||'');
-    if(is3B){
-      // 구분 = 살균 조건 A/B (해당 조건에 동그라미). 배치는 시스템 데이터로만 보관
-      const cond=_rt3bCond(min, r.temp);
-      xml=_rtXset(xml,'B'+R, cond==='B' ? ('A / B'+CIRC) : ('A'+CIRC+' / B'));
-      xml=_rtXset(xml,'D'+R,r.product||'', shrinkIdx);
-    } else {
-      xml=_rtXset(xml,'C'+R,r.product||'', shrinkIdx);
-    }
-    xml=_rtXset(xml,'G'+R,r.t2||''); xml=_rtXset(xml,'K'+R,r.t3||'');
-    xml=_rtXset(xml,'O'+R,min!=null?min+'분':'');
-    xml=_rtXset(xml,'Q'+R,r.temp?r.temp+'℃':'');
-    // 판정: 원본 '적 │ 부' 유지 + 해당 글자에 동그라미
-    let sv='적 │ 부';
-    if(judge==='적합') sv='적'+CIRC+' │ 부';
-    else if(judge==='부적합') sv='적 │ 부'+CIRC;
-    xml=_rtXset(xml,'S'+R,sv);
-  });
-  z['xl/worksheets/sheet1.xml']=enc.encode(xml);
+
+  const per=RT_ROWS_PER_SHEET;
+  // 양식에 시트가 2장 있다. 11건을 넘으면 둘째 시트까지 쓴다.
+  const sheets=['xl/worksheets/sheet1.xml','xl/worksheets/sheet2.xml'].filter(k=>z[k]);
+  const tot=Math.min(sheets.length, Math.max(1, Math.ceil(rows.length/per)));
+
+  for(let p=0;p<sheets.length;p++){
+    let xml=dec.decode(z[sheets[p]]);
+    const part = p<tot ? rows.slice(p*per,(p+1)*per) : [];
+    // 쓰지 않는 시트는 날짜만 비워 원본 그대로 둔다
+    const _dtx = (tot>1 && p<tot) ? (dateTxt+'   ('+(p+1)+' / '+tot+')') : dateTxt;
+    xml=_rtXset(xml,'E6', p<tot ? _dtx : '');
+    part.forEach((r,i)=>{
+      const R=24+i; if(R>34) return;
+      const min=_rtMin(r.t2,r.t3);
+      const judge=_rtJudge(r.ccp,min,r.temp);
+      xml=_rtXset(xml,'A'+R,r.machine||'');
+      if(is3B){
+        // 구분 = 살균 조건 A/B (해당 조건에 동그라미). 배치는 시스템 데이터로만 보관
+        const cond=_rt3bCond(min, r.temp);
+        xml=_rtXset(xml,'B'+R, cond==='B' ? ('A / B'+CIRC) : ('A'+CIRC+' / B'));
+        xml=_rtXset(xml,'D'+R,r.product||'', shrinkIdx);
+      } else {
+        xml=_rtXset(xml,'C'+R,r.product||'', shrinkIdx);
+      }
+      xml=_rtXset(xml,'G'+R,r.t2||''); xml=_rtXset(xml,'K'+R,r.t3||'');
+      xml=_rtXset(xml,'O'+R,min!=null?min+'분':'');
+      xml=_rtXset(xml,'Q'+R,r.temp?r.temp+'℃':'');
+      // 판정: 원본 '적 │ 부' 유지 + 해당 글자에 동그라미
+      let sv='적 │ 부';
+      if(judge==='적합') sv='적'+CIRC+' │ 부';
+      else if(judge==='부적합') sv='적 │ 부'+CIRC;
+      xml=_rtXset(xml,'S'+R,sv);
+    });
+    z[sheets[p]]=enc.encode(xml);
+  }
+  if(rows.length > sheets.length*per){
+    alert('회차가 '+(sheets.length*per)+'건을 넘어 초과분('+(rows.length-sheets.length*per)+'건)은 점검표에 담기지 않았습니다.');
+  }
   const blob=new Blob([fflate.zipSync(z)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=outName;
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
 }
-// 회차가 한 장(11건)을 넘으면 장을 나눠 여러 파일로 내려받는다
-async function _rtFillPaged(tplPath, baseName, rows, is3B, dateTxt){
-  const per = RT_ROWS_PER_SHEET;
-  const tot = Math.max(1, Math.ceil(rows.length / per));
-  for(let p=0; p<tot; p++){
-    const part = rows.slice(p*per, (p+1)*per);
-    const name = (tot>1)
-      ? baseName.replace(/\.xlsx$/, '_'+(p+1)+'of'+tot+'.xlsx')
-      : baseName;
-    await _rtFillTemplate(tplPath, name, part, is3B, dateTxt, p+1, tot);
-    if(p < tot-1) await new Promise(r=>setTimeout(r, 400));  // 연속 다운로드 차단 방지
-  }
-}
-
 async function rtDownloadCcp(){
   try{
     const dEl=document.getElementById('rt_ccp_date');
@@ -451,8 +450,8 @@ async function rtDownloadCcp(){
     if(!r2b.length && !r3b.length){ toast('해당 날짜에 완료된 회차가 없습니다','d'); return; }
     const [yy,mm,dd]=dateStr.split('-');
     const dateTxt=yy+' 년   '+parseInt(mm)+' 월   '+parseInt(dd)+' 일';
-    if(r2b.length) await _rtFillPaged('assets/ccp2b.xlsx','CCP-2B_점검표_'+dateStr+'.xlsx', r2b, false, dateTxt);
-    if(r3b.length) await _rtFillPaged('assets/ccp3b.xlsx','CCP-3B_점검표_'+dateStr+'.xlsx', r3b, true, dateTxt);
+    if(r2b.length) await _rtFillTemplate('assets/ccp2b.xlsx','CCP-2B_점검표_'+dateStr+'.xlsx', r2b, false, dateTxt);
+    if(r3b.length) await _rtFillTemplate('assets/ccp3b.xlsx','CCP-3B_점검표_'+dateStr+'.xlsx', r3b, true, dateTxt);
     toast('CCP 점검표 다운로드 ✓','s');
   }catch(e){
     console.error('[CCP 점검표]',e);
@@ -484,65 +483,66 @@ function _rtLoadPdfLib(){
 }
 async function _rtCcpFont(){ if(_rtCcpFontBytes) return _rtCcpFontBytes; _rtCcpFontBytes=await (await fetch('assets/NotoKR-ccp.ttf')).arrayBuffer(); return _rtCcpFontBytes; }
 
-async function _rtFillPdfForm(key, outName, rows, is3B, dateTxt, pageNo, pageTot){
+async function _rtFillPdfForm(key, outName, rows, is3B, dateTxt){
   const cfg=RT_PDF_COORDS[key];
   const { PDFDocument, rgb }=window.PDFLib;
-  const pdf=await PDFDocument.load(await (await fetch(cfg.form)).arrayBuffer());
+  const tplBytes=await (await fetch(cfg.form)).arrayBuffer();
+  const per=RT_ROWS_PER_SHEET;
+  const tot=Math.max(1, Math.ceil(rows.length/per));
+
+  // 양식을 페이지 수만큼 복사해 한 파일에 담는다 (11건 초과 시 2장, 3장…)
+  const pdf=await PDFDocument.create();
   pdf.registerFontkit(window.fontkit);
   const font=await pdf.embedFont(await _rtCcpFont(), {subset:true});
-  const pg=pdf.getPages()[0];
+  const tpl=await PDFDocument.load(tplBytes);
+  for(let p=0;p<tot;p++){
+    const [copied]=await pdf.copyPages(tpl,[0]);
+    pdf.addPage(copied);
+  }
+
   const FS=9, cx=cfg.cx;
   const W=(t,fs)=>font.widthOfTextAtSize(t,fs);
-  const ctext=(x,y,t,fs=FS)=>{ if(t==='') return; pg.drawText(String(t),{x:x-W(String(t),fs)/2,y,size:fs,font,color:rgb(0,0,0)}); };
-  const circle=(x,y)=>pg.drawEllipse({x,y:y+4,xScale:7,yScale:8,borderColor:rgb(0,0,0),borderWidth:1.1});
-  // 점검일자 (여러 장이면 장 번호를 붙인다)
-  const _dtx = (pageTot>1) ? (dateTxt+'   ('+pageNo+' / '+pageTot+')') : dateTxt;
-  pg.drawText(_dtx,{x:cfg.e6.cx-W(_dtx,10)/2,y:cfg.e6.y,size:10,font});
-  rows.forEach((r,i)=>{
-    if(i>10) return;
-    const y=cfg.rowY[i];
-    const min=_rtMin(r.t2,r.t3);
-    const judge=_rtJudge(r.ccp,min,r.temp);
-    ctext(cx.A,y,r.machine||'');
-    if(is3B){
-      ctext(cx.D,y,r.product||'',7.5);
-      const cond=_rt3bCond(min,r.temp);
-      const sb='A  /  B', x0=cx.B-W(sb,FS)/2;
-      pg.drawText(sb,{x:x0,y,size:FS,font});
-      const ax=x0+W('A',FS)/2, bbx=x0+W('A  /  ',FS)+W('B',FS)/2;
-      circle(cond==='B'?bbx:ax, y);
-    } else {
-      ctext(cx.C,y,r.product||'',8);
-    }
-    if(r.t2) ctext(cx.G,y,r.t2);
-    if(r.t3) ctext(cx.K,y,r.t3);
-    if(min!=null) ctext(cx.O,y,min+'분');
-    if(r.temp) ctext(cx.Q,y,r.temp+'℃');
-    // 판정 (적 │ 부 + 해당 동그라미)
-    const s='적   │   부', sx0=cx.S-W(s,FS)/2;
-    pg.drawText(s,{x:sx0,y,size:FS,font});
-    if(judge){
-      const jeok=sx0+W('적',FS)/2, bu=sx0+W('적   │   ',FS)+W('부',FS)/2;
-      circle(judge==='부적합'?bu:jeok, y);
-    }
-  });
+
+  for(let p=0;p<tot;p++){
+    const pg=pdf.getPages()[p];
+    const part=rows.slice(p*per,(p+1)*per);
+    const ctext=(x,y,t,fs=FS)=>{ if(t==='') return; pg.drawText(String(t),{x:x-W(String(t),fs)/2,y,size:fs,font,color:rgb(0,0,0)}); };
+    const circle=(x,y)=>pg.drawEllipse({x,y:y+4,xScale:7,yScale:8,borderColor:rgb(0,0,0),borderWidth:1.1});
+    // 점검일자 (여러 장이면 장 번호를 붙인다)
+    const _dtx = (tot>1) ? (dateTxt+'   ('+(p+1)+' / '+tot+')') : dateTxt;
+    pg.drawText(_dtx,{x:cfg.e6.cx-W(_dtx,10)/2,y:cfg.e6.y,size:10,font});
+    part.forEach((r,i)=>{
+      if(i>=per) return;
+      const y=cfg.rowY[i];
+      const min=_rtMin(r.t2,r.t3);
+      const judge=_rtJudge(r.ccp,min,r.temp);
+      ctext(cx.A,y,r.machine||'');
+      if(is3B){
+        ctext(cx.D,y,r.product||'',7.5);
+        const cond=_rt3bCond(min,r.temp);
+        const sb='A  /  B', x0=cx.B-W(sb,FS)/2;
+        pg.drawText(sb,{x:x0,y,size:FS,font});
+        const ax=x0+W('A',FS)/2, bbx=x0+W('A  /  ',FS)+W('B',FS)/2;
+        circle(cond==='B'?bbx:ax, y);
+      } else {
+        ctext(cx.C,y,r.product||'',8);
+      }
+      if(r.t2) ctext(cx.G,y,r.t2);
+      if(r.t3) ctext(cx.K,y,r.t3);
+      if(min!=null) ctext(cx.O,y,min+'분');
+      if(r.temp) ctext(cx.Q,y,r.temp+'℃');
+      // 판정 (적 │ 부 + 해당 동그라미)
+      const sj='적   │   부', sx0=cx.S-W(sj,FS)/2;
+      pg.drawText(sj,{x:sx0,y,size:FS,font});
+      if(judge){
+        const jeok=sx0+W('적',FS)/2, bu=sx0+W('적   │   ',FS)+W('부',FS)/2;
+        circle(judge==='부적합'?bu:jeok, y);
+      }
+    });
+  }
   const blob=new Blob([await pdf.save()],{type:'application/pdf'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=outName;
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
-}
-
-// PDF도 11건을 넘으면 장을 나눈다
-async function _rtFillPdfPaged(key, baseName, rows, is3B, dateTxt){
-  const per = RT_ROWS_PER_SHEET;
-  const tot = Math.max(1, Math.ceil(rows.length / per));
-  for(let p=0; p<tot; p++){
-    const part = rows.slice(p*per, (p+1)*per);
-    const name = (tot>1)
-      ? baseName.replace(/\.pdf$/, '_'+(p+1)+'of'+tot+'.pdf')
-      : baseName;
-    await _rtFillPdfForm(key, name, part, is3B, dateTxt, p+1, tot);
-    if(p < tot-1) await new Promise(r=>setTimeout(r, 400));
-  }
 }
 
 async function rtDownloadCcpPdf(){
@@ -558,8 +558,8 @@ async function rtDownloadCcpPdf(){
     if(!r2b.length && !r3b.length){ toast('해당 날짜에 완료된 회차가 없습니다','d'); return; }
     const [yy,mm,dd]=dateStr.split('-');
     const dateTxt=yy+' 년    '+parseInt(mm)+' 월    '+parseInt(dd)+' 일';
-    if(r2b.length) await _rtFillPdfPaged('2b','CCP-2B_점검표_'+dateStr+'.pdf', r2b, false, dateTxt);
-    if(r3b.length) await _rtFillPdfPaged('3b','CCP-3B_점검표_'+dateStr+'.pdf', r3b, true, dateTxt);
+    if(r2b.length) await _rtFillPdfForm('2b','CCP-2B_점검표_'+dateStr+'.pdf', r2b, false, dateTxt);
+    if(r3b.length) await _rtFillPdfForm('3b','CCP-3B_점검표_'+dateStr+'.pdf', r3b, true, dateTxt);
     toast('CCP 점검표 PDF 다운로드 ✓','s');
   }catch(e){
     console.error('[CCP PDF]',e);
