@@ -261,7 +261,7 @@ async function renderMonthly() {
   // 외포장 map (date_product → outerEa)
   const _opEaMap={};
   opReal.forEach(r=>{ _opEaMap[`${String(r.date||'').slice(0,10)}_${r.product||''}`]=opEa(r); });
-  // 부위 판정: packing.type 우선, 비어있으면 그날 파쇄 부위가 1종일 때만 자동 판정
+  // 부위 판정: packing.type 우선 → 대차 추적(wagonDist×파쇄 부위) → 그날 파쇄 부위 1종
   const _shPartByDate={};
   (shMonth||[]).forEach(r=>{
     const d=String(r.date||'').slice(0,10), t=String(r.type||'').trim();
@@ -269,9 +269,52 @@ async function renderMonthly() {
     if(!_shPartByDate[d]) _shPartByDate[d]=new Set();
     _shPartByDate[d].add(t);
   });
+  // 날짜별 대차번호 → 부위 (같은 번호가 재사용되면 후보를 모두 담고 무게·시각으로 고른다)
+  const _wagonPartByDate={};
+  (shMonth||[]).forEach(r=>{
+    const d=String(r.date||'').slice(0,10);
+    const t=String(r.type||'').trim();
+    if(!d||!t) return;
+    if(!_wagonPartByDate[d]) _wagonPartByDate[d]={};
+    const od=r.wagonOutDist||{};
+    const washed=parseFloat(r.kgWashed)||parseFloat(r.kg)||0;
+    const osum=Object.keys(od).reduce((s,k)=>s+(parseFloat(od[k])||0),0);
+    String(r.wagonOut||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(wn=>{
+      const kg = osum>0 ? washed*((parseFloat(od[wn])||0)/osum) : washed;
+      (_wagonPartByDate[d][wn]=_wagonPartByDate[d][wn]||[]).push({part:t,end:String(r.end||''),kg:kg});
+    });
+  });
+  const _pickWagonPart=(dt,wn,useKg,before)=>{
+    const c=(_wagonPartByDate[dt]||{})[String(wn)];
+    if(!c||!c.length) return null;
+    if(c.length===1) return c[0].part;
+    if(useKg>0){
+      const hit=c.filter(x=>Math.abs(x.kg-useKg)<0.5);
+      if(hit.length===1) return hit[0].part;
+      if(hit.length>1) return hit.sort((a,b)=>a.end<b.end?-1:1)[hit.length-1].part;
+    }
+    const ord=c.slice().sort((a,b)=>a.end<b.end?-1:1);
+    if(before){
+      const prev=ord.filter(x=>x.end && x.end<=before);
+      if(prev.length) return prev[prev.length-1].part;
+    }
+    return ord[ord.length-1].part;
+  };
   const _resolvePart=(r,dt)=>{
     const t=String(r.type||'').split(',')[0].trim();
     if(t) return t;
+    // 대차 추적: 그 포장이 받은 대차를 배출한 파쇄 기록의 부위
+    const wd=r.wagonDist;
+    if(wd && typeof wd==='object'){
+      const acc={};
+      Object.keys(wd).forEach(wn=>{
+        const kg=parseFloat(wd[wn])||0;
+        const p=_pickWagonPart(dt,wn,kg,r.start);
+        if(p) acc[p]=(acc[p]||0)+kg;
+      });
+      const keys=Object.keys(acc);
+      if(keys.length) return keys.sort((a,b)=>acc[b]-acc[a])[0];
+    }
     const s=_shPartByDate[dt];
     if(s && s.size===1) return Array.from(s)[0];
     return '미지정';
