@@ -386,6 +386,62 @@ function _rtAddShrink(z, dec, enc, baseIdx){
 // 양식 한 장에 들어가는 회차 수 (24~34행)
 const RT_ROWS_PER_SHEET = 11;
 
+// 양식 시트를 복제해 장 수를 늘린다.
+// 시트마다 그림(로고)과 인쇄설정이 딸려 있어 그 부속도 같이 복사해야 열린다.
+// 반환: 늘어난 뒤의 시트 xml 경로 목록
+function _rtGrowSheets(z, dec, enc, need){
+  const paths = ['xl/worksheets/sheet1.xml','xl/worksheets/sheet2.xml'].filter(k=>z[k]);
+  if(need <= paths.length) return paths;
+
+  let wb = dec.decode(z['xl/workbook.xml']);
+  let rels = dec.decode(z['xl/_rels/workbook.xml.rels']);
+  let ct = dec.decode(z['[Content_Types].xml']);
+  // 복제 원본은 둘째 시트(없으면 첫째)
+  const srcIdx = paths.length;                 // 2 이면 sheet2 를 복제
+  const srcSheet = 'xl/worksheets/sheet'+srcIdx+'.xml';
+  const srcRels  = 'xl/worksheets/_rels/sheet'+srcIdx+'.xml.rels';
+  const srcDraw  = 'xl/drawings/drawing'+srcIdx+'.xml';
+  const srcDrawR = 'xl/drawings/_rels/drawing'+srcIdx+'.xml.rels';
+  const srcPrn   = 'xl/printerSettings/printerSettings'+srcIdx+'.bin';
+
+  // 새 rId 는 기존 최대값 다음부터
+  let maxRid = 0;
+  (rels.match(/Id="rId(\d+)"/g)||[]).forEach(m=>{
+    const n = parseInt(m.replace(/\D/g,''),10); if(n>maxRid) maxRid=n;
+  });
+  const baseName = (wb.match(/<sheet name="([^"]*)"/)||[,'CCP'])[1].replace(/\(.*\)/,'').trim();
+
+  for(let n=paths.length+1; n<=need; n++){
+    const sh='xl/worksheets/sheet'+n+'.xml';
+    z[sh] = z[srcSheet].slice(0);
+    if(z[srcPrn]) z['xl/printerSettings/printerSettings'+n+'.bin'] = z[srcPrn].slice(0);
+    if(z[srcDraw]){
+      z['xl/drawings/drawing'+n+'.xml'] = z[srcDraw].slice(0);
+      if(z[srcDrawR]) z['xl/drawings/_rels/drawing'+n+'.xml.rels'] = z[srcDrawR].slice(0);
+      ct = ct.replace('</Types>',
+        '<Override PartName="/xl/drawings/drawing'+n+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+    }
+    if(z[srcRels]){
+      let r = dec.decode(z[srcRels])
+        .replace(/drawing\d+\.xml/, 'drawing'+n+'.xml')
+        .replace(/printerSettings\d+\.bin/, 'printerSettings'+n+'.bin');
+      z['xl/worksheets/_rels/sheet'+n+'.xml.rels'] = enc.encode(r);
+    }
+    ct = ct.replace('</Types>',
+      '<Override PartName="/xl/worksheets/sheet'+n+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+    const rid = 'rId'+(++maxRid);
+    rels = rels.replace('</Relationships>',
+      '<Relationship Id="'+rid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+n+'.xml"/></Relationships>');
+    wb = wb.replace('</sheets>',
+      '<sheet name="'+baseName+' ('+n+')" sheetId="'+(100+n)+'" r:id="'+rid+'"/></sheets>');
+    paths.push(sh);
+  }
+  z['xl/workbook.xml'] = enc.encode(wb);
+  z['xl/_rels/workbook.xml.rels'] = enc.encode(rels);
+  z['[Content_Types].xml'] = enc.encode(ct);
+  return paths;
+}
+
 async function _rtFillTemplate(tplPath, outName, rows, is3B, dateTxt){
   const buf=await (await fetch(tplPath)).arrayBuffer();
   const z=fflate.unzipSync(new Uint8Array(buf));
@@ -396,9 +452,9 @@ async function _rtFillTemplate(tplPath, outName, rows, is3B, dateTxt){
   const shrinkIdx = _rtAddShrink(z, dec, enc, prodBase);
 
   const per=RT_ROWS_PER_SHEET;
-  // 양식에 시트가 2장 있다. 11건을 넘으면 둘째 시트까지 쓴다.
-  const sheets=['xl/worksheets/sheet1.xml','xl/worksheets/sheet2.xml'].filter(k=>z[k]);
-  const tot=Math.min(sheets.length, Math.max(1, Math.ceil(rows.length/per)));
+  // 필요한 장 수만큼 시트를 늘린다 (양식은 2장, 그 이상은 복제)
+  const tot=Math.max(1, Math.ceil(rows.length/per));
+  const sheets=_rtGrowSheets(z, dec, enc, tot);
 
   for(let p=0;p<sheets.length;p++){
     let xml=dec.decode(z[sheets[p]]);
@@ -429,9 +485,6 @@ async function _rtFillTemplate(tplPath, outName, rows, is3B, dateTxt){
       xml=_rtXset(xml,'S'+R,sv);
     });
     z[sheets[p]]=enc.encode(xml);
-  }
-  if(rows.length > sheets.length*per){
-    alert('회차가 '+(sheets.length*per)+'건을 넘어 초과분('+(rows.length-sheets.length*per)+'건)은 점검표에 담기지 않았습니다.');
   }
   const blob=new Blob([fflate.zipSync(z)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
