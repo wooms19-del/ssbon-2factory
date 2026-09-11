@@ -91,7 +91,7 @@
       if(_nextRaw.length&&_nxt>_cur*2) _rawTh=_nextRaw;
     }
     var _seen=new Set();
-    var matchedTh=_rawTh.filter(function(r){ var k=(r.cart||'')+'|'+_sl10(r.date)+'|'+(r.type||''); if(_seen.has(k)) return false; _seen.add(k); return true; });
+    var matchedTh=_rawTh.filter(function(r){ var k=r.fbId||r.id||((r.cart||'')+'|'+_sl10(r.date)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||'')); if(_seen.has(k)) return false; _seen.add(k); return true; });
 
     var rmByType={};
     matchedTh.forEach(function(r){ var ts=_splitT(r.type); if(!ts.length) ts=['미분류']; ts.forEach(function(t){ rmByType[t]=(rmByType[t]||0)+_num(r.totalKg); }); });

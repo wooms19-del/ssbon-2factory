@@ -559,9 +559,11 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       matched=thList.filter(function(r){return d(r)===date;});
       if(!matched.length) matched=thList.filter(function(r){return d(r)===prevD;});
     }
+    // 중복 제거는 문서 단위로. (대차|날짜|부위)로 묶으면 한 대차에 나중에
+    // 박스를 더 얹은 건이 통째로 버려진다. (2026-09-11 대차1 4박스 100.2kg)
     var seen=new Set(); var ded=[];
     matched.forEach(function(r){
-      var k=(r.cart||'')+'|'+d(r)+'|'+(r.type||'');
+      var k=r.fbId||r.id||((r.cart||'')+'|'+d(r)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||''));
       if(seen.has(k)) return; seen.add(k); ded.push(r);
     });
     return _perfR2(ded.reduce(function(s,r){return s+(parseFloat(r.totalKg)||0);},0));
@@ -589,7 +591,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       if(!matched.length) matched=thList.filter(function(r){return d(r)===prevD;});
     }
     var seen=new Set(); var ded=[];
-    matched.forEach(function(r){var k=(r.cart||'')+'|'+d(r)+'|'+(r.type||''); if(seen.has(k))return; seen.add(k); ded.push(r);});
+    matched.forEach(function(r){var k=r.fbId||r.id||((r.cart||'')+'|'+d(r)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||'')); if(seen.has(k))return; seen.add(k); ded.push(r);});
     var partType={}, partKgM={};
     ded.forEach(function(r){
       var p=r.part||r.type||'';
@@ -677,7 +679,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       }
       var seen = new Set(); var ded = [];
       thDay.forEach(function(r){
-        var k = (r.cart||'')+'|'+d(r)+'|'+(r.type||'');
+        var k = r.fbId||r.id||((r.cart||'')+'|'+d(r)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||''));
         if(seen.has(k)) return; seen.add(k); ded.push(r);
       });
       var bx={}, kg={};
@@ -697,7 +699,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       var thDay = thClean.filter(function(r){ return d(r)===date; });
       var seen = new Set(); var ded = [];
       thDay.forEach(function(r){
-        var k = (r.cart||'')+'|'+d(r)+'|'+(r.type||'');
+        var k = r.fbId||r.id||((r.cart||'')+'|'+d(r)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||''));
         if(seen.has(k)) return; seen.add(k); ded.push(r);
       });
       var bx={}, kg={};
@@ -770,7 +772,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     if(thUsed==='PREV'){ try{ console.warn('[부위추적 TH_PREV]', date, product, '- 같은 날 thawing 0건, 전날 매칭 사용.'); }catch(_){} }
     var seen = new Set(); var ded = [];
     thM.forEach(function(r){
-      var k = (r.cart||'')+'|'+d(r)+'|'+(r.type||'');
+      var k = r.fbId||r.id||((r.cart||'')+'|'+d(r)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||''));
       if(seen.has(k)) return; seen.add(k); ded.push(r);
     });
     var bx={}, kg={};

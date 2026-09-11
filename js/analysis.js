@@ -2305,7 +2305,7 @@ function getThKgByPP_(ppRecs, allThawing, packDate) {
     if(_nextMatched.length && _nxtKg>_curKg*2) matched=_nextMatched;
   }
   const seen=new Set();
-  const deduped=matched.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
+  const deduped=matched.filter(r=>{const k=r.fbId||r.id||((r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||''));if(seen.has(k))return false;seen.add(k);return true;});
   return r2(deduped.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
 }
 
@@ -2344,7 +2344,7 @@ function getThByPartByPP_(ppRecs, allThawing, packDate) {
     if(_nextMatched.length && _nxtKg>_curKg*2) matched=_nextMatched;
   }
   const seen=new Set();
-  const deduped=matched.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(seen.has(k))return false;seen.add(k);return true;});
+  const deduped=matched.filter(r=>{const k=r.fbId||r.id||((r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||''));if(seen.has(k))return false;seen.add(k);return true;});
   const byPart={};
   deduped.forEach(r=>{
     const part=String(r.type||'기타').trim()||'기타';
@@ -2464,8 +2464,16 @@ function renderDailyFromLocal_(d){
     const _nxtKg=r2(_nextRaw.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
     if(_nextRaw.length && _nxtKg > _curKg*2) _rawTh=_nextRaw;
   }
+  // 중복 제거는 문서 단위로만 한다.
+  // 예전에는 (대차|날짜|부위) 를 키로 썼는데, 한 대차에 나중에 박스를 더 얹는 경우
+  // (2026-09-11 대차 1번: 15박스 384.6kg + 4박스 100.2kg)가 같은 키가 되어
+  // 뒤엣것이 통째로 버려졌다. 같은 문서가 두 번 들어오는 것만 걸러낸다.
   const _seenTh=new Set();
-  const matchedTh=_rawTh.filter(r=>{const k=(r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'');if(_seenTh.has(k))return false;_seenTh.add(k);return true;});
+  const matchedTh=_rawTh.filter(r=>{
+    const k=r.fbId||r.id||((r.cart||'')+'|'+String(r.date||'').slice(0,10)+'|'+(r.type||'')+'|'+(r.start||'')+'|'+(r.totalKg||''));
+    if(_seenTh.has(k))return false;
+    _seenTh.add(k);return true;
+  });
   let rmKg=r2(matchedTh.reduce((s,r)=>s+(parseFloat(r.totalKg)||0),0));
   // 원육 타입별 KG: matchedTh 기준으로 재계산 (바코드·중복 해동 오염 방지)
   Object.keys(thByType).forEach(k=>delete thByType[k]);
