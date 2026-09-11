@@ -1537,14 +1537,23 @@ function _calcWorkHoursByTime(inTime, outTime, tags){
 // ─────────────────────────────────────────────────────────
 // 주간 출퇴근 서명표 엑셀 다운로드 (A4 가로 맞춤)
 // ─────────────────────────────────────────────────────────
-function attDownloadWeekly(){
-  var today=new Date(_attDate);
-  var day=today.getDay();
-  var diff=day===0?-6:1-day;
-  var mon=new Date(today); mon.setDate(today.getDate()+diff);
+async function attDownloadWeekly(){
+  // 화면에서 보고 있는 주를 그대로 뽑는다. (_attDate 는 오늘이라 과거 주가 안 나왔음)
+  var mon = _attWeekStart ? new Date(_attWeekStart) : (function(){
+    var t=new Date(_attDate), day=t.getDay(), diff=day===0?-6:1-day;
+    var m=new Date(t); m.setDate(t.getDate()+diff); return m;
+  })();
 
   var allDates=[], dlabels=['월','화','수','목','금','토','일'];
   for(var i=0;i<7;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);allDates.push(d);}
+
+  // 과거 주는 localStorage 에 없을 수 있어 Firestore 에서 먼저 받아 둔다
+  try{
+    if(typeof toast==='function') toast('출퇴근 기록 불러오는 중…','i');
+    await _attPrefetchWeek(mon);
+  }catch(e){
+    console.warn('[attDownloadWeekly] prefetch 실패', e && e.message);
+  }
 
   // 기록 있는 날만 필터
   var dates=allDates.filter(function(dt){
@@ -1557,7 +1566,12 @@ function attDownloadWeekly(){
       return r&&(r.tags&&r.tags.length>0||r.inTime||r.outTime);
     });
   });
-  if(dates.length===0){alert('이번 주 출퇴근 기록이 없습니다.');return;}
+  if(dates.length===0){
+    var _m1=mon.getMonth()+1, _d1=mon.getDate();
+    var _e=new Date(mon); _e.setDate(mon.getDate()+6);
+    alert(_m1+'/'+_d1+' ~ '+(_e.getMonth()+1)+'/'+_e.getDate()+' 주간에 출퇴근 기록이 없습니다.');
+    return;
+  }
 
   var DS=8;
   var numDays=dates.length;
