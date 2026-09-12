@@ -1539,24 +1539,29 @@ function _calcWorkHoursByTime(inTime, outTime, tags){
 // ─────────────────────────────────────────────────────────
 async function attDownloadWeekly(){
   // 화면에서 보고 있는 주를 그대로 뽑는다. (_attDate 는 오늘이라 과거 주가 안 나왔음)
+  // 서명표는 일요일부터 토요일까지 7일을 항상 채운다. 근무가 없는 날도 칸은 남긴다.
   var mon = _attWeekStart ? new Date(_attWeekStart) : (function(){
     var t=new Date(_attDate), day=t.getDay(), diff=day===0?-6:1-day;
     var m=new Date(t); m.setDate(t.getDate()+diff); return m;
   })();
+  // 화면 기준(월요일 시작)을 일요일 시작으로 옮긴다
+  var sun=new Date(mon); sun.setDate(mon.getDate()-1);
 
-  var allDates=[], dlabels=['월','화','수','목','금','토','일'];
-  for(var i=0;i<7;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);allDates.push(d);}
+  var dlabels=['일','월','화','수','목','금','토'];
+  var dates=[];
+  for(var i=0;i<7;i++){var d=new Date(sun);d.setDate(sun.getDate()+i);dates.push(d);}
 
   // 과거 주는 localStorage 에 없을 수 있어 Firestore 에서 먼저 받아 둔다
   try{
     if(typeof toast==='function') toast('출퇴근 기록 불러오는 중…','i');
     await _attPrefetchWeek(mon);
+    await _attPrefetchWeek(sun);   // 일요일이 이전 주 범위라 한 번 더
   }catch(e){
     console.warn('[attDownloadWeekly] prefetch 실패', e && e.message);
   }
 
-  // 기록 있는 날만 필터
-  var dates=allDates.filter(function(dt){
+  // 한 주에 기록이 하나도 없으면 안내만 하고 끝낸다
+  var _hasAny=dates.some(function(dt){
     var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
     var raw=localStorage.getItem(_attDateKey(ds));
     if(!raw) return false;
@@ -1566,16 +1571,15 @@ async function attDownloadWeekly(){
       return r&&(r.tags&&r.tags.length>0||r.inTime||r.outTime);
     });
   });
-  if(dates.length===0){
-    var _m1=mon.getMonth()+1, _d1=mon.getDate();
-    var _e=new Date(mon); _e.setDate(mon.getDate()+6);
-    alert(_m1+'/'+_d1+' ~ '+(_e.getMonth()+1)+'/'+_e.getDate()+' 주간에 출퇴근 기록이 없습니다.');
+  if(!_hasAny){
+    var _s=dates[0], _e=dates[6];
+    alert((_s.getMonth()+1)+'/'+_s.getDate()+' ~ '+(_e.getMonth()+1)+'/'+_e.getDate()+' 주간에 출퇴근 기록이 없습니다.');
     return;
   }
 
   var DS=8;
   var numDays=dates.length;
-  var dlabelsByDate=dates.map(function(dt){return dlabels[(dt.getDay()===0?6:dt.getDay()-1)];});
+  var dlabelsByDate=dates.map(function(dt){return dlabels[dt.getDay()];});
 
   try{
     var yr=dates[0].getFullYear(), mo=dates[0].getMonth()+1;
