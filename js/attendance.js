@@ -1238,6 +1238,8 @@ async function _attPrefetchWeek(weekStart){
 // prefetch + render 묶음 (호출자가 이 함수를 await로 부름)
 async function _attShowMonthly(){
   if(!_attWeekStart) _attWeekStart=_attGetWeekMon(_attDate||tod());
+  // 예전 값(월요일 시작)이 남아 있으면 그 주 일요일로 맞춘다
+  if(_attWeekStart.getDay()!==0) _attWeekStart.setDate(_attWeekStart.getDate()-_attWeekStart.getDay());
   await _loadHolidays();
   await _attPrefetchWeek(_attWeekStart);
   _renderAttMonthly();
@@ -1250,6 +1252,7 @@ function attWeekToday(){ _attWeekStart=_attGetWeekMon(tod()); _attShowMonthly();
 function _renderAttMonthly(){
   var tbl=document.getElementById('attWeekTable'); if(!tbl) return;
   if(!_attWeekStart) _attWeekStart=_attGetWeekMon(_attDate||tod());
+  if(_attWeekStart.getDay()!==0) _attWeekStart.setDate(_attWeekStart.getDate()-_attWeekStart.getDay());
   var dates=[];
   var dow=['일','월','화','수','목','금','토'];
   for(var i=0;i<7;i++){
@@ -1544,6 +1547,7 @@ async function attDownloadWeekly(){
     var t=new Date(_attDate);
     var s=new Date(t); s.setDate(t.getDate()-t.getDay()); return s;
   })();
+  if(sun.getDay()!==0) sun.setDate(sun.getDate()-sun.getDay());
 
   var dlabels=['일','월','화','수','목','금','토'];
   var dates=[];
