@@ -1324,9 +1324,11 @@ function _renderAttMonthly(){
         var label=isAbsent?'결근':isHoliday?'휴무':'연차';
         var color=isAbsent?'#e53935':isHoliday?'#0891b2':'#ad1457';
         html+='<td colspan="2" style="padding:4px;text-align:center;font-size:11px;font-weight:600;color:'+color+';background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+label+'</td>';
-      } else if(!r||isWknd){
-        html+='<td style="padding:4px;text-align:center;font-size:11px;color:var(--g3);background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+(isWknd&&!r?'-':'')+'</td>';
-        html+='<td style="padding:4px;text-align:center;font-size:11px;color:var(--g3);background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+(isWknd&&!r?'-':'')+'</td>';
+      } else if(!r){
+        // 기록이 없는 날. 주말은 '-' 로, 평일은 빈칸으로 둔다.
+        var _dash = isWknd ? '-' : '';
+        html+='<td style="padding:4px;text-align:center;font-size:11px;color:var(--g3);background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+_dash+'</td>';
+        html+='<td style="padding:4px;text-align:center;font-size:11px;color:var(--g3);background:'+bg+';border:0.5px solid var(--g2);cursor:pointer" onclick="attWeekCellEdit(\''+escapedDs+'\',\''+escapedName+'\')">'+_dash+'</td>';
       } else {
         var tagLabel=tags.length?tags.map(function(t){return ATT_SL[t]||t;}).join('+'):'';
         var badge=tagLabel?'<div style="font-size:9px;color:#1a56db">'+tagLabel+'</div>':'';
