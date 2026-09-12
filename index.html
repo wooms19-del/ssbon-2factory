@@ -349,6 +349,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
     <button class="att-sub-tab" data-tab="leave" onclick="attShowSubTab('leave',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">연차 신청</button>
     <button class="att-sub-tab on" data-tab="input" onclick="attShowSubTab('input',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">출퇴근 입력</button>
     <button class="att-sub-tab" data-tab="monthly" onclick="attShowSubTab('monthly',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">월별 조회</button>
+    <button class="att-sub-tab" data-tab="person" onclick="attShowSubTab('person',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">직원별 조회</button>
     <button class="att-sub-tab" data-tab="staff" onclick="attShowSubTab('staff',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">직원 관리</button>
     <button class="att-sub-tab" data-tab="report" onclick="attShowSubTab('report',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">현황·조출</button>
   </div>
@@ -378,6 +379,23 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
     <!-- 주간 테이블 -->
     <div style="overflow-x:auto;padding:0">
       <table id="attWeekTable" style="width:100%;border-collapse:collapse;font-size:12px"></table>
+    </div>
+  </div>
+
+  <!-- 직원별 조회 탭 -->
+  <div id="attPersonWrap" style="display:none">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;border-bottom:var(--br);flex-wrap:wrap">
+      <select id="attPsName" class="fc" style="padding:6px 8px;font-size:13px;min-width:130px" onchange="attPsRender()"></select>
+      <input type="date" id="attPsFrom" class="fc" style="padding:6px 8px;font-size:13px" onchange="attPsLoad()">
+      <span style="font-size:12px;color:var(--g5)">~</span>
+      <input type="date" id="attPsTo" class="fc" style="padding:6px 8px;font-size:13px" onchange="attPsLoad()">
+      <button class="btn bo" style="padding:5px 10px;font-size:12px" onclick="attPsQuick(30)">최근 30일</button>
+      <button class="btn bo" style="padding:5px 10px;font-size:12px" onclick="attPsQuick('month')">이번 달</button>
+      <button class="btn bo" style="padding:5px 12px;font-size:12px;margin-left:auto" onclick="attPsExcel()">📥 엑셀</button>
+    </div>
+    <div id="attPsSummary" style="padding:10px 14px"></div>
+    <div style="overflow-x:auto;padding:0">
+      <table id="attPsTable" style="width:100%;border-collapse:collapse;font-size:12px"></table>
     </div>
   </div>
 
@@ -1741,7 +1759,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
 <script src="js/kakao.js?v=1778129561"></script>
 <script src="js/app.js?v=1788500816"></script>
 <script src="js/schedule.js?v=1780015580"></script>
-<script src="js/attendance.js?v=1789174973"></script>
+<script src="js/attendance.js?v=1789175241"></script>
 <script src="js/timepicker.js?v=1778129561"></script>
 <script src="js/globals.js?v=1778599476"></script>
 <script src="js/stock.js?v=1788503654"></script>

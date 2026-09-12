@@ -230,11 +230,12 @@ function attSave(){
 
 function _renderAttAll(){
   _renderAttSummary();
-  ['attInputWrap','attMonthlyWrap','attLeaveWrap','attStaffWrap','attReportWrap'].forEach(function(id){var w=document.getElementById(id);if(w)w.style.display='none';});
-  var wrapId={input:'attInputWrap',monthly:'attMonthlyWrap',leave:'attLeaveWrap',staff:'attStaffWrap',report:'attReportWrap'}[_attSubTab];
+  ['attInputWrap','attMonthlyWrap','attPersonWrap','attLeaveWrap','attStaffWrap','attReportWrap'].forEach(function(id){var w=document.getElementById(id);if(w)w.style.display='none';});
+  var wrapId={input:'attInputWrap',monthly:'attMonthlyWrap',person:'attPersonWrap',leave:'attLeaveWrap',staff:'attStaffWrap',report:'attReportWrap'}[_attSubTab];
   var w=document.getElementById(wrapId);if(w)w.style.display='';
   if(_attSubTab==='input')_renderAttInput();
   if(_attSubTab==='monthly')_attShowMonthly();  // ★ Firebase prefetch + render
+  if(_attSubTab==='person')_attShowPerson();
   if(_attSubTab==='leave')_attShowLeave();
   if(_attSubTab==='staff')_renderAttStaff();
   if(_attSubTab==='report')_renderAttReport();
@@ -1533,8 +1534,178 @@ function _calcWorkHoursByTime(inTime, outTime, tags){
   var overlap=Math.max(0, Math.min(outM,lunchEnd)-Math.max(inM,lunchStart))/60;
   var hours=(outM-inM)/60 - overlap;
   if(tags.indexOf('half-am')>=0||tags.indexOf('half-pm')>=0) hours-=4;
-  if(tags.indexOf('quarter')>=0) hours-=2;
+  if(tags.indexOf('quarter')>=0||tags.indexOf('quarter-am')>=0||tags.indexOf('quarter-pm')>=0) hours-=2;
   return Math.max(0, hours);
+}
+
+// ============================================================
+// 직원별 조회 — 한 사람의 기간별 출퇴근 이력
+//   기간을 직접 지정한다. 날짜별 출퇴근·근무시간과 합계를 본다.
+// ============================================================
+var _attPsData = null;   // {date: rec}
+
+function _attPsFmt(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+async function _attShowPerson(){
+  var sel=document.getElementById('attPsName');
+  if(sel){
+    var cur=sel.value;
+    sel.innerHTML=(_attEmps||[]).map(function(e){
+      return '<option value="'+e.name+'">'+e.name+(e.part?' ('+e.part+')':'')+'</option>';
+    }).join('');
+    if(cur) sel.value=cur;
+  }
+  var f=document.getElementById('attPsFrom'), t=document.getElementById('attPsTo');
+  if(f && !f.value){
+    var to=new Date(), from=new Date();
+    from.setDate(to.getDate()-29);
+    f.value=_attPsFmt(from); t.value=_attPsFmt(to);
+  }
+  await attPsLoad();
+}
+
+function attPsQuick(kind){
+  var f=document.getElementById('attPsFrom'), t=document.getElementById('attPsTo');
+  var to=new Date(), from=new Date();
+  if(kind==='month'){ from=new Date(to.getFullYear(), to.getMonth(), 1); }
+  else { from.setDate(to.getDate()-(parseInt(kind,10)-1)); }
+  f.value=_attPsFmt(from); t.value=_attPsFmt(to);
+  attPsLoad();
+}
+
+async function attPsLoad(){
+  var f=document.getElementById('attPsFrom'), t=document.getElementById('attPsTo');
+  if(!f||!t||!f.value||!t.value) return;
+  if(f.value>t.value){ if(typeof toast==='function') toast('시작일이 종료일보다 늦습니다','w'); return; }
+  var days=Math.round((new Date(t.value)-new Date(f.value))/86400000)+1;
+  if(days>200){ if(typeof toast==='function') toast('기간이 너무 깁니다 (최대 200일)','w'); return; }
+
+  var body=document.getElementById('attPsSummary');
+  if(body) body.innerHTML='<div style="color:var(--g5);font-size:13px">불러오는 중…</div>';
+
+  _attPsData={};
+  var jobs=[];
+  for(var i=0;i<days;i++){
+    (function(idx){
+      var d=new Date(f.value+'T00:00:00'); d.setDate(d.getDate()+idx);
+      var ds=_attPsFmt(d);
+      jobs.push(
+        firebase.firestore().collection('attendance').doc(ds).get()
+          .then(function(doc){
+            if(doc && doc.exists) _attPsData[ds]=(doc.data().records||{});
+          }).catch(function(){})
+      );
+    })(i);
+  }
+  await Promise.all(jobs);
+  attPsRender();
+}
+
+function attPsRender(){
+  var sel=document.getElementById('attPsName');
+  var tbl=document.getElementById('attPsTable');
+  var sum=document.getElementById('attPsSummary');
+  if(!sel||!tbl||!_attPsData) return;
+  var name=sel.value;
+  var f=document.getElementById('attPsFrom').value;
+  var t=document.getElementById('attPsTo').value;
+  if(!name||!f||!t) return;
+
+  var dow=['일','월','화','수','목','금','토'];
+  var rows=[], totH=0, workDays=0, cnt={annual:0, absent:0, holiday:0, half:0};
+  var days=Math.round((new Date(t)-new Date(f))/86400000)+1;
+  for(var i=0;i<days;i++){
+    var d=new Date(f+'T00:00:00'); d.setDate(d.getDate()+i);
+    var ds=_attPsFmt(d);
+    var r=(_attPsData[ds]||{})[name]||null;
+    var tags=(r&&r.tags)||[];
+    var h=r?_calcWorkHoursByTime(r.inTime, r.outTime, tags):0;
+    if(h>0){ totH+=h; workDays++; }
+    if(tags.indexOf('annual')>=0) cnt.annual++;
+    if(tags.indexOf('absent')>=0) cnt.absent++;
+    if(tags.indexOf('holiday')>=0) cnt.holiday++;
+    if(tags.indexOf('half-am')>=0||tags.indexOf('half-pm')>=0||tags.indexOf('quarter')>=0
+       ||tags.indexOf('quarter-am')>=0||tags.indexOf('quarter-pm')>=0) cnt.half++;
+    rows.push({ds:ds, d:d, rec:r, tags:tags, h:h});
+  }
+
+  if(sum){
+    var box=function(lb,v,c){
+      return '<div style="flex:1;min-width:96px;background:var(--g1);border-radius:8px;padding:9px 12px">'
+        +'<div style="font-size:11px;color:var(--g5)">'+lb+'</div>'
+        +'<div style="font-size:18px;font-weight:600;margin-top:2px;'+(c?'color:'+c:'')+'">'+v+'</div></div>';
+    };
+    sum.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      + box('출근일', workDays+'일')
+      + box('총 근무', totH.toFixed(1)+'h', '#1d4ed8')
+      + box('일평균', (workDays?(totH/workDays).toFixed(1):'0.0')+'h')
+      + box('연차', cnt.annual+'일', cnt.annual?'#1d4ed8':'')
+      + box('반차·반반차', cnt.half+'일')
+      + box('결근', cnt.absent+'일', cnt.absent?'#dc2626':'')
+      + '</div>';
+  }
+
+  var h2='<thead><tr style="background:var(--g1)">'
+    +['날짜','요일','출근','퇴근','근무시간','비고'].map(function(x,i){
+      return '<th style="padding:8px 10px;font-size:12px;font-weight:600;text-align:'+(i>=2&&i<=4?'center':'left')+';border-bottom:0.5px solid var(--g2);color:var(--g6)">'+x+'</th>';
+    }).join('')+'</tr></thead><tbody>';
+  var todayStr=(typeof tod==='function')?tod():'';
+  rows.forEach(function(r){
+    var isSun=r.d.getDay()===0, isSat=r.d.getDay()===6;
+    var dc=isSun?'#dc2626':isSat?'#1d4ed8':'var(--g7)';
+    var note=_attTagLabels ? _attTagLabels(r.tags) : r.tags.join(',');
+    var empty=!r.rec||(!r.rec.inTime&&!r.rec.outTime&&r.tags.length===0);
+    h2+='<tr style="border-bottom:0.5px solid var(--g2);'+(r.ds===todayStr?'background:#eff6ff':'')+'">'
+      +'<td style="padding:7px 10px;color:'+dc+'">'+r.ds.slice(5).replace('-','/')+'</td>'
+      +'<td style="padding:7px 10px;color:'+dc+'">'+dow[r.d.getDay()]+'</td>'
+      +'<td style="padding:7px 10px;text-align:center">'+((r.rec&&r.rec.inTime)||'-')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center">'+((r.rec&&r.rec.outTime)||'-')+'</td>'
+      +'<td style="padding:7px 10px;text-align:center;font-weight:'+(r.h>0?'600':'400')+';color:'+(r.h>0?'var(--g7)':'var(--g4)')+'">'+(r.h>0?r.h.toFixed(1)+'h':'-')+'</td>'
+      +'<td style="padding:7px 10px;font-size:11px;color:var(--g5)">'+(empty?'':note)+'</td>'
+      +'</tr>';
+  });
+  h2+='</tbody>';
+  tbl.innerHTML=h2;
+}
+
+// 태그를 사람이 읽는 말로 (ATT_SL 재사용)
+function _attTagLabels(tags){
+  if(!tags||!tags.length) return '';
+  return tags.map(function(t){ return (typeof ATT_SL!=='undefined' && ATT_SL[t]) || t; }).join(' · ');
+}
+
+// 직원별 조회 엑셀
+function attPsExcel(){
+  if(typeof XLSX==='undefined'){ if(typeof toast==='function') toast('엑셀 모듈을 불러오지 못했습니다','w'); return; }
+  var sel=document.getElementById('attPsName');
+  var name=sel&&sel.value;
+  var f=document.getElementById('attPsFrom').value, t=document.getElementById('attPsTo').value;
+  if(!name||!_attPsData){ if(typeof toast==='function') toast('먼저 조회하세요','w'); return; }
+
+  var dow=['일','월','화','수','목','금','토'];
+  var aoa=[[name+' 출퇴근 기록'],[f+' ~ '+t],[],['날짜','요일','출근','퇴근','근무시간(h)','비고']];
+  var days=Math.round((new Date(t)-new Date(f))/86400000)+1;
+  var totH=0, workDays=0;
+  for(var i=0;i<days;i++){
+    var d=new Date(f+'T00:00:00'); d.setDate(d.getDate()+i);
+    var ds=_attPsFmt(d);
+    var r=(_attPsData[ds]||{})[name]||null;
+    var tags=(r&&r.tags)||[];
+    var h=r?_calcWorkHoursByTime(r.inTime,r.outTime,tags):0;
+    if(h>0){ totH+=h; workDays++; }
+    aoa.push([ds, dow[d.getDay()], (r&&r.inTime)||'', (r&&r.outTime)||'',
+              h>0?Math.round(h*10)/10:'', _attTagLabels(tags)]);
+  }
+  aoa.push([]);
+  aoa.push(['합계','','','', Math.round(totH*10)/10, '출근 '+workDays+'일']);
+
+  var ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:12},{wch:6},{wch:8},{wch:8},{wch:12},{wch:20}];
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '출퇴근');
+  XLSX.writeFile(wb, name+'_출퇴근_'+f+'~'+t+'.xlsx');
 }
 
 // ─────────────────────────────────────────────────────────
