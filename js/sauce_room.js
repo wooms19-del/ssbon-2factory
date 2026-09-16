@@ -65,6 +65,11 @@ async function renderSauceRoom(){
   });
   _srMake = mk; _srUse = us; _srName = nm;
   _srPaint();
+  // 제조 이력은 뒤이어 채운다 (잔량 카드가 먼저 뜨도록)
+  _srLogLoad().then(function(){
+    var b = document.getElementById('srLogBody');
+    if(b) b.innerHTML = _srLogHtml();
+  });
 }
 
 function _srRows(){
@@ -83,6 +88,7 @@ function _srRows(){
 function _srPaint(){
   var el = document.getElementById('p-sauceroom');
   if(!el) return;
+  _srLogInit();
   var rows = _srRows();
   var total = rows.reduce(function(s,r){ return s + Math.max(0, r.qty); }, 0);
   var neg = rows.filter(function(r){ return r.qty < -SR_EMPTY; });
@@ -117,6 +123,21 @@ function _srPaint(){
     h += _srCard(r);
   });
   h += '</div></div>';
+
+  // 제조 이력 (기간 지정)
+  h += '<div class="card" style="padding:14px 16px;margin-top:10px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">';
+  h += '<div style="font-size:14px;font-weight:600">소스 제조 이력</div>';
+  h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+     + '<input type="date" class="fc" value="' + _srLogFrom + '" onchange="srLogSet(\'from\',this.value)" style="padding:5px 7px;font-size:12px">'
+     + '<span style="font-size:12px;color:var(--g5)">~</span>'
+     + '<input type="date" class="fc" value="' + _srLogTo + '" onchange="srLogSet(\'to\',this.value)" style="padding:5px 7px;font-size:12px">'
+     + '<button class="btn bo bsm" style="padding:4px 10px;font-size:12px" onclick="srLogQuick(7)">최근 7일</button>'
+     + '<button class="btn bo bsm" style="padding:4px 10px;font-size:12px" onclick="srLogQuick(30)">30일</button>'
+     + '<button class="btn bo bsm" style="padding:4px 10px;font-size:12px" onclick="srLogExcel()">엑셀</button>'
+     + '</div></div>';
+  h += '<div id="srLogBody" style="margin-top:10px">' + _srLogHtml() + '</div>';
+  h += '</div>';
 
   h += '<div style="font-size:11px;color:var(--g5);padding:10px 4px;line-height:1.7">'
      + '제조는 소스 탭, 사용은 포장 탭의 소스 탱크 기록에서 자동 반영됩니다. 내포장이 종료될 때 해당 탱크에서 차감됩니다.<br>'
@@ -217,3 +238,156 @@ async function srSaveCount(){
   }
 }
 
+
+// ── 소스 제조 이력 ────────────────────────────────────
+// 탱크에 언제 무엇을 얼마나 쳤는지 되짚어 볼 수 있게 한다.
+// 잔량 카드는 합계만 보여 주므로 개별 기록은 여기서 본다.
+var _srLogFrom = '';
+var _srLogTo   = '';
+var _srLog     = null;   // [{date,name,kg,tank,note,at}]
+
+function _srLogInit(){
+  if(_srLogFrom && _srLogTo) return;
+  var t = srTod();
+  _srLogTo = t;
+  _srLogFrom = _srAddDay(t, -6);
+}
+
+async function _srLogLoad(){
+  _srLogInit();
+  try{
+    var rows = await fbGetRange('sauce', _srLogFrom, _srLogTo);
+    _srLog = (rows||[]).slice().sort(function(a,b){
+      var x = String(a.date||'') + String(a._createdAt||'');
+      var y = String(b.date||'') + String(b._createdAt||'');
+      return x < y ? 1 : -1;      // 최근 것이 위로
+    });
+  }catch(e){
+    _srLog = [];
+  }
+}
+
+function _srLogHtml(){
+  if(_srLog === null) return '<div style="font-size:12px;color:var(--g5)">불러오는 중…</div>';
+  if(!_srLog.length){
+    return '<div style="font-size:12px;color:var(--g5);padding:14px 0;text-align:center">'
+         + _srLogFrom + ' ~ ' + _srLogTo + ' 기간에 제조 기록이 없습니다.</div>';
+  }
+  var totFC = 0, totFP = 0;
+  _srLog.forEach(function(r){
+    var kg = parseFloat(r.kg)||0;
+    if(String(r.name||'').indexOf('FC') >= 0) totFC += kg; else totFP += kg;
+  });
+
+  var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+    + '<div style="background:var(--g1);border-radius:8px;padding:8px 12px">'
+      + '<span style="font-size:11px;color:var(--g5)">기간 제조</span> '
+      + '<strong style="font-size:15px">' + Math.round(totFC+totFP).toLocaleString() + '</strong>'
+      + '<span style="font-size:11px;color:var(--g5)"> kg · ' + _srLog.length + '회</span></div>'
+    + '<div style="background:var(--g1);border-radius:8px;padding:8px 12px">'
+      + '<span style="font-size:11px;color:#1d4ed8;font-weight:600">FP</span> '
+      + '<strong style="font-size:15px">' + Math.round(totFP).toLocaleString() + '</strong>'
+      + '<span style="font-size:11px;color:var(--g5)"> kg</span></div>'
+    + '<div style="background:var(--g1);border-radius:8px;padding:8px 12px">'
+      + '<span style="font-size:11px;color:#dc2626;font-weight:600">FC</span> '
+      + '<strong style="font-size:15px">' + Math.round(totFC).toLocaleString() + '</strong>'
+      + '<span style="font-size:11px;color:var(--g5)"> kg</span></div>'
+    + '</div>';
+
+  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead><tr style="background:var(--g1)">'
+    + '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--g6)">제조일</th>'
+    + '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--g6)">소스</th>'
+    + '<th style="padding:7px 10px;text-align:right;font-size:11px;color:var(--g6);width:90px">제조량</th>'
+    + '<th style="padding:7px 10px;text-align:center;font-size:11px;color:var(--g6);width:90px">탱크</th>'
+    + '<th style="padding:7px 10px;text-align:center;font-size:11px;color:var(--g6);width:70px">입력시각</th>'
+    + '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--g6)">특이사항</th>'
+    + '</tr></thead><tbody>';
+
+  var dow = ['일','월','화','수','목','금','토'];
+  var lastDate = '';
+  _srLog.forEach(function(r){
+    var ds = String(r.date||'').slice(0,10);
+    var isFC = String(r.name||'').indexOf('FC') >= 0;
+    var at = String(r._createdAt||'');
+    var hhmm = '';
+    if(at){
+      var d = new Date(at);
+      if(!isNaN(d)) hhmm = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    }
+    var dLbl = '';
+    if(ds !== lastDate){
+      var dt = new Date(ds + 'T00:00:00');
+      dLbl = ds.slice(5).replace('-','/') + (isNaN(dt) ? '' : '(' + dow[dt.getDay()] + ')');
+      lastDate = ds;
+    }
+    h += '<tr style="border-bottom:0.5px solid var(--g2)">'
+      + '<td style="padding:7px 10px;color:var(--g6)">' + dLbl + '</td>'
+      + '<td style="padding:7px 10px"><span style="font-size:11px;font-weight:600;color:' + (isFC?'#dc2626':'#1d4ed8') + '">'
+        + (isFC?'FC':'FP') + '</span> <span style="color:var(--g6)">' + (r.name||'') + '</span></td>'
+      + '<td style="padding:7px 10px;text-align:right;font-weight:600">' + Math.round(parseFloat(r.kg)||0).toLocaleString()
+        + '<span style="font-size:11px;font-weight:400;color:var(--g5)"> kg</span></td>'
+      + '<td style="padding:7px 10px;text-align:center">' + (r.tank||'-') + '</td>'
+      + '<td style="padding:7px 10px;text-align:center;font-size:11px;color:var(--g5)">' + hhmm + '</td>'
+      + '<td style="padding:7px 10px;font-size:11px;color:var(--g5)">' + (r.note||'') + '</td>'
+      + '</tr>';
+  });
+  h += '</tbody></table></div>';
+  return h;
+}
+
+function srLogSet(which, v){
+  if(!v) return;
+  if(which === 'from') _srLogFrom = v; else _srLogTo = v;
+  if(_srLogFrom > _srLogTo){
+    if(typeof toast === 'function') toast('시작일이 종료일보다 늦습니다','w');
+    return;
+  }
+  _srLog = null;
+  var b = document.getElementById('srLogBody');
+  if(b) b.innerHTML = _srLogHtml();
+  _srLogLoad().then(function(){
+    var b2 = document.getElementById('srLogBody');
+    if(b2) b2.innerHTML = _srLogHtml();
+  });
+}
+
+function srLogQuick(days){
+  var t = srTod();
+  _srLogTo = t;
+  _srLogFrom = _srAddDay(t, -(days-1));
+  srLogSet('to', _srLogTo);
+}
+
+function srLogExcel(){
+  if(typeof XLSX === 'undefined'){
+    if(typeof toast === 'function') toast('엑셀 모듈을 불러오지 못했습니다','w');
+    return;
+  }
+  if(!_srLog || !_srLog.length){
+    if(typeof toast === 'function') toast('내보낼 기록이 없습니다','w');
+    return;
+  }
+  var aoa = [['소스 제조 이력'], [_srLogFrom + ' ~ ' + _srLogTo], [],
+             ['제조일','구분','소스명','제조량(kg)','탱크','입력시각','특이사항']];
+  var totFC = 0, totFP = 0;
+  _srLog.slice().reverse().forEach(function(r){
+    var kg = parseFloat(r.kg)||0;
+    var isFC = String(r.name||'').indexOf('FC') >= 0;
+    if(isFC) totFC += kg; else totFP += kg;
+    var at = String(r._createdAt||''), hhmm = '';
+    if(at){
+      var d = new Date(at);
+      if(!isNaN(d)) hhmm = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    }
+    aoa.push([String(r.date||'').slice(0,10), isFC?'FC':'FP', r.name||'', kg, r.tank||'', hhmm, r.note||'']);
+  });
+  aoa.push([]);
+  aoa.push(['합계','','', totFC+totFP, '', '', 'FP '+totFP+' / FC '+totFC]);
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:12},{wch:6},{wch:20},{wch:12},{wch:10},{wch:10},{wch:20}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '소스제조이력');
+  XLSX.writeFile(wb, '소스제조이력_' + _srLogFrom + '~' + _srLogTo + '.xlsx');
+}
