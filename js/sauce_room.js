@@ -32,7 +32,18 @@ async function renderSauceRoom(){
     _srBase = { date: '', tanks: {} };
   }
   var today = srTod();
-  var from = _srBase.date ? _srAddDay(_srBase.date, 1) : _srAddDay(today, -60);
+  // 실사한 날도 집계에 넣는다. 다음날부터 세면 실사 뒤에 친 소스가
+  // 하루 동안 화면에 안 잡힌다. 대신 실사 시각보다 나중에 들어온 것만 센다.
+  var from = _srBase.date || _srAddDay(today, -60);
+  var baseAt = _srBase.updatedAt || '';
+
+  // 실사일 당일 기록은 실사 시각 이후만 인정
+  var afterCount = function(r){
+    var d = String(r.date||'').slice(0,10);
+    if(d !== _srBase.date) return true;          // 실사일이 아니면 그대로
+    if(!baseAt) return false;                    // 실사 시각을 모르면 당일분 제외
+    return String(r._createdAt||'') > baseAt;
+  };
 
   var R = await Promise.all([
     fbGetRange('sauce', from, today).catch(function(){ return []; }),
@@ -41,10 +52,12 @@ async function renderSauceRoom(){
   var mk = {}, us = {}, nm = {};
   (R[0]||[]).forEach(function(r){
     var t = r.tank; if(!t) return;
+    if(!afterCount(r)) return;
     mk[t] = (mk[t]||0) + (parseFloat(r.kg)||0);
     if(r.name) nm[t] = r.name;
   });
   (R[1]||[]).forEach(function(r){
+    if(!afterCount(r)) return;
     (r.sauceTanks||[]).forEach(function(x){
       if(!x || !x.tank) return;
       us[x.tank] = (us[x.tank]||0) + (parseFloat(x.kg)||0);
