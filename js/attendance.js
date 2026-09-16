@@ -302,9 +302,28 @@ function _applyLeaveRequests(date){
     if(lv.type==='annual'){
       _attRecs[lv.name]={tags:['annual'], inTime:'', outTime:''};
     } else {
-      _attRecs[lv.name]={tags:[lv.type], inTime:(r&&r.inTime)||'09:00', outTime:(r&&r.outTime)||'18:00'};
+      // 반차·반반차는 종류에 맞는 근무 시각을 넣는다.
+      // 09:00~18:00 을 그대로 넣으면 하루 종일 근무한 것으로 잡힌다.
+      var _t=_leaveWorkTime(lv.type);
+      _attRecs[lv.name]={tags:[lv.type], inTime:_t.in, outTime:_t.out};
     }
   });
+}
+
+// 휴가 종류별 실제 근무 시각 (점심 12:00~13:00)
+//   오전 반차  → 오후만 근무  13:00~18:00 (5h)
+//   오후 반차  → 오전만 근무  09:00~12:00 (3h, 점심 전 퇴근)
+//   오전 반반차 → 11:00~18:00 (6h)
+//   오후 반반차 → 09:00~16:00 (6h)
+function _leaveWorkTime(type){
+  switch(type){
+    case 'half-am':    return {in:'13:00', out:'18:00'};
+    case 'half-pm':    return {in:'09:00', out:'12:00'};
+    case 'quarter-am': return {in:'11:00', out:'18:00'};
+    case 'quarter':
+    case 'quarter-pm': return {in:'09:00', out:'16:00'};
+    default:           return {in:'09:00', out:'18:00'};
+  }
 }
 
 async function _attShowLeave(){
