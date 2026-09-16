@@ -37,9 +37,9 @@ const DEFAULT_EMPS = ['김구식','김수영','임혜경','한채현','김정희
   '유혜선','레티장','김진화','드엉반담','르탄프엉','응우옌반동','응우옌민호앙',
   '응우옌반키','르판하이퐁','판투안안'];
 
-const ATT_SL    = {normal:'정상',checkin:'출근',checkout:'퇴근',early:'조출',overtime:'연장','half-am':'반차(오전)','half-pm':'반차(오후)',quarter:'반반차','quarter-am':'반반차(오전)','quarter-pm':'반반차(오후)',annual:'연차',absent:'결근',holiday:'휴무'};
-const ATT_ICON  = {normal:'✅',checkin:'🕘',checkout:'🏃',early:'🌅',overtime:'⏰','half-am':'🌓','half-pm':'🌓',quarter:'🌗','quarter-am':'🌗','quarter-pm':'🌗',annual:'📅',absent:'❌',holiday:'🏖️'};
-const ATT_COLOR = {normal:'#2e7d32',checkin:'#1a56db',checkout:'#0277bd',early:'#1565c0',overtime:'#e65100','half-am':'#6a1b9a','half-pm':'#6a1b9a',quarter:'#4a148c','quarter-am':'#4a148c','quarter-pm':'#4a148c',annual:'#ad1457',absent:'#b71c1c',holiday:'#0891b2'};
+const ATT_SL    = {normal:'정상',checkin:'출근',checkout:'퇴근',early:'조출',overtime:'연장','half-am':'반차(오전)','half-pm':'반차(오후)',quarter:'반반차','quarter-am':'반반차(오전)','quarter-pm':'반반차(오후)',annual:'연차',absent:'결근',holiday:'휴무','birth-am':'생일반차(오전)','birth-pm':'생일반차(오후)','wed-am':'결혼반차(오전)','wed-pm':'결혼반차(오후)'};
+const ATT_ICON  = {normal:'✅',checkin:'🕘',checkout:'🏃',early:'🌅',overtime:'⏰','half-am':'🌓','half-pm':'🌓',quarter:'🌗','quarter-am':'🌗','quarter-pm':'🌗',annual:'📅',absent:'❌',holiday:'🏖️','birth-am':'🎂','birth-pm':'🎂','wed-am':'💍','wed-pm':'💍'};
+const ATT_COLOR = {normal:'#2e7d32',checkin:'#1a56db',checkout:'#0277bd',early:'#1565c0',overtime:'#e65100','half-am':'#6a1b9a','half-pm':'#6a1b9a',quarter:'#4a148c','quarter-am':'#4a148c','quarter-pm':'#4a148c',annual:'#ad1457',absent:'#b71c1c',holiday:'#0891b2','birth-am':'#c2185b','birth-pm':'#c2185b','wed-am':'#7b1fa2','wed-pm':'#7b1fa2'};
 // 시간 입력 필요 여부
 const ATT_NEEDS_IN  = {checkin:true,early:true};
 const ATT_NEEDS_OUT = {overtime:true};
@@ -197,6 +197,12 @@ function attSave(){
     Object.keys(_attRecs||{}).forEach(function(n){
       if(!_inMaster[n] && _attRecs[n]) full[n]=_attRecs[n];
     });
+    // 승인된 휴가가 있으면 기본값으로 덮기 전에 먼저 반영한다.
+    // 이걸 안 하면 09:00~18:00 기본값이 들어가고, 그 뒤 휴가 승인이
+    // '이미 근무 기록 있음'에 막혀 영영 반영되지 않는다.
+    if(typeof _applyLeaveRequests === 'function'){
+      try{ _applyLeaveRequests(_attDate); }catch(e){}
+    }
     _attEmps.forEach(function(e){
       full[e.name] = _attRecs[e.name]||{tags:[],inTime:'09:00',outTime:'18:00'};
     });
@@ -248,11 +254,18 @@ function _renderAttAll(){
 // ============================================================
 var LEAVE_COL='leave_requests';
 var LEAVE_TYPES=[
-  {v:'annual',  label:'연차 (하루)',   unit:1},
-  {v:'half-am', label:'반차 (오전)',   unit:0.5},
-  {v:'half-pm', label:'반차 (오후)',   unit:0.5},
-  {v:'quarter', label:'반반차',        unit:0.25}
+  {v:'annual',     label:'연차 (하루)',      unit:1},
+  {v:'half-am',    label:'반차 (오전)',      unit:0.5},
+  {v:'half-pm',    label:'반차 (오후)',      unit:0.5},
+  {v:'quarter',    label:'반반차',           unit:0.25},
+  // 아래 둘은 연차 일수에서 차감하지 않는다 (unit 0). 반차로만 쓴다.
+  {v:'birth-am',   label:'생일반차 (오전)',  unit:0},
+  {v:'birth-pm',   label:'생일반차 (오후)',  unit:0},
+  {v:'wed-am',     label:'결혼반차 (오전)',  unit:0},
+  {v:'wed-pm',     label:'결혼반차 (오후)',  unit:0}
 ];
+// 연차에서 차감하지 않는 휴가
+var LEAVE_FREE={'birth-am':1,'birth-pm':1,'wed-am':1,'wed-pm':1};
 var _leaveCache=null;        // 전체 신청 목록 (배열)
 var _leaveEditId=null;       // 수정 중인 신청 id (null이면 신규)
 var _leaveShowPast=false;    // 지난 신청 표시 여부
@@ -322,8 +335,12 @@ function _applyLeaveRequests(date){
 //   오후 반반차 → 09:00~16:00 (6h)
 function _leaveWorkTime(type){
   switch(type){
-    case 'half-am':    return {in:'13:00', out:'18:00'};
-    case 'half-pm':    return {in:'09:00', out:'12:00'};
+    case 'half-am':
+    case 'birth-am':
+    case 'wed-am':     return {in:'13:00', out:'18:00'};
+    case 'half-pm':
+    case 'birth-pm':
+    case 'wed-pm':     return {in:'09:00', out:'12:00'};
     case 'quarter-am': return {in:'11:00', out:'18:00'};
     case 'quarter':
     case 'quarter-pm': return {in:'09:00', out:'16:00'};
@@ -352,9 +369,44 @@ async function attLeaveDecide(id, status){
     await _leaveLoad(true);
     await _leaveSyncUsedDays();
     _renderAttLeave();
+    if(status==='approved'){
+      // 승인한 날짜의 저장된 근태에 바로 반영한다.
+      // 화면에 열려 있는 날이 아니어도 반영해야, 나중에 열었을 때
+      // 기본값(09:00~18:00)에 막혀 휴가가 사라지는 일이 없다.
+      try{ await _leaveWriteToAttendance(lv); }catch(e){ console.warn('[연차] 근태 반영 실패', e); }
+    }
     if(_leaveWorkDates(lv.from,lv.to).indexOf(_attDate)>=0) await _loadAttDate(_attDate);
     toast(status==='approved'?'승인됨 ✓':'반려됨','s');
   }catch(err){ console.error('[연차] 승인 처리 실패', err); toast('처리 실패','e'); }
+}
+
+// 승인된 휴가를 해당 날짜의 attendance 문서에 직접 써 넣는다.
+// 그 날짜에 이미 실제로 찍은 기록이 있으면 건드리지 않는다.
+async function _leaveWriteToAttendance(lv){
+  var dates=_leaveWorkDates(lv.from, lv.to);
+  for(var i=0;i<dates.length;i++){
+    var ds=dates[i];
+    var ref=firebase.firestore().collection('attendance').doc(ds);
+    var doc=await ref.get();
+    if(!doc || !doc.exists) continue;            // 저장된 기록이 없으면 열 때 반영된다
+    var data=doc.data()||{};
+    var recs=data.records||{};
+    var r=recs[lv.name];
+    var tags=(r&&r.tags)||[];
+    // 실제로 찍은 기록은 보호. 태그 없는 기본값만 덮는다.
+    var isDefault=(!tags.length && (!r || (r.inTime==='09:00' && r.outTime==='18:00')));
+    var worked=((r&&(r.inTime||r.outTime))||tags.indexOf('checkin')>=0||tags.indexOf('early')>=0) && !isDefault;
+    if(worked) continue;
+    if(tags.indexOf('absent')>=0) continue;
+    if(tags.indexOf(lv.type)>=0) continue;
+    if(lv.type==='annual'){
+      recs[lv.name]={tags:['annual'], inTime:'', outTime:''};
+    }else{
+      var t=_leaveWorkTime(lv.type);
+      recs[lv.name]={tags:[lv.type], inTime:t.in, outTime:t.out};
+    }
+    await ref.update({records:recs});
+  }
 }
 
 async function attLeaveUnapprove(id){
