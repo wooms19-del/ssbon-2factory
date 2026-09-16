@@ -295,7 +295,12 @@ function _applyLeaveRequests(date){
     if(_leaveWorkDates(lv.from, lv.to).indexOf(date) < 0) return;
     var r=_attRecs[lv.name];
     var tags=(r&&r.tags)||[];
-    var worked=(r&&(r.inTime||r.outTime))||tags.indexOf('checkin')>=0||tags.indexOf('early')>=0;
+    // 실제로 찍은 기록이 있으면 그것을 우선한다.
+    // 다만 태그 없이 09:00~18:00 기본값만 들어간 것은 '찍은 기록'이 아니다.
+    // 그걸 근무로 보면 승인된 휴가가 영영 반영되지 않는다.
+    var _isDefault = (!tags.length && (!r || (r.inTime==='09:00' && r.outTime==='18:00')));
+    var worked=((r&&(r.inTime||r.outTime)) || tags.indexOf('checkin')>=0 || tags.indexOf('early')>=0)
+               && !_isDefault;
     if(worked) return;                                  // 실제 근무 기록 우선
     if(tags.indexOf('absent')>=0) return;                // 결근 처리도 우선
     if(tags.indexOf(lv.type)>=0) return;                 // 이미 같은 태그면 그대로
