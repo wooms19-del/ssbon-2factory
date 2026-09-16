@@ -300,13 +300,21 @@ async function _leaveLoad(force){
 
 // ★ 해당 날짜에 걸린 연차 신청을 근태 기록에 반영
 //   현장에서 이미 입력된 기록(출퇴근 시각/조출/체크인)은 절대 덮어쓰지 않음
+//   같은 날 여러 건(예: 결혼반차 오전 + 일반반차 오후)은 모아서 한 번에 반영한다
 function _applyLeaveRequests(date){
   if(!_leaveCache || !_leaveCache.length) return;
+  // 1) 그날 승인된 신청을 사람별로 모은다
+  var byName={};
   _leaveCache.forEach(function(lv){
     if(!lv || !lv.name) return;
     if((lv.status||'approved')!=='approved') return;   // ★ 승인된 것만 반영 (대기/반려 제외)
     if(_leaveWorkDates(lv.from, lv.to).indexOf(date) < 0) return;
-    var r=_attRecs[lv.name];
+    (byName[lv.name]=byName[lv.name]||[]).push(lv);
+  });
+  // 2) 사람별로 조합해 한 번에 쓴다
+  Object.keys(byName).forEach(function(name){
+    var lvs=byName[name];
+    var r=_attRecs[name];
     var tags=(r&&r.tags)||[];
     // 실제로 찍은 기록이 있으면 그것을 우선한다.
     // 다만 태그 없이 09:00~18:00 기본값만 들어간 것은 '찍은 기록'이 아니다.
@@ -316,16 +324,41 @@ function _applyLeaveRequests(date){
                && !_isDefault;
     if(worked) return;                                  // 실제 근무 기록 우선
     if(tags.indexOf('absent')>=0) return;                // 결근 처리도 우선
-    if(tags.indexOf(lv.type)>=0) return;                 // 이미 같은 태그면 그대로
-    if(lv.type==='annual'){
-      _attRecs[lv.name]={tags:['annual'], inTime:'', outTime:''};
-    } else {
-      // 반차·반반차는 종류에 맞는 근무 시각을 넣는다.
-      // 09:00~18:00 을 그대로 넣으면 하루 종일 근무한 것으로 잡힌다.
-      var _t=_leaveWorkTime(lv.type);
-      _attRecs[lv.name]={tags:[lv.type], inTime:_t.in, outTime:_t.out};
-    }
+    var merged=_leaveMerge(lvs.map(function(x){return x.type;}));
+    if(!merged) return;
+    // 이미 같은 결과면 그대로 둔다
+    if(tags.length===merged.tags.length &&
+       merged.tags.every(function(t){return tags.indexOf(t)>=0;})) return;
+    _attRecs[name]={tags:merged.tags, inTime:merged.in, outTime:merged.out};
   });
+}
+
+// 휴가 종류 여러 건을 하나의 근태 기록으로 합친다.
+//   오전 계열 + 오후 계열  → 하루 휴무 (연차 1일과 같은 취급)
+//   같은 시간대가 겹치면   → 먼저 것만 인정
+//   반반차는 반차와 시간대가 달라 그대로 둔다
+function _leaveMerge(types){
+  types=(types||[]).filter(Boolean);
+  if(!types.length) return null;
+  if(types.indexOf('annual')>=0) return {tags:['annual'], in:'', out:''};
+
+  var AM={'half-am':1,'birth-am':1,'wed-am':1,'quarter-am':1};
+  var PM={'half-pm':1,'birth-pm':1,'wed-pm':1,'quarter-pm':1,'quarter':1};
+  var am=null, pm=null, rest=[];
+  types.forEach(function(t){
+    if(AM[t]){ if(!am) am=t; }                 // 같은 시간대는 하나만
+    else if(PM[t]){ if(!pm) pm=t; }
+    else if(rest.indexOf(t)<0) rest.push(t);
+  });
+
+  // 오전 + 오후 → 하루 종일 쉼
+  if(am && pm){
+    return {tags:[am, pm].concat(rest), in:'', out:''};
+  }
+  var one = am || pm || rest[0];
+  if(!one) return null;
+  var t=_leaveWorkTime(one);
+  return {tags:[one].concat(rest.filter(function(x){return x!==one;})), in:t.in, out:t.out};
 }
 
 // 휴가 종류별 실제 근무 시각 (점심 12:00~13:00)
@@ -382,10 +415,20 @@ async function attLeaveDecide(id, status){
 
 // 승인된 휴가를 해당 날짜의 attendance 문서에 직접 써 넣는다.
 // 그 날짜에 이미 실제로 찍은 기록이 있으면 건드리지 않는다.
+// 같은 날 다른 휴가가 이미 승인돼 있으면 함께 묶어 반영한다.
 async function _leaveWriteToAttendance(lv){
   var dates=_leaveWorkDates(lv.from, lv.to);
   for(var i=0;i<dates.length;i++){
     var ds=dates[i];
+    // 그날 이 사람의 승인된 신청을 모두 모은다
+    var types=(_leaveCache||[]).filter(function(x){
+      return x && x.name===lv.name && (x.status||'approved')==='approved'
+             && _leaveWorkDates(x.from, x.to).indexOf(ds)>=0;
+    }).map(function(x){ return x.type; });
+    if(types.indexOf(lv.type)<0) types.push(lv.type);
+    var merged=_leaveMerge(types);
+    if(!merged) continue;
+
     var ref=firebase.firestore().collection('attendance').doc(ds);
     var doc=await ref.get();
     if(!doc || !doc.exists) continue;            // 저장된 기록이 없으면 열 때 반영된다
@@ -398,13 +441,9 @@ async function _leaveWriteToAttendance(lv){
     var worked=((r&&(r.inTime||r.outTime))||tags.indexOf('checkin')>=0||tags.indexOf('early')>=0) && !isDefault;
     if(worked) continue;
     if(tags.indexOf('absent')>=0) continue;
-    if(tags.indexOf(lv.type)>=0) continue;
-    if(lv.type==='annual'){
-      recs[lv.name]={tags:['annual'], inTime:'', outTime:''};
-    }else{
-      var t=_leaveWorkTime(lv.type);
-      recs[lv.name]={tags:[lv.type], inTime:t.in, outTime:t.out};
-    }
+    if(tags.length===merged.tags.length &&
+       merged.tags.every(function(t){return tags.indexOf(t)>=0;})) continue;
+    recs[lv.name]={tags:merged.tags, inTime:merged.in, outTime:merged.out};
     await ref.update({records:recs});
   }
 }
@@ -536,6 +575,26 @@ async function attLeaveAdd(){
     return lv.name===name && lv._id!==_leaveEditId
         && _leaveWorkDates(lv.from,lv.to).some(function(d){return ds.indexOf(d)>=0;});
   });
+  // 같은 시간대(오전끼리·오후끼리)나 연차와 겹치면 아예 막는다.
+  // 오전 + 오후 조합은 하루 휴무가 되므로 허용한다.
+  var _slotOf=function(t){
+    if(t==='annual') return 'day';
+    if(t==='half-am'||t==='birth-am'||t==='wed-am'||t==='quarter-am') return 'am';
+    if(t==='half-pm'||t==='birth-pm'||t==='wed-pm'||t==='quarter-pm'||t==='quarter') return 'pm';
+    return 'etc';
+  };
+  var mySlot=_slotOf(type);
+  var clash=dup.filter(function(lv){
+    var s=_slotOf(lv.type);
+    return s===mySlot || s==='day' || mySlot==='day';
+  });
+  if(clash.length){
+    var c=clash[0];
+    alert(name+'님은 '+c.from+'에 이미 '+_leaveTypeLabel(c.type)+' 신청이 있습니다.\n'
+        + '같은 시간대는 겹쳐 쓸 수 없습니다.\n\n'
+        + '오전 + 오후 조합(예: 결혼반차 오전 + 반차 오후)은 가능합니다.');
+    return;
+  }
   if(dup.length && !confirm(name+'님은 해당 기간에 이미 신청이 있습니다.\n그래도 진행할까요?')) return;
   var e=(_attEmps||[]).filter(function(x){return x.name===name;})[0]||{};
   var rec={ name:name, part:e.part||'', empId:e.id||name, type:type, from:from, to:to,
