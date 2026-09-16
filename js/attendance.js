@@ -1514,11 +1514,10 @@ function _calcWorkHours(tags){
   return Math.max(0,base);
 }
 
-// 시각 기반 실근무시간 계산 (월별 조회 표시용)
-// - 결근/연차: 0h
-// - 정상: (퇴근-출근) - 1시간(점심)
-// - 반차: 위에서 -4시간
-// - 반반차: 위에서 -2시간
+// 시각 기반 실근무시간 계산 (월별 조회·직원별 조회 표시용)
+// - 결근/연차/휴무: 0h
+// - 그 외: (퇴근-출근) - 점심 겹친 시간
+// 반차·반반차는 출퇴근 시각에 이미 반영돼 있으므로 따로 빼지 않는다.
 function _calcWorkHoursByTime(inTime, outTime, tags){
   if(!tags) tags=[];
   if(tags.indexOf('annual')>=0||tags.indexOf('absent')>=0||tags.indexOf('holiday')>=0) return 0;
@@ -1535,8 +1534,9 @@ function _calcWorkHoursByTime(inTime, outTime, tags){
   var lunchStart=12*60, lunchEnd=13*60;
   var overlap=Math.max(0, Math.min(outM,lunchEnd)-Math.max(inM,lunchStart))/60;
   var hours=(outM-inM)/60 - overlap;
-  if(tags.indexOf('half-am')>=0||tags.indexOf('half-pm')>=0) hours-=4;
-  if(tags.indexOf('quarter')>=0||tags.indexOf('quarter-am')>=0||tags.indexOf('quarter-pm')>=0) hours-=2;
+  // 반차·반반차는 출퇴근 시각에 이미 반영돼 있다.
+  // (오후 반차 09:00~14:00 → 실근무 4시간)
+  // 여기서 또 빼면 이중 차감이라 0시간이 된다.
   return Math.max(0, hours);
 }
 
