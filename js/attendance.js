@@ -1555,9 +1555,28 @@ function _renderAttStaff(){
       +(e.birth?'':'<span style="font-size:11px;color:#dc2626;margin-left:6px">생년월일 없음</span>')+'</span>'
       +'<span style="font-size:12px;color:var(--g5)">연차 '+e.annualDays+'일 / 잔여 <b style="color:var(--p)">'+(e.annualDays-(e.usedDays||0))+'일</b></span>'
       +'<button class="btn bo bsm" onclick="attEditStaff('+i+')">수정</button>'
+      +'<button class="btn bo bsm" style="color:#b45309" onclick="attResignStaff('+i+')">퇴사</button>'
       +'<button class="btn bo bsm" style="color:#e53935" onclick="attDeleteStaff('+i+')">삭제</button>'
       +'</div>';
   }).join('');
+
+  // 퇴사자 — 명부에서 빠졌지만 기록은 남아 있는 사람
+  var gone=_attResignedList();
+  if(gone.length){
+    el.innerHTML += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--g2)">'
+      + '<div style="font-size:12px;color:var(--g5);margin-bottom:8px">퇴사자 '+gone.length+'명 '
+      + '<span style="color:var(--g4)">— 명부에서 빠졌지만 과거 기록은 남아 있습니다</span></div>'
+      + gone.map(function(x){
+          return '<div style="display:flex;align-items:center;padding:7px 0;gap:10px;font-size:13px;color:var(--g5)">'
+            + '<span style="flex:1">'+x.name
+            + '<span style="font-size:11px;margin-left:8px">'
+            + (x.join?'입사 '+x.join.slice(5).replace('-','/')+' · ':'')
+            + '퇴사 '+(x.date?x.date.slice(5).replace('-','/'):'-')+'</span></span>'
+            + '<button class="btn bo bsm" onclick="attRehireStaff(\''+x.name.replace(/'/g,"\\\\'")+'\')">복직</button>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+  }
 }
 // ★ 직원 고유 ID — 동명이인이 생겨도 기록이 섞이지 않도록 (2026-08-31)
 //   화면에는 노출하지 않음. 직원이 외울 필요 없는 내부 값.
@@ -1631,7 +1650,72 @@ function attSaveStaff(i){
   _renderAttStaff();
   if(typeof toast==='function') toast(name+' 저장 \u2713','s');
 }
-function attDeleteStaff(i){if(!confirm(_attEmps[i].name+' 삭제?'))return;var _nm=_attEmps[i].name;_attEmps.splice(i,1);_attHist.push({name:_nm,date:tod(),type:'퇴사'});_saveAttEmps();_renderAttStaff();}
+// 퇴사 처리 — 퇴사일을 지정하고 명부에서 뺀다.
+// 그날까지의 출퇴근 기록은 그대로 남는다(월별 조회에 '퇴사' 표시로 나옴).
+function attResignStaff(i){
+  var e=_attEmps[i]; if(!e) return;
+  var d=prompt(e.name+' 퇴사일을 입력하세요 (YYYY-MM-DD)', tod());
+  if(d===null) return;
+  d=String(d).trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ toast&&toast('날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)','w'); return; }
+  var jd=_attJoinDateOf(e.name);
+  if(jd && d<jd){ toast&&toast('퇴사일이 입사일('+jd+')보다 빠릅니다','w'); return; }
+  if(!confirm(e.name+' 님을 '+d+' 자로 퇴사 처리합니다.\n\n'
+            + '명부에서 빠지지만 그날까지의 출퇴근 기록은 그대로 남습니다.')) return;
+  // 같은 사람의 기존 퇴사 기록이 있으면 날짜만 갱신
+  var prev=(_attHist||[]).filter(function(h){ return h && h.name===e.name && h.type==='퇴사'; });
+  if(prev.length){ prev[prev.length-1].date=d; }
+  else { _attHist.push({name:e.name, date:d, type:'퇴사'}); }
+  _attEmps.splice(i,1);
+  _saveAttEmps();
+  _renderAttStaff();
+  toast&&toast(e.name+' 퇴사 처리 ('+d+')','s');
+}
+
+// 퇴사일 조회 — history 의 '퇴사' 기록 중 가장 최근 것
+function _attResignDateOf(name){
+  var recs=(_attHist||[]).filter(function(h){ return h && h.name===name && h.type==='퇴사'; });
+  if(!recs.length) return '';
+  recs.sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; });
+  return String(recs[recs.length-1].date||'').slice(0,10);
+}
+
+// 퇴사자 목록 (명부에서 빠진 사람)
+function _attResignedList(){
+  var cur={}; (_attEmps||[]).forEach(function(e){ cur[e.name]=1; });
+  var seen={}, out=[];
+  (_attHist||[]).forEach(function(h){
+    if(!h || h.type!=='퇴사' || cur[h.name] || seen[h.name]) return;
+    seen[h.name]=1;
+    out.push({name:h.name, date:String(h.date||'').slice(0,10), join:_attJoinDateOf(h.name)});
+  });
+  out.sort(function(a,b){ return a.date<b.date?1:-1; });
+  return out;
+}
+
+// 퇴사자 복직 — 명부에 다시 넣는다
+function attRehireStaff(name){
+  if(!confirm(name+' 님을 명부에 다시 추가할까요?')) return;
+  if((_attEmps||[]).some(function(e){ return e.name===name; })){
+    toast&&toast('이미 명부에 있습니다','w'); return;
+  }
+  _attEmps.push({id:_attNextEmpId(), name:name, part:'', position:'', role:'production',
+                 empNo:'', birth:'', gender:'', annualDays:0, usedDays:0});
+  _attHist.push({name:name, date:tod(), type:'입사'});
+  _saveAttEmps();
+  _renderAttStaff();
+  toast&&toast(name+' 복직 처리','s');
+}
+
+function attDeleteStaff(i){
+  var e=_attEmps[i]; if(!e) return;
+  if(!confirm(e.name+' 님을 명부에서 완전히 지웁니다.\n\n'
+            + '퇴사 처리가 아니라 삭제입니다. 이력에 남지 않습니다.\n'
+            + '퇴사라면 [퇴사] 버튼을 쓰세요.')) return;
+  _attEmps.splice(i,1);
+  _saveAttEmps();
+  _renderAttStaff();
+}
 
 // ─── 유틸 ───
 function _attFmt(v){v=(v||'').replace(/[^0-9]/g,'');if(v.length>4)v=v.slice(0,4);if(v.length===3)v='0'+v;if(v.length===4)return v.slice(0,2)+':'+v.slice(2);return v;}
