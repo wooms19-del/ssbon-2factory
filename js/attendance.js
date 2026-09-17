@@ -1555,8 +1555,7 @@ function _renderAttStaff(){
       +(e.birth?'':'<span style="font-size:11px;color:#dc2626;margin-left:6px">생년월일 없음</span>')+'</span>'
       +'<span style="font-size:12px;color:var(--g5)">연차 '+e.annualDays+'일 / 잔여 <b style="color:var(--p)">'+(e.annualDays-(e.usedDays||0))+'일</b></span>'
       +'<button class="btn bo bsm" onclick="attEditStaff('+i+')">수정</button>'
-      +'<button class="btn bo bsm" style="color:#b45309" onclick="attResignStaff('+i+')">퇴사</button>'
-      +'<button class="btn bo bsm" style="color:#e53935" onclick="attDeleteStaff('+i+')">삭제</button>'
+      +'<button class="btn bo bsm" style="color:#e53935" onclick="attResignStaff('+i+')">퇴사</button>'
       +'</div>';
   }).join('');
 
@@ -1654,14 +1653,12 @@ function attSaveStaff(i){
 // 그날까지의 출퇴근 기록은 그대로 남는다(월별 조회에 '퇴사' 표시로 나옴).
 function attResignStaff(i){
   var e=_attEmps[i]; if(!e) return;
-  var d=prompt(e.name+' 퇴사일을 입력하세요 (YYYY-MM-DD)', tod());
-  if(d===null) return;
+  var d=prompt(e.name+' 님, 언제 퇴사하셨나요?\n\nYYYY-MM-DD 형식으로 입력하세요.', tod());
+  if(d===null) return;                                  // 취소
   d=String(d).trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ toast&&toast('날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)','w'); return; }
   var jd=_attJoinDateOf(e.name);
   if(jd && d<jd){ toast&&toast('퇴사일이 입사일('+jd+')보다 빠릅니다','w'); return; }
-  if(!confirm(e.name+' 님을 '+d+' 자로 퇴사 처리합니다.\n\n'
-            + '명부에서 빠지지만 그날까지의 출퇴근 기록은 그대로 남습니다.')) return;
   // 같은 사람의 기존 퇴사 기록이 있으면 날짜만 갱신
   var prev=(_attHist||[]).filter(function(h){ return h && h.name===e.name && h.type==='퇴사'; });
   if(prev.length){ prev[prev.length-1].date=d; }
@@ -1707,15 +1704,6 @@ function attRehireStaff(name){
   toast&&toast(name+' 복직 처리','s');
 }
 
-function attDeleteStaff(i){
-  var e=_attEmps[i]; if(!e) return;
-  if(!confirm(e.name+' 님을 명부에서 완전히 지웁니다.\n\n'
-            + '퇴사 처리가 아니라 삭제입니다. 이력에 남지 않습니다.\n'
-            + '퇴사라면 [퇴사] 버튼을 쓰세요.')) return;
-  _attEmps.splice(i,1);
-  _saveAttEmps();
-  _renderAttStaff();
-}
 
 // ─── 유틸 ───
 function _attFmt(v){v=(v||'').replace(/[^0-9]/g,'');if(v.length>4)v=v.slice(0,4);if(v.length===3)v='0'+v;if(v.length===4)return v.slice(0,2)+':'+v.slice(2);return v;}
