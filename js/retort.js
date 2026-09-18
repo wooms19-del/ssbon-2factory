@@ -13,6 +13,35 @@ const RT_CCP = {
 const RT_BATCH=['A','B','C','D','E','F'];  // 3B 자숙 배치 구분
 
 function _rtToday(){ return (L.retort||[]).filter(r=>String(r.date||'').slice(0,10)===tod()); }
+
+// ── 서버 재동기화 ──
+// 회차 번호를 화면 메모리로만 세면, 다른 태블릿이 넣은 기록이 안 보여서
+// 1회차부터 다시 매겨진다. 저장 직전과 화면 자동갱신에서 캐시를 버리고 서버를 다시 읽는다.
+async function _rtSync(){
+  const d = tod();
+  try{
+    if(typeof fbClearCache==='function') fbClearCache('retort');
+    const recs = await fbGetByDate('retort', d);
+    const pending = (L.retort||[]).filter(r => !r.fbId && String(r.date||'').slice(0,10)===d);
+    L.retort = (L.retort||[]).filter(r => String(r.date||'').slice(0,10)!==d).concat(recs, pending);
+    return true;
+  }catch(e){ console.error('[레토르트] 동기화 실패', e); return false; }
+}
+
+// 레토르트 탭에 켜 둔 채로 있어도 다른 태블릿 기록이 따라오게 (60초)
+var _rtTimer = null;
+function rtAutoRefresh(on){
+  if(_rtTimer){ clearInterval(_rtTimer); _rtTimer=null; }
+  if(!on) return;
+  _rtTimer = setInterval(function(){
+    if(document.hidden) return;
+    const pg = document.getElementById('p-retort');
+    if(!pg || !pg.classList.contains('on')){ rtAutoRefresh(false); return; }
+    if(_rtViewDate() !== tod()) return;          // 과거 조회 중이면 건드리지 않음
+    _rtSync().then(function(){ renderRetort(); });
+  }, 60000);
+}
+
 function _rtViewDate(){ return window._rtViewDt || tod(); }
 function _rtViewRecs(){ const d=_rtViewDate(); return (L.retort||[]).filter(r=>String(r.date||'').slice(0,10)===d); }
 
@@ -249,9 +278,13 @@ async function rtStart(m){
     batch=parts.join(', ');
     if(!ea){ const eaEl=document.getElementById('rt_ea_'+m); ea=eaEl?(parseInt(eaEl.value)||0):0; }
   }
+  // ★ 회차 번호는 저장 직전에 서버 기준으로 다시 센다 (태블릿 여러 대 대응)
+  toast('확인중...','i');
+  await _rtSync();
   const mine=_rtToday().filter(r=>String(r.machine)===m);
-  if(mine.some(r=>!r.t4)){ toast(m+'호기는 진행 중 회차가 있습니다','d'); return; }
-  const round=(mine.length?Math.max(...mine.map(r=>r.round||0)):0)+1;
+  if(mine.some(r=>!r.t4)){ toast(m+'호기는 진행 중 회차가 있습니다','d'); renderRetort(); return; }
+  // 기록이 삭제돼 번호에 구멍이 나도 겹치지 않게 (건수, 최대번호) 둘 다 본다
+  const round=Math.max(mine.length, ...mine.map(r=>parseInt(r.round)||0), 0)+1;
   const rec={ id:gid(), date:tod(), machine:m, round, product:prod, ccp, batch, ea,
               t1:nowHM(), t2:'', t3:'', t4:'', temp:null };
   toast('저장중...','i');

@@ -172,6 +172,7 @@ function _aiReloadMonthly(){
 window._aiReloadMonthly = _aiReloadMonthly;
 
 function showTab(mode,tab){
+  if(tab!=='retort' && typeof rtAutoRefresh==='function') rtAutoRefresh(false);
   if(mode==='i') ITAB=tab; else DTAB=tab;
   const nav=mode==='i'?'inav':'dnav';
   const tabs=mode==='i'?['barcode','thawing','preprocess','cooking','shredding','packing','retort','sauce','outerpacking','sauceroom','attendance']:['daily','monthly','trace','recipe','timetable','timetable_test','settings'];
@@ -237,7 +238,10 @@ function showTab(mode,tab){
   } else if(tab==='outerpacking'){
     loadOuterPacking();
   } else if(tab==='retort'){
-    loadFromServer(today).then(()=>{ if(typeof renderRetort==='function') renderRetort(); });
+    loadFromServer(today).then(()=>{
+      if(typeof renderRetort==='function') renderRetort();
+      if(typeof rtAutoRefresh==='function') rtAutoRefresh(true);   // 다른 태블릿 기록 자동 반영
+    });
   } else if(tab==='attendance'){
     initAttendance();
   } else if(tab==='recipe'){
