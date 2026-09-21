@@ -6,9 +6,9 @@
 const RT_MACHINES = ['1','2','3'];
 const RT_CCP = {
   '2B':   {label:'CCP-2B (멸균 121℃·18분↑)',  temp:121, min:18, defTemp:121},
-  '3B':   {label:'CCP-3B (살균 95℃·30분↑)',   temp:95,  min:30, defTemp:115},
-  '3B-A': {label:'CCP-3B (살균 95℃·30분↑)',   temp:95,  min:30, defTemp:115},  // 구버전 호환
-  '3B-B': {label:'CCP-3B (살균 95℃·30분↑)',   temp:95,  min:30, defTemp:115},  // 구버전 호환
+  '3B':   {label:'CCP-3B (살균 95℃·30분↑)',   temp:95,  min:30, defTemp:105},
+  '3B-A': {label:'CCP-3B (살균 95℃·30분↑)',   temp:95,  min:30, defTemp:105},  // 구버전 호환
+  '3B-B': {label:'CCP-3B (살균 95℃·30분↑)',   temp:95,  min:30, defTemp:105},  // 구버전 호환
 };
 const RT_BATCH=['A','B','C','D','E','F'];  // 3B 자숙 배치 구분
 
