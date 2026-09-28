@@ -2814,8 +2814,8 @@ function renderDailyFromLocal_(d){
     if(shRec.type) return shRec.type.split(',')[0].trim();
     const wIns = (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean);
     for(const wIn of wIns){
-      const ckRec = ck.find(c2 => (c2.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
-      if(ckRec && ckRec.type) return ckRec.type.split(',')[0].trim();
+      const ckRec = _ckPickForWIn(shRec, wIn);
+      if(ckRec) return ckRec.type.split(',')[0].trim();
     }
     return '';
   }
