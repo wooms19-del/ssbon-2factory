@@ -2653,6 +2653,26 @@ function renderDailyFromLocal_(d){
     return map;
   }
 
+  // 파쇄 wagonIn 하나 → 그 와건을 배출한 자숙 회차.
+  //   와건 번호는 같은 날 재사용되므로 첫 매칭이 아니라, 파쇄 시작 전에 끝난 자숙 중 가장 나중 것을 고른다.
+  function _ckPickForWIn(shRec, wIn) {
+    const cands = ck.filter(cr => (cr.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn) && cr.type);
+    if(!cands.length) return null;
+    const before = cands.filter(cr => cr.end && shRec.start && String(cr.end) <= String(shRec.start));
+    return before.length
+      ? before.reduce((a,b)=> String(b.end) > String(a.end) ? b : a)
+      : cands[0];
+  }
+  // 파쇄 레코드 → 부위 목록. 파쇄에 확정된 type이 있으면 그걸 우선 쓴다.
+  function _shRecTypes(shRec) {
+    if(shRec.type) return String(shRec.type).split(',').map(t=>t.trim()).filter(Boolean);
+    const out = [];
+    (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wIn => {
+      const ckRec = _ckPickForWIn(shRec, wIn);
+      if(ckRec) ckRec.type.split(',').forEach(t=>{ t=t.trim(); if(t && out.indexOf(t)<0) out.push(t); });
+    });
+    return out;
+  }
   // 포장 와건/카트→파쇄→자숙 체인으로 원육타입 추적
   function getPkType(pkRec) {
     // noMeat 제품 (메추리알 등): 원육 추적 안 함 — 원육 칸 빈 값 처리
@@ -2665,22 +2685,12 @@ function renderDailyFromLocal_(d){
     // 와건 경로
     wagons.forEach(wNum => {
       const shRec = sh.find(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).includes(wNum));
-      if(shRec) {
-        (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wIn => {
-          const ckRec = ck.find(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
-          if(ckRec && ckRec.type) ckRec.type.split(',').forEach(t=>types.add(t.trim()));
-        });
-      }
+      if(shRec) _shRecTypes(shRec).forEach(t=>types.add(t));
     });
     // 카트 경로 (FC 3kg 라인: 파쇄→카트로 배출된 후 포장)
     carts.forEach(cNum => {
       const shRec = sh.find(r=>(r.cartOut||'').split(',').map(w=>w.trim()).includes(cNum));
-      if(shRec) {
-        (shRec.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean).forEach(wIn => {
-          const ckRec = ck.find(r=>(r.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
-          if(ckRec && ckRec.type) ckRec.type.split(',').forEach(t=>types.add(t.trim()));
-        });
-      }
+      if(shRec) _shRecTypes(shRec).forEach(t=>types.add(t));
     });
     if(types.size) return [...types].join(', ');
     // 폴백: 전처리 데이터에서 가장 많이 사용된 타입
@@ -2698,8 +2708,8 @@ function renderDailyFromLocal_(d){
     let type = r.type || '';
     if(!type) {
       for(const wIn of wIns) {
-        const ckRec = ck.find(c2=>(c2.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
-        if(ckRec && ckRec.type){ type = ckRec.type.split(',')[0].trim(); break; }
+        const ckRec = _ckPickForWIn(r, wIn);
+        if(ckRec){ type = ckRec.type.split(',')[0].trim(); break; }
       }
     }
     if(!type) type = '미분류';
