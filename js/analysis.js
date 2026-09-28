@@ -351,7 +351,7 @@ async function renderMonthly() {
   const rows=Object.entries(byProd).sort((a,b)=>b[1].ea-a[1].ea);
   // 제품명에서 그램 파싱 → 완제품 KG (예: 170g→0.17, 3KG→3)
   function _prodKgUnit(name){ const m=(name||'').match(/(\d+(?:\.\d+)?)\s*(g|KG)\b/i); if(!m) return 0; return m[2].toUpperCase()==='KG'?parseFloat(m[1]):parseFloat(m[1])/1000; }
-  let totProdKg=0, totCnt=0;
+  let totProdKg=0, totCnt=0, totOutEa=0;
   const _erpMap=window._erpMap||{};
   const _erpCode=(prod,part)=>{ const d=_erpMap[prod]; if(!d) return ''; return d[part]||d['*']||''; };
   const _pkEaByProd={};
@@ -364,7 +364,7 @@ async function renderMonthly() {
     const _shareInProd=(_pkEaByProd[prod]>0)?(v.pkEa||0)/_pkEaByProd[prod]:1;
     const _eaForKg=op_.outerEa>0?op_.outerEa*_shareInProd:(v.pkEa||0);
     const pkgKg=r2(_eaForKg*_prodKgUnit(prod));
-    totEA+=v.ea; totDef+=v.defect; totPkEa+=(v.pkEa||0); totProdKg=r2(totProdKg+pkgKg);
+    totEA+=v.ea; totDef+=v.defect; totPkEa+=(v.pkEa||0); totProdKg=r2(totProdKg+pkgKg); totOutEa+=_eaForKg;
     const _pouch=(v.pkEa||0)+v.defect;
     const dr=_pouch>0?(v.defect/_pouch*100).toFixed(2)+'%':'—';
     const dc=_pouch>0&&v.defect/_pouch*100>2?'var(--d)':'var(--s)';
@@ -375,12 +375,13 @@ async function renderMonthly() {
       <td style="font-weight:500">${prod}${part?` <span style="font-weight:400;font-size:12px;color:${part==='미지정'?'var(--d)':'var(--g5)'}">(${part})</span>`:''}</td>
       <td style="text-align:center">${v.cnt}회</td>
       <td style="text-align:center;font-weight:600;color:#9a5b0b">${shareTxt}</td>
+      <td style="text-align:center;color:var(--s)">${Math.round(_eaForKg).toLocaleString()}</td>
       <td style="text-align:center;font-weight:600;color:var(--p)">${(v.pkEa||0).toLocaleString()}</td>
       <td style="text-align:center">${(v.pkEa+v.defect)>0?(v.pkEa+v.defect).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${pkgKg>0?pkgKg.toLocaleString()+'kg':'—'}</td>
       <td style="text-align:center;color:${dc}">${dr}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--g4);padding:1rem">데이터 없음</td></tr>';
+  }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--g4);padding:1rem">데이터 없음</td></tr>';
   const totPouch=totPkEa+totDef;
   if(tfoot){ const tdr=totPouch>0?(totDef/totPouch*100).toFixed(2)+'%':'—';
     tfoot.innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--g3)">
@@ -388,6 +389,7 @@ async function renderMonthly() {
       <td>합계</td>
       <td style="text-align:center">${totCnt}회</td>
       <td style="text-align:center;color:#9a5b0b">100%</td>
+      <td style="text-align:center;color:var(--s)">${Math.round(totOutEa).toLocaleString()}</td>
       <td style="text-align:center;color:var(--p)">${totPkEa.toLocaleString()}</td>
       <td style="text-align:center">${(totPkEa+totDef)>0?(totPkEa+totDef).toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--s)">${totProdKg>0?totProdKg.toLocaleString()+'kg':'—'}</td>
@@ -4956,12 +4958,12 @@ window._moSetPrevCmpTab = _moSetPrevCmpTab;
 
 // ── 제품별 생산 현황: 이미지 저장 / 엑셀 다운로드 ──────────────
 function _moProdTableData(){
-  const head=['ERP 코드','제품명','작업 횟수','비중(%)','내포장 EA','파우치 사용량','완제품 중량(KG)','불량률(%)'];
+  const head=['ERP 코드','제품명','작업 횟수','비중(%)','완제품 EA','내포장 EA','파우치 사용량','완제품 중량(KG)','불량률(%)'];
   const cut=t=>{ const v=parseFloat(String(t).replace(/[^0-9.\-]/g,'')); return isFinite(v)?v:String(t); };
   const pick=tr=>{
     const c=[...tr.cells].map(x=>x.textContent.trim());
-    if(c.length<8) return null;
-    return [c[0], c[1], cut(c[2]), cut(c[3]), cut(c[4]), cut(c[5]), cut(c[6]), cut(c[7])];
+    if(c.length<9) return null;
+    return [c[0], c[1], cut(c[2]), cut(c[3]), cut(c[4]), cut(c[5]), cut(c[6]), cut(c[7]), cut(c[8])];
   };
   const body=[...document.querySelectorAll('#mo_prod_tbl tr')].map(pick).filter(Boolean);
   const foot=[...document.querySelectorAll('#mo_prod_total tr')].map(pick).filter(Boolean);
@@ -4977,12 +4979,12 @@ function _moExportProdExcel(){
     const meta=(document.getElementById('mo_prod_meta')||{}).textContent||'';
     const aoa=[['제품별 생산 현황  '+ym],[meta],[],head,...body,...foot];
     const ws=XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols']=[{wch:11},{wch:34},{wch:10},{wch:10},{wch:13},{wch:14},{wch:16},{wch:11}];
-    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}},{s:{r:1,c:0},e:{r:1,c:7}}];
+    ws['!cols']=[{wch:11},{wch:34},{wch:10},{wch:10},{wch:13},{wch:13},{wch:14},{wch:16},{wch:11}];
+    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}},{s:{r:1,c:0},e:{r:1,c:8}}];
     const HR=3, LAST=HR+body.length+foot.length;
     const thin={style:'thin',color:{rgb:'D5DBE4'}};
     for(let R=0;R<=LAST;R++){
-      for(let C=0;C<8;C++){
+      for(let C=0;C<9;C++){
         const ref=XLSX.utils.encode_cell({r:R,c:C});
         if(!ws[ref]) ws[ref]={t:'s',v:''};
         const st={font:{name:'맑은 고딕',sz:10},alignment:{vertical:'center',horizontal:C===1?'left':(C===0?'left':'center')}};
@@ -4993,9 +4995,9 @@ function _moExportProdExcel(){
           st.border={top:thin,bottom:thin,left:thin,right:thin}; }
         else if(R>HR){ st.border={top:thin,bottom:thin,left:thin,right:thin};
           if(R>=HR+body.length+1){ st.font={name:'맑은 고딕',sz:10,bold:true}; st.fill={patternType:'solid',fgColor:{rgb:'F5F7FA'}}; }
-          if([4,5].includes(C)) st.numFmt='#,##0';
-          if(C===6) st.numFmt='#,##0.00';
-          if([3,7].includes(C)) st.numFmt='0.00';
+          if([4,5,6].includes(C)) st.numFmt='#,##0';
+          if(C===7) st.numFmt='#,##0.00';
+          if([3,8].includes(C)) st.numFmt='0.00';
         }
         ws[ref].s=st;
       }
