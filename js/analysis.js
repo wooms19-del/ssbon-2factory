@@ -2616,10 +2616,20 @@ function renderDailyFromLocal_(d){
   function getShType(shRecs, ckRecs) {
     const types = new Set();
     shRecs.forEach(sh => {
+      // ★ 파쇄에 확정된 부위가 있으면 그걸 쓴다 (와건 번호 재사용 시 자숙 역추적이 틀림)
+      if(sh.type){
+        sh.type.split(',').forEach(t=>{ if(t.trim()) types.add(t.trim()); });
+        return;
+      }
       const wIns = (sh.wagonIn||'').split(',').map(w=>w.trim()).filter(Boolean);
       wIns.forEach(wIn => {
-        const ckRec2 = ckRecs.find(cr => (cr.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn));
-        if(ckRec2 && ckRec2.type) ckRec2.type.split(',').forEach(t=>{ if(t.trim()) types.add(t.trim()); });
+        const cands = ckRecs.filter(cr => (cr.wagonOut||'').split(',').map(w=>w.trim()).includes(wIn) && cr.type);
+        if(!cands.length) return;
+        const before = cands.filter(cr => cr.end && sh.start && String(cr.end) <= String(sh.start));
+        const pick = before.length
+          ? before.reduce((a,b)=> String(b.end) > String(a.end) ? b : a)
+          : cands[0];
+        if(pick && pick.type) pick.type.split(',').forEach(t=>{ if(t.trim()) types.add(t.trim()); });
       });
     });
     if(types.size) return [...types].join(',');

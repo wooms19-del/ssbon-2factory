@@ -484,15 +484,27 @@ function pkResolveTypeFromWagon(wNum, kind, pkDate){
   });
   const sh = shList[0];
   if(!sh) return '';
-  // ★ 같은 날짜의 cooking으로 제한 — 와곤번호는 날짜별 재사용되므로 다른 날짜 cooking과 매칭되면 부위 오추론
+  // ★ 파쇄에 이미 확정된 부위가 있으면 그걸 쓴다.
+  //   자숙까지 거슬러 올라가면 같은 날 와건 번호가 재사용됐을 때 틀린 회차를 집는다.
+  if(sh.type){
+    const t0 = String(sh.type).split(',')[0].trim();
+    if(t0) return t0;
+  }
+  // fallback — 파쇄에 부위가 없는 옛 기록용. 같은 날짜 자숙만 보고,
+  //   파쇄 시작 전에 끝난 자숙 중 가장 나중 것을 고른다(와건 재사용 대비).
   const shDate = String(sh.date||'').slice(0,10);
   const wIns = (sh.wagonIn||'').split(',').map(x=>x.trim()).filter(Boolean);
   for(const wIn of wIns){
-    const ck = (L.cooking||[]).find(r =>
+    const cands = (L.cooking||[]).filter(r =>
       String(r.date||'').slice(0,10) === shDate &&
-      (r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn)
+      (r.wagonOut||'').split(',').map(x=>x.trim()).includes(wIn) && r.type
     );
-    if(ck && ck.type) return ck.type.split(',')[0].trim();
+    if(!cands.length) continue;
+    const before = cands.filter(r => r.end && sh.start && String(r.end) <= String(sh.start));
+    const pick = before.length
+      ? before.reduce((a,b)=> String(b.end) > String(a.end) ? b : a)
+      : cands[0];
+    if(pick && pick.type) return pick.type.split(',')[0].trim();
   }
   return '';
 }
