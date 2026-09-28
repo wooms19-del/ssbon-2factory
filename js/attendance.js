@@ -805,6 +805,22 @@ async function _attSaveReportCfg(){
 function _attCfgSetRequired(v){ if(!_attReportCfg)return; _attReportCfg.requiredHeadcount=parseInt(v)||0; _attSaveReportCfg(); _renderAttReport(); }
 function _attCfgSetNote(v){ if(!_attReportCfg)return; _attReportCfg.note=v; _attSaveReportCfg(); }
 
+// ── 평일 / 주말 양식 분기 ──
+// 평일은 전원 출근이 기본이라 '빠지는 사람'을 적고, 주말은 전원 휴무가 기본이라
+// '나오는 사람'을 적는다. 그래서 주말에는 표를 출근자 중심으로 바꾼다.
+function _attIsWeekend(d){
+  var g=new Date(String(d)+'T00:00:00').getDay();
+  return g===0||g===6;
+}
+// 실제로 나온 사람인지 판정. 기본값(09:00~18:00, 태그 없음)은 안 나온 것으로 본다.
+function _attWorkedOn(name){
+  var r=_attRecs[name], tags=(r&&r.tags)||[];
+  if(tags.indexOf('absent')>=0||tags.indexOf('holiday')>=0||tags.indexOf('annual')>=0) return false;
+  var isDefault=(!tags.length && (!r || (r.inTime==='09:00' && r.outTime==='18:00')));
+  if(isDefault) return false;
+  return !!((r&&(r.inTime||r.outTime)) || tags.indexOf('checkin')>=0 || tags.indexOf('early')>=0);
+}
+
 async function _renderAttReport(){
   var host=document.getElementById('attReportContent'); if(!host)return;
   await _attLoadReportCfg();
@@ -815,7 +831,37 @@ async function _renderAttReport(){
   Object.keys(groups).forEach(function(p){ if(parts.indexOf(p)<0&&groups[p].length)parts.push(p); });
 
   function tagOf(name){return _getRec(name).tags||[];}
-  var tot={total:0,annual:0,half:0,quarter:0,holiday:0,work:0}, bodyRows='';
+  var isWk=_attIsWeekend(_attDate);
+  var tot={total:0,annual:0,half:0,quarter:0,holiday:0,work:0}, bodyRows='', head='', totRow='';
+
+  if(isWk){
+    // ── 휴일 양식 ──
+    // 칼럼은 평일과 같다. 맨 끝 칸만 휴무자 → 출근인원으로 바꾼다.
+    // 휴일은 전원 휴무가 기본이라 연차·반차·반반차·휴무는 집계하지 않는다.
+    parts.forEach(function(p,idx){
+      var mem=groups[p]||[];
+      var on=mem.filter(function(e){ return _attWorkedOn(e.name); });
+      tot.total+=mem.length; tot.work+=on.length;
+      function cel(v,strong){return '<td style="text-align:center;padding:6px 4px;border:1px solid var(--g2)'+(strong?';font-weight:700;color:#1d4ed8':'')+'">'+(v||'-')+'</td>';}
+      var gubun = idx===0 ? '<td rowspan="'+(parts.length+1)+'" style="text-align:center;padding:6px;border:1px solid var(--g2);font-weight:700;background:#f3f6fb;vertical-align:middle;width:56px">생산</td>' : '';
+      bodyRows+='<tr>'+gubun
+        +'<td style="text-align:center;padding:6px 8px;border:1px solid var(--g2);font-weight:600;width:130px">'+p+'</td>'
+        +cel(mem.length)+cel(0)+cel(0)+cel(0)+cel(0)+cel(on.length,true)
+        +'<td style="padding:6px 8px;border:1px solid var(--g2);font-size:11px;color:var(--g5)">'
+          +(on.map(function(e){ return _attDispName(e); }).join(', ')||'-')+'</td></tr>';
+    });
+    head='<tr style="background:#2A3F5F;color:#fff">'
+      +'<th style="padding:7px 6px;border:1px solid #2A3F5F;width:56px">구분</th>'
+      +'<th style="padding:7px 8px;border:1px solid #2A3F5F;width:130px">파트</th>'
+      +['총원','연차','반차','반반차','휴무','출근'].map(function(h){return '<th style="padding:7px 4px;border:1px solid #2A3F5F;width:64px">'+h+'</th>';}).join('')
+      +'<th style="padding:7px 8px;border:1px solid #2A3F5F">출근인원</th></tr>';
+    var wcel=function(v){return '<td style="text-align:center;padding:6px 4px;border:1px solid var(--g2);font-weight:700">'+(v||'-')+'</td>';};
+    totRow='<tr style="background:#eef4fb">'
+      +'<td style="text-align:center;padding:6px 8px;border:1px solid var(--g2);font-weight:700">합계</td>'
+      +wcel(tot.total)+wcel(0)+wcel(0)+wcel(0)+wcel(0)
+      +'<td style="text-align:center;padding:6px 4px;border:1px solid var(--g2);font-weight:700;color:#1d4ed8">'+tot.work+'</td>'
+      +'<td style="border:1px solid var(--g2)"></td></tr>';
+  } else {
   parts.forEach(function(p,idx){
     var mem=groups[p]||[], c={total:mem.length,annual:0,half:0,quarter:0,holiday:0,absent:0}, off=[];
     mem.forEach(function(e){
@@ -839,17 +885,18 @@ async function _renderAttReport(){
       +cel(c.total)+cel(c.annual)+cel(c.half)+cel(c.quarter)+cel(c.holiday)+cel(work,true)
       +'<td style="padding:6px 8px;border:1px solid var(--g2);font-size:11px;color:var(--g5)">'+(off.join(', ')||'-')+'</td></tr>';
   });
-  var head='<tr style="background:#2A3F5F;color:#fff">'
+  head='<tr style="background:#2A3F5F;color:#fff">'
     +'<th style="padding:7px 6px;border:1px solid #2A3F5F;width:56px">구분</th>'
     +'<th style="padding:7px 8px;border:1px solid #2A3F5F;width:130px">파트</th>'
     +['총원','연차','반차','반반차','휴무','출근'].map(function(h){return '<th style="padding:7px 4px;border:1px solid #2A3F5F;width:64px">'+h+'</th>';}).join('')
     +'<th style="padding:7px 8px;border:1px solid #2A3F5F">휴무자</th></tr>';
-  function tcel(v){return '<td style="text-align:center;padding:6px 4px;border:1px solid var(--g2);font-weight:700">'+(v||'-')+'</td>';}
-  var totRow='<tr style="background:#eef4fb">'
+  var tcel=function(v){return '<td style="text-align:center;padding:6px 4px;border:1px solid var(--g2);font-weight:700">'+(v||'-')+'</td>';};
+  totRow='<tr style="background:#eef4fb">'
     +'<td style="text-align:center;padding:6px 8px;border:1px solid var(--g2);font-weight:700">합계</td>'
     +tcel(tot.total)+tcel(tot.annual)+tcel(tot.half)+tcel(tot.quarter)+tcel(tot.holiday)
     +'<td style="text-align:center;padding:6px 4px;border:1px solid var(--g2);font-weight:700;color:#1d4ed8">'+tot.work+'</td>'
     +'<td style="border:1px solid var(--g2)"></td></tr>';
+  }
 
   // 생산동 인원 현황
   var totalHead=(_attEmps||[]).length;
@@ -876,7 +923,7 @@ async function _renderAttReport(){
 
   var msg=_buildEarlyMsg();
   host.innerHTML=
-    '<div style="font-size:14px;font-weight:700;margin:10px 0 6px">'+_attFmtLabel(_attDate)+' 근태현황</div>'
+    '<div style="font-size:14px;font-weight:700;margin:10px 0 6px">'+_attFmtLabel(_attDate)+(isWk?' 휴일근태현황':' 근태현황')+'</div>'
     +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
     +'<thead>'+head+'</thead><tbody>'+bodyRows+totRow+'</tbody></table></div>'
     +'<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">'+statBox+noteBox+'</div>'
