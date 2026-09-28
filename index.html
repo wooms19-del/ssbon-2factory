@@ -538,12 +538,14 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
   <!-- 알람 카드 (자숙/파쇄/포장 수율 이상 시 표시) -->
   <div id="alertCard" style="display:none;margin-bottom:10px"></div>
 
-  <div class="kg4">
+  <div class="kg4" id="dKpi4">
     <div class="kc inf"><div class="klb">총 생산(EA)</div><div class="kv" id="d_ea">-</div><div class="ksb" id="d_easb"></div></div>
     <div class="kc gd"><div class="klb">원육수율</div><div class="kv" id="d_yld">-</div><div class="ksb">%</div></div>
     <div class="kc wn"><div class="klb">인시당 EA</div><div class="kv" id="d_mh">-</div><div class="ksb">EA/인시</div></div>
     <div class="kc bd2"><div class="klb">포장불량</div><div class="kv" id="d_def">-</div><div class="ksb">%</div></div>
   </div>
+  <!-- 혼합 생산일: 부위별 카드 (부위 2종 이상일 때만 표시, dKpi4 대신) -->
+  <div id="dKpiParts" style="display:none;margin-bottom:10px"></div>
   <div class="card">
     <div class="ct">공정별 현황</div>
     <div style="overflow-x:auto"><table class="tbl" style="width:100%;min-width:760px;table-layout:fixed">

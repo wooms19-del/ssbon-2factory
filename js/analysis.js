@@ -2535,6 +2535,70 @@ function renderDailyFromLocal_(d){
   const defLabel = document.getElementById('d_def_label');
   if(defLabel) defLabel.textContent = defRate>2 ? '% ▲기준초과' : defRate>0 ? '% ▼기준이하' : '%';
 
+  // ── 혼합 생산일 KPI 분리 ────────────────────────────────────
+  // 부위를 2종 이상 투입한 날은 합산 원육수율이 뜻을 잃는다.
+  // (2026-09-28: 설도만 포장했는데 분모에 홍두깨 3,200kg이 들어가 6.1%)
+  // 부위가 2종 이상이면 위 4칸 대신 부위별 카드를 보여준다.
+  _renderKpiByPart();
+  function _renderKpiByPart(){
+    const box4=document.getElementById('dKpi4'), boxP=document.getElementById('dKpiParts');
+    if(!box4||!boxP) return;
+    const parts=Object.keys(thByType).filter(t=>t&&(parseFloat(thByType[t])||0)>0);
+    if(parts.length<2){ box4.style.display=''; boxP.style.display='none'; boxP.innerHTML=''; return; }
+
+    const by={}, ensure=p2=>{ if(!by[p2]) by[p2]={ea:0,def:0,raw:0,mh:0}; return by[p2]; };
+    parts.forEach(ensure);
+    pk.forEach(r=>{
+      const ts=String(getPkType(r)||'').split(',').map(x=>x.trim()).filter(Boolean);
+      const key = ts.length===1 ? ts[0] : (ts.length>1 ? ts.join('+') : '원육 없음');
+      const o=ensure(key), ea=parseFloat(r.ea)||0;
+      const prod=(L.products||[]).find(x=>x.name===r.product);
+      o.ea+=ea; o.def+=parseFloat(r.defect)||0;
+      o.raw+= prod ? ea*(parseFloat(prod.kgea)||0) : 0;
+      o.mh += sumMH([r]);
+    });
+    // 포장을 안 한 부위가 어디까지 갔는지
+    const hasType=(arr,p2)=>arr.some(r=>String(r.type||'').split(',').map(x=>x.trim()).indexOf(p2)>=0);
+    const stageOf=p2=>{
+      if(sh.some(r=>_shRecTypes(r).indexOf(p2)>=0)) return '파쇄';
+      if(hasType(ck,p2)) return '자숙';
+      if(hasType(pp,p2)) return '전처리';
+      return '';
+    };
+    const fmt=n=>Number(n).toLocaleString();
+    const cell=(lbl,val,col)=>'<div style="flex:1;min-width:84px">'
+      +'<div style="font-size:11px;color:var(--g5);margin-bottom:3px">'+lbl+'</div>'
+      +'<div style="font-size:19px;font-weight:700;line-height:1.1'+(col?';color:'+col:'')+'">'+val+'</div></div>';
+    const cards=Object.keys(by).sort((a,b)=>(by[b].ea||0)-(by[a].ea||0)).map(p2=>{
+      const o=by[p2], rm=parseFloat(thByType[p2])||0;
+      const yld=(rm>0&&o.raw>0)?(o.raw/rm*100):null;
+      const mh=o.mh>0?(o.ea/o.mh):null;
+      const dr=(o.ea+o.def)>0?(o.def/(o.ea+o.def)*100):null;
+      const stage=stageOf(p2);
+      const note = o.ea>0
+        ? (rm>0 ? '원육 '+fmt(r2(rm))+'kg' : '')
+        : (stage ? stage+'까지 · 포장 미실시' : '포장 미실시');
+      return '<div style="border:1px solid var(--g2);border-radius:10px;padding:11px 13px;background:#fff">'
+        +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:9px">'
+          +'<span style="font-weight:700;font-size:14px">'+p2+'</span>'
+          +'<span style="font-size:11px;color:var(--g5)">'+note+'</span></div>'
+        +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+          +cell('총 생산', o.ea?fmt(o.ea)+'<span style="font-size:11px;font-weight:400;color:var(--g5)"> EA</span>':'—', o.ea?'var(--p)':'var(--g4)')
+          +cell('원육수율', yld!=null?yld.toFixed(1)+'%':'—', yld!=null?'var(--s)':'var(--g4)')
+          +cell('인시당 EA', mh!=null?mh.toFixed(1):'—', mh!=null?'':'var(--g4)')
+          +cell('포장불량', dr!=null?dr.toFixed(1)+'%':'—', dr==null?'var(--g4)':(dr>2?'var(--d)':'var(--s)'))
+        +'</div></div>';
+    }).join('');
+    box4.style.display='none';
+    boxP.style.display='';
+    boxP.innerHTML=
+      '<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap">'
+        +'<span style="font-size:13px;font-weight:600;color:var(--g6)">혼합 생산 — 부위별</span>'
+        +'<span style="font-size:13px;color:var(--g5)">합계 총 생산 <b style="color:var(--p)">'+fmt(totalEA)+'</b> EA</span>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:10px">'+cards+'</div>';
+  }
+
   // ============================================================
   // 일별 알람 체크 - 자숙/파쇄/포장 원육수율 이상 탐지
   // 원육수율 = 해당 공정 산출 / 원육 투입(rmKg) * 100
