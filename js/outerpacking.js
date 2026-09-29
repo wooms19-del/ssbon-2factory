@@ -452,6 +452,11 @@ async function completeOuterPacking(i, date, product, innerEa) {
   const rc = (L.recipes||{})[product] || {};
   const outerMats = rc.outer || [];
   const perBox = outerMats.length && outerMats[0].qty > 0 ? Math.round(1/outerMats[0].qty) : 0;
+  // 잔량 EA는 한 박스 입수보다 적어야 한다 — 박스 수를 잔량 칸에 넣는 실수 방지 (2026-09-30)
+  if(perBox > 0 && partial >= perBox){
+    toast('잔량 EA('+partial+')가 한 박스 입수('+perBox+'EA) 이상입니다. 박스 수는 박스 칸에 입력하세요','d');
+    return;
+  }
   const materials = [{
     name: product,
     theory: boxes * perBox + partial,
