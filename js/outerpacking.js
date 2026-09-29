@@ -594,7 +594,8 @@ function renderOpDone(list) {
           </div>`;
         })()}
         ${note !== '-' ? `<div style="margin-top:8px;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--g5)">📝 ${note}</div>` : ''}
-        <div style="margin-top:10px;text-align:right">
+        <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <button class="btn bsm" onclick="event.stopPropagation();opDeleteDone('${item.fbId}','${String(item.product).replace(/'/g,"\\'")}','${item.date||''}')" style="font-size:12px;padding:4px 12px;color:var(--d);border-color:var(--d)">🗑 삭제 (미완료로)</button>
           <button class="btn bo bsm" onclick="event.stopPropagation();toggleOpEdit(${i})" style="font-size:12px;padding:4px 12px">✏️ 수정</button>
         </div>
         <div id="op_edit_${i}" style="display:none;margin-top:10px;padding:12px;background:var(--g1);border-radius:8px" onclick="event.stopPropagation()">
@@ -654,6 +655,23 @@ function _opWlRow(s, e, w){
 function opEditAddWl(i){
   const c = document.getElementById('oe_wl_'+i);
   if(c) c.insertAdjacentHTML('beforeend', _opWlRow('','',''));
+}
+
+// 완료 기록 삭제 → 그 날짜·제품은 다시 미완료 목록으로 돌아간다.
+//   외포장 기록만 지운다. 내포장(packing) 실적은 건드리지 않는다.
+async function opDeleteDone(fbId, product, date) {
+  if(!fbId){ toast('Firebase ID 없음','d'); return; }
+  const dLabel = date ? String(date).slice(5).replace('-','/') : '';
+  if(!confirm(dLabel+' '+product+' 외포장 기록을 삭제할까요?\n\n삭제하면 다시 미완료 목록으로 돌아갑니다.\n내포장 실적은 그대로 유지됩니다.')) return;
+  try {
+    await db.collection('outerpacking').doc(fbId).delete();
+    fbClearCache('outerpacking');
+    toast(product+' 미완료로 되돌림 ✓','s');
+    loadOuterPacking();
+  } catch(e) {
+    console.error(e);
+    toast('삭제 실패: '+e.message,'d');
+  }
 }
 
 async function saveOpEdit(fbId, i) {
