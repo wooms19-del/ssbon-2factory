@@ -1697,8 +1697,10 @@ function attSaveStaff(i){
   if(!e.id) upd.id=_attNextEmpId();
   _attEmps[i]=Object.assign({},e,upd);
   var join=(g('aes_join')||'').trim();
+  var _oldJoin=_attJoinDateOf(e.name||name);
   if(join) _attSetJoinDate(e.name||name, name, join);
   _saveAttEmps();
+  if(join && join!==_oldJoin) _attCleanRecs(name, '<', join);   // 입사일을 바꾸면 그 전 날짜에 남은 기록 정리
   _attCloseModal();
   _renderAttStaff();
   if(typeof toast==='function') toast(name+' 저장 \u2713','s');
@@ -1721,6 +1723,39 @@ function attResignStaff(i){
   _saveAttEmps();
   _renderAttStaff();
   toast&&toast(e.name+' 퇴사 처리 ('+d+')','s');
+  _attCleanRecs(e.name, '>', d);   // 퇴사일 다음 날부터 남아 있는 기록 정리
+}
+
+// 퇴사일 이후('>') 또는 입사일 이전('<') 날짜에 남아 있는 그 사람 출퇴근 기록을 지운다 (2026-09-29)
+//   예: 출퇴근을 먼저 저장하고 나중에 퇴사 처리하면 퇴사일 다음 날 기록이 남아 있던 문제
+async function _attCleanRecs(name, op, date){
+  try{
+    var db=firebase.firestore();
+    var snap=await db.collection('attendance').where(firebase.firestore.FieldPath.documentId(), op, date).get();
+    var cnt=0;
+    // 복직자는 예전 근무 기간(이전 퇴사일까지) 기록을 건드리지 않는다
+    var _prevResign=(op==='<')?_attResignDateOf(name):'';
+    for(var k=0;k<snap.docs.length;k++){
+      var doc=snap.docs[k], data=doc.data()||{}, recs=data.records||{};
+      if(!recs[name]) continue;
+      if(_prevResign && doc.id<=_prevResign) continue;
+      delete recs[name];
+      var s={totalWorkers:0,totalAbsent:0,totalAnnual:0,totalHoliday:0,totalEarly:0,totalOvertime:0,totalHeadcount:Object.keys(recs).length};
+      Object.keys(recs).forEach(function(n){
+        var tags=(recs[n]||{}).tags||[];
+        if(tags.indexOf('absent')>=0)s.totalAbsent++;
+        else if(tags.indexOf('annual')>=0)s.totalAnnual++;
+        else if(tags.indexOf('holiday')>=0)s.totalHoliday++;
+        else s.totalWorkers++;
+        if(tags.indexOf('early')>=0)s.totalEarly++;
+        if(tags.indexOf('overtime')>=0)s.totalOvertime++;
+      });
+      await doc.ref.update({records:recs, summary:s, updatedAt:new Date().toISOString()});
+      try{ localStorage.setItem(_attDateKey(doc.id), JSON.stringify(recs)); }catch(e){}
+      cnt++;
+    }
+    if(cnt && typeof toast==='function') toast(name+' — '+(op==='>'?'퇴사일 이후':'입사일 이전')+' 기록 '+cnt+'일 정리','s');
+  }catch(err){ console.error('[attCleanRecs] '+name+' 정리 실패', err); }
 }
 
 // 퇴사일 조회 — history 의 '퇴사' 기록 중 가장 최근 것
