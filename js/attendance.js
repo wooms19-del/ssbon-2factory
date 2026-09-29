@@ -195,7 +195,11 @@ function attSave(){
     var _inMaster={};
     _attEmps.forEach(function(e){ _inMaster[e.name]=true; });
     Object.keys(_attRecs||{}).forEach(function(n){
-      if(!_inMaster[n] && _attRecs[n]) full[n]=_attRecs[n];
+      if(_inMaster[n] || !_attRecs[n]) return;
+      // 퇴사일 다음 날부터는 기록을 남기지 않는다 (2026-09-29)
+      var _rd=_attResignDateOf(n);
+      if(_rd && _attDate>_rd) return;
+      full[n]=_attRecs[n];
     });
     // 승인된 휴가가 있으면 기본값으로 덮기 전에 먼저 반영한다.
     // 이걸 안 하면 09:00~18:00 기본값이 들어가고, 그 뒤 휴가 승인이
@@ -204,6 +208,9 @@ function attSave(){
       try{ _applyLeaveRequests(_attDate); }catch(e){}
     }
     _attEmps.forEach(function(e){
+      // 입사일 이전 날짜에는 기록을 만들지 않는다 (2026-09-29)
+      var _jd=_attJoinDateOf(e.name);
+      if(_jd && _attDate<_jd) return;
       full[e.name] = _attRecs[e.name]||{tags:[],inTime:'09:00',outTime:'18:00'};
     });
     Object.keys(full).forEach(function(n){
