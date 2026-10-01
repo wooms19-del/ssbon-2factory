@@ -2252,13 +2252,18 @@ function _attCloseModal(){var w=document.getElementById('att_modal_wrap');if(w)w
 window._attCloseModal = _attCloseModal;
 
 // ============================================================
-// 월별근태(ERP형) — ERP iU 월별근태등록과 같은 배치로 2공장 근태를 보여준다 (2026-10-01)
-//   왼쪽: 사원 목록 + 월 합계 / 오른쪽: 선택 사원의 일자별 그리드
-//   계산 기준 (월 마감 대조용)
-//   - 계(실근무) = _calcWorkHoursByTime(인정출근, 퇴근) — 점심 12~13시 차감
-//   - 정상 = 8시간까지, 연장 = 8시간 초과분 (8시간 이하면 출근이 일러도 연장·조출 아님)
-//   - 연장(조) = 연장 중 09:00 이전 시작분, 연장(석) = 나머지
-//   - 야간 = 22:00~06:00 사이 근무 (근로기준법 제56조 제3항, 연장 여부와 별개)
+// 월별근태(ERP형) — ERP iU 월별근태등록과 같은 컬럼·계산으로 2공장 근태를 보여준다 (2026-10-01)
+//   왼쪽: 사원 목록 + 월 합계 / 오른쪽: 선택 사원의 일자별 그리드. 시간 표기는 ERP처럼 시.분
+//   ERP 엑셀(2026-09)을 역산한 규칙
+//   - 시간코드: 평일=정상근무, 토·일·공휴일=휴일근무 / (N시출근)은 인정 출근(inTime)의 시
+//   - 인정 시작 = max(인정 출근, 실출근). 일찍 와도 시간코드 시각부터 센다. 늦으면 지각
+//   - 계 = 퇴근-시작-점심(12~13시 겹친 만큼). 2공장 근무조는 휴일에도 점심을 뺀다
+//     (일반직군 ERP 샘플은 휴일에 점심을 안 빼지만, 2공장 ERP 값은 뺀다 — 9/19·9/20 대조)
+//   - 정상근무: 정상 = 시작~(시간코드+9시간) 구간, 8시간(반차 4·반반차 6) 한도. 그 뒤 = 연장
+//     지각하면 정상이 줄고, 못 채운 만큼은 조퇴
+//   - 휴일근무: 정상 없음. 8시간까지 연장, 넘으면 연장(석)
+//   - 야간 = 22:00~06:00 사이 근무 (근로기준법 제56조 제3항)
+//   - 조출일(왼쪽 목록): 9시 전 시작 + 계 8시간 초과 (요일 무관) (8시간 이하면 조출 아님)
 // ============================================================
 var _attErpMonth=null;   // 'YYYY-MM'
 var _attErpData=null;    // {date: records}
@@ -2269,32 +2274,54 @@ function _attErpToMin(t){
   var p=t.split(':'); var h=parseInt(p[0]), m=parseInt(p[1]);
   return (isNaN(h)||isNaN(m))?null:h*60+m;
 }
-
-function _attErpCalcDay(r){
-  var z={h:0,normal:0,ext:0,extAm:0,extPm:0,night:0};
-  if(!r) return z;
-  var tags=r.tags||[];
-  var h=_calcWorkHoursByTime(r.inTime, r.outTime, tags);
-  if(h<=0) return z;
-  var inM=_attErpToMin(r.inTime), outM=_attErpToMin(r.outTime);
-  z.h=h;
-  z.normal=Math.min(h,8);
-  z.ext=Math.max(0,h-8);
-  z.extAm=Math.min(z.ext, Math.max(0,9*60-inM)/60);
-  z.extPm=z.ext-z.extAm;
-  z.night=(Math.max(0,Math.min(outM,6*60)-inM)+Math.max(0,outM-Math.max(inM,22*60)))/60;
-  return z;
+// 분 → ERP 표기 시.분 (0이면 빈칸)
+function _attErpHM(min){
+  if(!min||min<=0) return '';
+  min=Math.round(min);
+  return Math.floor(min/60)+'.'+String(min%60).padStart(2,'0');
 }
 
-function _attErpCode(r, isOff){
+function _attErpCalcDay(r, ds){
+  var wd=new Date(ds+'T00:00:00').getDay(), hol=_isHoliday(ds);
+  var gubun=wd===0?'주휴':hol?'휴일':wd===6?'토요일':'평일';
+  var z={gubun:gubun, work:gubun==='평일'?'전일':gubun==='토요일'?'반일':'휴무',
+    code:'', tcode:'', inT:'', outT:'',
+    late:0, leaveEarly:0, w:0, normal:0, extPm:0, ext:0, night:0, annual:0, early:false};
+  var isHolWork=(gubun!=='평일');
   var tags=(r&&r.tags)||[];
-  if(tags.indexOf('annual')>=0) return '연차';
-  if(tags.indexOf('absent')>=0) return '결근';
-  if(tags.indexOf('holiday')>=0) return '휴무';
-  var lv=tags.filter(function(t){return /^(half|quarter|birth|wed)/.test(t);})[0];
-  if(lv) return ATT_SL[lv]||lv;
-  if(r&&r.inTime&&r.outTime) return '출근';
-  return isOff?'휴일':'';
+  var lvTag=tags.filter(function(t){return /^(half|quarter|birth|wed)/.test(t);})[0];
+  var lvMin=!lvTag?0:/^quarter/.test(lvTag)?120:240;
+  var startH=9;
+  if(r&&r.inTime&&!lvTag){ var sm=_attErpToMin(r.inTime); if(sm!==null) startH=Math.floor(sm/60); }
+  z.tcode=(isHolWork?'휴일근무':'정상근무')+'('+startH+'시출근)';
+  if(tags.indexOf('annual')>=0){ z.code='연차'; z.annual=480; return z; }
+  if(tags.indexOf('absent')>=0){ z.code='결근'; return z; }
+  if(tags.indexOf('holiday')>=0){ z.code='휴무'; return z; }
+  if(lvTag && !LEAVE_FREE[lvTag]) z.annual=lvMin;
+  var inM=_attErpToMin(r&&r.inTime), outM=_attErpToMin(r&&r.outTime), realM=_attErpToMin(r&&r.realIn);
+  if(inM===null||outM===null||outM<=inM){ z.code=lvTag?(ATT_SL[lvTag]||lvTag):''; return z; }
+  z.inT=(r.realIn||r.inTime); z.outT=r.outTime;
+  var st=inM;
+  if(realM!==null && realM>inM){ z.late=realM-inM; st=realM; }
+  if(outM<=st) return z;
+  var lunchIn=function(a,b){ return Math.max(0, Math.min(b,13*60)-Math.max(a,12*60)); };
+  var cap=480-lvMin;
+  if(isHolWork){
+    z.w=outM-st-lunchIn(st,outM);
+    z.ext=Math.min(z.w,480);
+    z.extPm=z.w-z.ext;
+  }else{
+    var shiftEnd=startH*60+540;
+    var nEnd=Math.max(st,Math.min(outM,shiftEnd));
+    z.normal=Math.min(cap, nEnd-st-lunchIn(st,nEnd));
+    z.ext=Math.max(0, outM-Math.max(st,shiftEnd));
+    z.w=z.normal+z.ext;
+    z.leaveEarly=outM<shiftEnd?Math.max(0, cap-z.normal-z.late):0;
+  }
+  z.early=(st<9*60 && z.w>480);
+  z.night=Math.max(0,Math.min(outM,6*60)-st)+Math.max(0,outM-Math.max(st,22*60));
+  z.code=lvTag?(ATT_SL[lvTag]||lvTag):z.late>0?'지각':z.leaveEarly>0?'조퇴':'출근';
+  return z;
 }
 
 async function _attShowErp(){
@@ -2312,18 +2339,12 @@ async function attErpLoad(){
   var list=document.getElementById('attErpList');
   if(list) list.innerHTML='<div style="padding:12px;color:var(--g5);font-size:13px">불러오는 중…</div>';
   await _loadHolidays();
-  var y=parseInt(_attErpMonth.slice(0,4)), m=parseInt(_attErpMonth.slice(5,7));
-  var last=new Date(y,m,0).getDate();
   _attErpData={};
-  var jobs=[];
-  for(var i=1;i<=last;i++){
-    (function(ds){
-      jobs.push(firebase.firestore().collection('attendance').doc(ds).get()
-        .then(function(doc){ if(doc&&doc.exists) _attErpData[ds]=doc.data().records||{}; })
-        .catch(function(){}));
-    })(_attErpMonth+'-'+String(i).padStart(2,'0'));
-  }
-  await Promise.all(jobs);
+  await Promise.all(_attErpDates().map(function(ds){
+    return firebase.firestore().collection('attendance').doc(ds).get()
+      .then(function(doc){ if(doc&&doc.exists) _attErpData[ds]=doc.data().records||{}; })
+      .catch(function(){});
+  }));
   attErpRender();
 }
 
@@ -2334,13 +2355,15 @@ function _attErpDates(){
   return out;
 }
 
+var _ATT_ERP_SUMK=['late','leaveEarly','w','normal','extPm','night','ext','annual'];
 function _attErpSum(name){
-  var s={days:0,h:0,normal:0,ext:0,extAm:0,extPm:0,night:0,earlyDays:0};
+  var s={days:0,earlyDays:0};
+  _ATT_ERP_SUMK.forEach(function(k){ s[k]=0; });
   _attErpDates().forEach(function(ds){
-    var c=_attErpCalcDay((_attErpData[ds]||{})[name]);
-    if(c.h>0) s.days++;
-    if(c.extAm>0) s.earlyDays++;
-    ['h','normal','ext','extAm','extPm','night'].forEach(function(k){ s[k]+=c[k]; });
+    var c=_attErpCalcDay((_attErpData[ds]||{})[name], ds);
+    if(c.w>0) s.days++;
+    if(c.early) s.earlyDays++;
+    _ATT_ERP_SUMK.forEach(function(k){ s[k]+=c[k]; });
   });
   return s;
 }
@@ -2351,9 +2374,10 @@ function attErpRender(){
   if(!_attErpData) return;
   var emps=(_attEmps||[]).slice().sort(function(a,b){ return String(a.empNo||'').localeCompare(String(b.empNo||'')); });
   if(!_attErpSel || !emps.some(function(e){return e.name===_attErpSel;})) _attErpSel=emps.length?emps[0].name:null;
-  var f1=function(v){ return v>0?(Math.round(v*10)/10).toString():''; };
+  var hm=_attErpHM;
   var th='padding:6px 6px;font-size:11px;font-weight:600;background:var(--g1);border:1px solid var(--g2);color:var(--g6);white-space:nowrap;position:sticky;top:0';
   var td='padding:5px 6px;border:1px solid var(--g2);white-space:nowrap';
+  var tdr=td+';text-align:right';
 
   // 왼쪽 — 사원 목록 + 월 합계
   var lh='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
@@ -2365,47 +2389,51 @@ function attErpRender(){
       +'<td style="'+td+';text-align:center;color:var(--g5)">'+(i+1)+'</td>'
       +'<td style="'+td+'">'+(e.empNo||'-')+'</td>'
       +'<td style="'+td+'">'+e.name+'</td>'
-      +'<td style="'+td+';text-align:right">'+(s.earlyDays||'')+'</td>'
-      +'<td style="'+td+';text-align:right">'+f1(s.ext)+'</td>'
-      +'<td style="'+td+';text-align:right">'+f1(s.night)+'</td></tr>';
+      +'<td style="'+tdr+'">'+(s.earlyDays||'')+'</td>'
+      +'<td style="'+tdr+'">'+hm(s.ext+s.extPm)+'</td>'
+      +'<td style="'+tdr+'">'+hm(s.night)+'</td></tr>';
   });
   lh+='</tbody></table>';
   var list=document.getElementById('attErpList'); if(list) list.innerHTML=lh;
 
-  // 오른쪽 — 선택 사원 일자별
+  // 오른쪽 — 선택 사원 일자별 (ERP 컬럼 순서)
   var grid=document.getElementById('attErpGrid'); if(!grid) return;
   if(!_attErpSel){ grid.innerHTML=''; return; }
-  var dow=['일','월','화','수','목','금','토'];
-  var cols=['일자','요일','구분','근태','실출근','출근','퇴근','계','정상','연장(조)','연장(석)','연장','야간'];
+  var dow=['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
+  var cols=['일자','요일','구분','근무','근태코드명','시간코드','출근','퇴근','지각','조퇴','외출','계','연장(조)','정상','연장(석)','야간','심야','연장','연차(시간)','기타사항'];
   var s=_attErpSum(_attErpSel);
+  var red=function(v){ return '<td style="'+tdr+';color:#dc2626">'+(hm(v)||'0.00')+'</td>'; };
   var gh='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
     +cols.map(function(x){return '<th style="'+th+'">'+x+'</th>';}).join('')+'</tr>'
-    +'<tr style="background:#fff7ed;font-weight:600">'
-    +'<td style="'+td+'" colspan="7">합계 · 출근 '+s.days+'일 · 조출 '+s.earlyDays+'일</td>'
-    +[s.h,s.normal,s.extAm,s.extPm,s.ext,s.night].map(function(v){return '<td style="'+td+';text-align:right">'+(Math.round(v*10)/10).toFixed(1)+'</td>';}).join('')
-    +'</tr></thead><tbody>';
+    +'<tr style="font-weight:600"><td style="'+td+'" colspan="8">합계 · 출근 '+s.days+'일 · 조출 '+s.earlyDays+'일</td>'
+    +red(s.late)+red(s.leaveEarly)+red(0)+red(s.w)+red(0)+red(s.normal)+red(s.extPm)+red(s.night)+red(0)+red(s.ext)+red(s.annual)
+    +'<td style="'+td+'"></td></tr></thead><tbody>';
   _attErpDates().forEach(function(ds){
-    var d=new Date(ds+'T00:00:00'), wd=d.getDay();
-    var hol=_isHoliday(ds), isOff=(wd===0||hol);
-    var gubun=isOff?'휴일':(wd===6?'토요일':'평일');
-    var dc=isOff?'#dc2626':(wd===6?'#1d4ed8':'var(--g7)');
-    var r=(_attErpData[ds]||{})[_attErpSel]||null;
-    var c=_attErpCalcDay(r);
-    var timed=c.h>0;
+    var wd=new Date(ds+'T00:00:00').getDay();
+    var c=_attErpCalcDay((_attErpData[ds]||{})[_attErpSel], ds);
+    var dc=(c.gubun==='주휴'||c.gubun==='휴일')?'#dc2626':(wd===6?'#1d4ed8':'var(--g7)');
+    var codeC=(c.code==='지각'||c.code==='조퇴'||c.code==='결근')?'#dc2626':'';
     gh+='<tr>'
       +'<td style="'+td+';color:'+dc+'">'+ds.replace(/-/g,'/')+'</td>'
       +'<td style="'+td+';color:'+dc+'">'+dow[wd]+'</td>'
-      +'<td style="'+td+'" title="'+(hol?_holidayName(ds):'')+'">'+gubun+'</td>'
-      +'<td style="'+td+'">'+_attErpCode(r,isOff||wd===6)+'</td>'
-      +'<td style="'+td+';text-align:center;color:var(--g5)">'+((timed&&r.realIn)||'')+'</td>'
-      +'<td style="'+td+';text-align:center">'+(timed?r.inTime:'')+'</td>'
-      +'<td style="'+td+';text-align:center">'+(timed?r.outTime:'')+'</td>'
-      +'<td style="'+td+';text-align:right;font-weight:600">'+f1(c.h)+'</td>'
-      +'<td style="'+td+';text-align:right">'+f1(c.normal)+'</td>'
-      +'<td style="'+td+';text-align:right">'+f1(c.extAm)+'</td>'
-      +'<td style="'+td+';text-align:right">'+f1(c.extPm)+'</td>'
-      +'<td style="'+td+';text-align:right">'+f1(c.ext)+'</td>'
-      +'<td style="'+td+';text-align:right;color:'+(c.night>0?'#1d4ed8':'')+'">'+f1(c.night)+'</td>'
+      +'<td style="'+td+'">'+c.gubun+'</td>'
+      +'<td style="'+td+'">'+c.work+'</td>'
+      +'<td style="'+td+';color:'+codeC+'">'+c.code+'</td>'
+      +'<td style="'+td+'">'+c.tcode+'</td>'
+      +'<td style="'+td+';text-align:center">'+c.inT+'</td>'
+      +'<td style="'+td+';text-align:center">'+c.outT+'</td>'
+      +'<td style="'+tdr+'">'+hm(c.late)+'</td>'
+      +'<td style="'+tdr+'">'+hm(c.leaveEarly)+'</td>'
+      +'<td style="'+tdr+'"></td>'
+      +'<td style="'+tdr+';font-weight:600">'+hm(c.w)+'</td>'
+      +'<td style="'+tdr+'"></td>'
+      +'<td style="'+tdr+'">'+hm(c.normal)+'</td>'
+      +'<td style="'+tdr+'">'+hm(c.extPm)+'</td>'
+      +'<td style="'+tdr+';color:'+(c.night>0?'#1d4ed8':'')+'">'+hm(c.night)+'</td>'
+      +'<td style="'+tdr+'"></td>'
+      +'<td style="'+tdr+'">'+hm(c.ext)+'</td>'
+      +'<td style="'+tdr+'">'+hm(c.annual)+'</td>'
+      +'<td style="'+td+';font-size:11px;color:var(--g5)">'+(_isHoliday(ds)?_holidayName(ds):'')+'</td>'
       +'</tr>';
   });
   gh+='</tbody></table>';
