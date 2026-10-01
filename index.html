@@ -352,6 +352,7 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
     <button class="att-sub-tab" data-tab="person" onclick="attShowSubTab('person',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">직원별 조회</button>
     <button class="att-sub-tab" data-tab="staff" onclick="attShowSubTab('staff',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">직원 관리</button>
     <button class="att-sub-tab" data-tab="report" onclick="attShowSubTab('report',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">현황·조출</button>
+    <button class="att-sub-tab" data-tab="erp" onclick="attShowSubTab('erp',this)" style="flex:1;padding:7px;font-size:13px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--g5);margin-bottom:-2px">월별근태(ERP)</button>
   </div>
 
   <!-- 출퇴근 입력 탭 -->
@@ -396,6 +397,20 @@ body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystem
     <div id="attPsSummary" style="padding:10px 14px"></div>
     <div style="overflow-x:auto;padding:0">
       <table id="attPsTable" style="width:100%;border-collapse:collapse;font-size:12px"></table>
+    </div>
+  </div>
+
+  <!-- 월별근태(ERP형) 탭 -->
+  <div id="attErpWrap" style="display:none">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;border-bottom:var(--br);flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:600">귀속년월</span>
+      <input type="month" id="attErpMonth" class="fc" style="padding:6px 8px;font-size:13px" onchange="attErpLoad()">
+      <span id="attErpTitle" style="font-size:13px;font-weight:600;color:#1d4ed8"></span>
+      <span style="font-size:11px;color:var(--g5);margin-left:auto">계=점심 제외 · 8시간 초과만 연장 · 야간 22~06시</span>
+    </div>
+    <div style="display:flex;gap:10px;padding:10px 14px;flex-wrap:wrap;align-items:flex-start">
+      <div id="attErpList" style="flex:0 0 330px;max-width:100%;max-height:75vh;overflow:auto"></div>
+      <div id="attErpGrid" style="flex:1 1 560px;min-width:0;max-height:75vh;overflow:auto"></div>
     </div>
   </div>
 
