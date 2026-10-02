@@ -2327,7 +2327,8 @@ function _attErpCalcDay(r, ds){
 async function _attShowErp(){
   var mi=document.getElementById('attErpMonth');
   if(mi && !mi.value){
-    var d=new Date(); mi.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    // 마감용 화면이라 지난달을 기본으로 연다
+    var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); mi.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   }
   await attErpLoad();
 }
@@ -2375,12 +2376,12 @@ function attErpRender(){
   var emps=(_attEmps||[]).slice().sort(function(a,b){ return String(a.empNo||'').localeCompare(String(b.empNo||'')); });
   if(!_attErpSel || !emps.some(function(e){return e.name===_attErpSel;})) _attErpSel=emps.length?emps[0].name:null;
   var hm=_attErpHM;
-  var th='padding:6px 6px;font-size:11px;font-weight:600;background:var(--g1);border:1px solid var(--g2);color:var(--g6);white-space:nowrap;position:sticky;top:0';
+  var th='padding:6px 6px;font-size:11px;font-weight:600;background:var(--g1);border:1px solid var(--g2);color:var(--g6);white-space:nowrap';
   var td='padding:5px 6px;border:1px solid var(--g2);white-space:nowrap';
   var tdr=td+';text-align:right';
 
   // 왼쪽 — 사원 목록 + 월 합계
-  var lh='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  var lh='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead style="position:sticky;top:0;z-index:1"><tr>'
     +['No','사번','성명','조출일','연장','야간'].map(function(x){return '<th style="'+th+'">'+x+'</th>';}).join('')
     +'</tr></thead><tbody>';
   emps.forEach(function(e,i){
@@ -2403,9 +2404,9 @@ function attErpRender(){
   var cols=['일자','요일','구분','근무','근태코드명','시간코드','출근','퇴근','지각','조퇴','외출','계','연장(조)','정상','연장(석)','야간','심야','연장','연차(시간)','기타사항'];
   var s=_attErpSum(_attErpSel);
   var red=function(v){ return '<td style="'+tdr+';color:#dc2626">'+(hm(v)||'0.00')+'</td>'; };
-  var gh='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+  var gh='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead style="position:sticky;top:0;z-index:1"><tr>'
     +cols.map(function(x){return '<th style="'+th+'">'+x+'</th>';}).join('')+'</tr>'
-    +'<tr style="font-weight:600"><td style="'+td+'" colspan="8">합계 · 출근 '+s.days+'일 · 조출 '+s.earlyDays+'일</td>'
+    +'<tr style="font-weight:600;background:#fff"><td style="'+td+'" colspan="8">합계 · 출근 '+s.days+'일 · 조출 '+s.earlyDays+'일</td>'
     +red(s.late)+red(s.leaveEarly)+red(0)+red(s.w)+red(0)+red(s.normal)+red(s.extPm)+red(s.night)+red(0)+red(s.ext)+red(s.annual)
     +'<td style="'+td+'"></td></tr></thead><tbody>';
   _attErpDates().forEach(function(ds){
