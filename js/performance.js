@@ -358,7 +358,9 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
   var byDP={};
   pkClean.forEach(function(r){
     var key=d(r)+'|'+(r.product||'기타');
-    if(!byDP[key]) byDP[key]={ea:0,pouch:0,defect:0,workers:0,subKg:0,subName:'',sauceKg:0,types:{}};
+    if(!byDP[key]) byDP[key]={ea:0,pouch:0,defect:0,workers:0,subKg:0,subName:'',sauceKg:0,types:{},wg:{}};
+    _perfSplit(r.wagon).forEach(function(w){ byDP[key].wg[w]=1; });
+    Object.keys(r.wagonDist||{}).forEach(function(w){ byDP[key].wg[String(w).trim()]=1; });
     byDP[key].ea += parseFloat(r.ea)||0;
     byDP[key].pouch += parseFloat(r.pouch)||0;
     byDP[key].defect += parseFloat(r.defect)||0;
@@ -467,12 +469,38 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     var p = (typeof L!=='undefined' && L && L.products) ? L.products.find(function(x){return x.name===name;}) : null;
     return p ? p.kgea : 0.05;
   };
+  var _perfIsNoMeat = function(name){
+    var p = (typeof L!=='undefined' && L && L.products) ? L.products.find(function(x){return x.name===name;}) : null;
+    return !!(p && p.noMeat);
+  };
   var _byDateForAlloc = {};
   Object.keys(byDP).forEach(function(k){
     var dt = k.split('|')[0];
     var prod = k.split('|')[1];
     var typeList = Object.keys(byDP[k].types || {});
     var primaryType = typeList.length ? typeList.sort(function(a,b){return (byDP[k].types[b]||0)-(byDP[k].types[a]||0);})[0] : '';
+    // ★ packing에 type이 없으면 월단위생산량과 같은 순서로 부위를 찾는다 (2026-10-02)
+    //   부위를 못 찾으면 '_'(그날 전체)로 분배돼 다른 부위 실적이 겹쳐 들어간다 (9/4 FC 3KG에 설도 전처리 합산)
+    //   1) 그 제품이 받은 와건을 배출한 같은 날 파쇄의 부위  2) 그날 방혈 부위  3) 제품→부위 설정
+    if(!primaryType && !_perfIsNoMeat(prod)){
+      var shT = {};
+      sh.forEach(function(r){
+        if(d(r)!==dt || testShIds.has(idOf(r))) return;
+        if(!_perfSplit(r.wagonOut).some(function(w){ return byDP[k].wg[w]; })) return;
+        var t2 = _shTypeFor(r);
+        if(t2 && t2!=='_') shT[t2] = (shT[t2]||0) + (parseFloat(r.kgWashed)||parseFloat(r.kg)||0);
+      });
+      var thT = {};
+      if(!Object.keys(shT).length){
+        Object.keys(thByDateType).forEach(function(thk){
+          var a = thk.split('|');
+          if(a[0]===dt && a[1]!=='_' && thByDateType[thk]>0) thT[a[1]] = (thT[a[1]]||0) + thByDateType[thk];
+        });
+      }
+      var cand = Object.keys(shT).length ? shT : thT;
+      var keys = Object.keys(cand).sort(function(a,b){ return cand[b]-cand[a]; });
+      primaryType = keys[0] || ((window._productParts && window._productParts[prod]) || '');
+    }
     // ★ eaDisp: 외포장 EA 있으면 그것, 없으면 내포장 EA (월단위 화면과 동일)
     var oe = (opMap[k] && opMap[k].ea) || 0;
     var eaDisp = oe > 0 ? oe : byDP[k].ea;
