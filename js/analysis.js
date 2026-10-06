@@ -4077,7 +4077,8 @@ function renderPackingChart(dayEntries, opMap, ym) {
       },
       scales: {
         x: { stacked: true, grid: { display: false }, ticks: { color: 'var(--g5)', font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
-        y: { stacked: true, grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '20%' },
+        y: { stacked: true, grid: { color: 'rgba(100,116,139,0.1)' }, ticks: { color: 'var(--g5)', font: { size: 10 }, callback: v => v.toLocaleString() + (yUnit||'') }, beginAtZero: true, grace: '20%',
+             suggestedMax: showAvgLine ? (Math.max(_curAvgKg||0, _avgPkKg||0) * 1.1 || undefined) : undefined },
         // 평균선 전용 — stacked 영향 안 받게 별도 축
         y_avg: { display: false, stacked: false, beginAtZero: true, grace: '20%',
           afterFit: function(scale){
@@ -4393,7 +4394,9 @@ function _moRenderRmChart(rmByDate, ym, rmByDatePart){
       },
       scales: {
         x: { stacked: isStacked, ticks: { font: {size:9}, autoSkip: false, maxRotation: 0 }, grid: { display: false } },
-        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '20%' },
+        // ★ 평균선이 막대보다 높아도 잘리지 않게 축 범위에 평균값을 넣는다 (월초 전월 일평균 안 보이던 문제, 2026-10-06)
+        y: { stacked: isStacked, ticks: { font: {size:10}, callback: v => v.toLocaleString()+'kg' }, beginAtZero: true, grace: '20%',
+             suggestedMax: Math.max(_curAvg||0, (_moRmTab==='종합' && _avgRm) ? _avgRm : 0) * 1.1 || undefined },
         // 평균선 전용 — stacked 영향 안 받게 별도 축 (display:false). y와 같은 범위 사용.
         y_avg: { display: false, stacked: false, beginAtZero: true, grace: '20%',
           afterFit: function(scale){
