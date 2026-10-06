@@ -563,7 +563,9 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
       const dayPkKg=r2(_byD[date].meat);
       moTotRm+=dayRm; moTotPkKg+=dayPkKg; moDays++;
       const yld=dayPkKg/dayRm*100;
-      if(yld>=52) moGoodDays++;
+      // 달성일 = 설정의 수율 목표 이상 (예전엔 주의선 52%로 고정돼 목표처럼 보였음, 2026-10-06)
+      const _goal = ((typeof getTargets==='function') ? getTargets() : {yieldGoal:55}).yieldGoal;
+      if(yld>=_goal) moGoodDays++;
       dailyYields.push({date, yld});
     });
     // ★ 표(생산일보)와 동일 총계 사용 — 표=KPI 일치 (6월 override 포함)
@@ -1180,7 +1182,7 @@ function _moRenderYieldKPI(totRm, totPkKg, avgYld, workDays, goodDays, lossKg) {
       <div style="font-size:11px;color:var(--g4);margin-top:3px">KG (${_G}% 기준 대비)</div>
     </div>
     <div class="card" style="text-align:center;padding:16px 10px">
-      <div style="font-size:11px;color:var(--g5);margin-bottom:6px">수율 ${_W}% 이상 달성</div>
+      <div style="font-size:11px;color:var(--g5);margin-bottom:6px">수율 목표 ${_G}% 이상 달성</div>
       <div style="font-size:24px;font-weight:700;color:#1e293b">${goodDays}<span style="font-size:14px;color:var(--g4)"> / ${workDays}일</span></div>
       <div style="font-size:11px;color:var(--g4);margin-top:3px">${workDays>0?(goodDays/workDays*100).toFixed(0)+'% 달성':''}</div>
     </div>`;
