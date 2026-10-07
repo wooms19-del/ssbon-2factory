@@ -58,6 +58,9 @@
       var c = window.adminCut(d);
       if(!c) return;
       var tg = byDate[d].filter(function(r){ return String(r[tk]||'').split(',')[0].trim() === c.part; });
+      // 같은 원육 풀(병합 그룹)의 멤버 행은 부위가 빈칸이라 그룹 번호로 함께 포함 (예: 130g + 130g 마트용)
+      var gs = tg.map(function(r){ return r.groupIdx; }).filter(function(g){ return g != null; });
+      if(gs.length) tg = byDate[d].filter(function(r){ return tg.indexOf(r) >= 0 || gs.indexOf(r.groupIdx) >= 0; });
       [[rk, c.rm], [pk, c.pp]].forEach(function(pair){
         var key = pair[0], cut = pair[1];
         var tot = tg.reduce(function(sum, r){ return sum + (parseFloat(r[key])||0); }, 0);
