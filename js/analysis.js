@@ -2490,6 +2490,9 @@ function renderDailyFromLocal_(d){
     rmKg=r2(adminBase(d,'rm',rmKg)); ppKg=r2(adminBase(d,'pp',ppKg));
     ckKg=r2(adminBase(d,'ck',ckKg)); shKg=r2(adminBase(d,'sh',shKg));
   }
+  // ★ 관리자 9월 수정본: 그날 빠진 부위 고기를 원육·전처리 합계에서 뺀다 (실적관리 화면과 같은 값)
+  const _cut = (typeof adminCut==='function') ? adminCut(d) : null;
+  if(_cut){ rmKg=r2(rmKg-_cut.rm); ppKg=r2(ppKg-_cut.pp); }
   const totalEA=pk.reduce((s,r)=>s+(parseFloat(r.ea)||0),0);
   const totalMH=r2(sumMH(pp)+sumMH(ck)+sumMH(sh)+sumMH(pk));
   const defect=pk.reduce((s,r)=>s+(parseFloat(r.defect)||0),0);

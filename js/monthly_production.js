@@ -1060,6 +1060,8 @@
         if(Object.keys(_of).length) r._ovFields = _of;
       });
     }
+    // ── 관리자 9월 수정본: 다른 곳으로 빠진 부위 고기를 원육·전처리에서 뺀다 (제품이 둘인 날도 그 부위 행만) ──
+    if(typeof adminApplyCut === 'function') adminApplyCut(rows, {typeKey:'type', rmKey:'rmKg', ppKey:'ppKg'});
 
     return {
       rows: rows,

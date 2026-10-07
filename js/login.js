@@ -50,8 +50,8 @@
     if(role==='admin'){
       try{ sessionStorage.setItem('ssbon_admin_v1','1'); }catch(e){}
       window._isAdmin=true;
-      if(typeof window._adminLoadOverride==='function'){
-        try{ window._adminLoadOverride('2026-06'); }catch(e){}
+      if(typeof window._adminLoadAllOverrides==='function'){
+        try{ window._adminLoadAllOverrides(); }catch(e){}
       }
     }
     if(role!=='admin'){

@@ -22,11 +22,54 @@
       if(data && Array.isArray(data.days)){
         var map = {};
         data.days.forEach(function(d){
-          if(d && d.date) map[d.date] = { rm:d.rm, pp:d.pp, ck:d.ck, sh:d.sh };
+          if(d && d.date) map[d.date] = { rm:d.rm, pp:d.pp, ck:d.ck, sh:d.sh, cut:d.cut };
         });
         window._adminOv[ym] = map;
       }
     }catch(e){ window._adminOvLoaded[ym] = false; } // 실패 시 재시도 허용
+  };
+
+  // 수정본이 있는 달 — 여기 적힌 달만 불러온다 (2026-10-07 9월 추가)
+  window._ADMIN_OV_MONTHS = ['2026-06','2026-09'];
+  window._adminLoadAllOverrides = function(){
+    return Promise.all(window._ADMIN_OV_MONTHS.map(function(ym){ return window._adminLoadOverride(ym); }));
+  };
+
+  // 관리자면서 그 날짜에 '부위에서 빼는 양'이 있으면 {part, rm, pp}, 아니면 null (동기)
+  //   9월 수정본: 다른 곳으로 빠진 설도 고기를 원육·전처리에서 같은 양만큼 뺀다 (자숙·파쇄·포장은 그대로)
+  window.adminCut = function(date){
+    if(!window._isAdmin) return null;
+    var m = window._adminOv[String(date||'').slice(0,7)];
+    var r = m && m[String(date).slice(0,10)];
+    var c = r && r.cut;
+    if(!c || !c.part) return null;
+    return { part: c.part, rm: parseFloat(c.rm)||0, pp: parseFloat(c.pp)||0 };
+  };
+
+  // 실적 행 배열에 '빼는 양'을 반영한다 — 일별실적·월단위생산량 공용 (화면마다 값이 달라지지 않게 한 곳에서)
+  //   그날 그 부위 행들에 원육·전처리를 각 행 kg 비율로 나눠 뺀다. 제품이 둘인 날도 해당 부위 행에서만 빠진다.
+  //   opt: {typeKey, rmKey, ppKey}
+  window.adminApplyCut = function(rows, opt){
+    if(!window._isAdmin || !rows || !rows.length) return;
+    var tk = opt.typeKey, rk = opt.rmKey, pk = opt.ppKey;
+    var byDate = {};
+    rows.forEach(function(r){ if(r && r.date) (byDate[r.date] = byDate[r.date] || []).push(r); });
+    Object.keys(byDate).forEach(function(d){
+      var c = window.adminCut(d);
+      if(!c) return;
+      var tg = byDate[d].filter(function(r){ return String(r[tk]||'').split(',')[0].trim() === c.part; });
+      [[rk, c.rm], [pk, c.pp]].forEach(function(pair){
+        var key = pair[0], cut = pair[1];
+        var tot = tg.reduce(function(sum, r){ return sum + (parseFloat(r[key])||0); }, 0);
+        if(!(cut > 0) || !(tot > 0)) return;
+        tg.forEach(function(r){
+          var v = parseFloat(r[key])||0;
+          if(!v) return;
+          r[key] = Math.round((v - cut * v / tot) * 100) / 100;
+          r._ovFields = r._ovFields || {}; r._ovFields[key] = true;
+        });
+      });
+    });
   };
 
   // 관리자면서 그 날짜 override 있으면 수정값, 아니면 원래값 (동기)
@@ -94,7 +137,7 @@
     _adminRenderBadge();
     if(typeof toast === 'function') toast('관리자 모드 ✓','s');
     // 6월 override 로드 후 현재 화면 갱신 (로드 완료돼야 수정본 반영)
-    _adminLoadOverride('2026-06').then(function(){
+    _adminLoadAllOverrides().then(function(){
       _adminRefreshView();
     });
   };
@@ -169,7 +212,7 @@
 
   function _adminInitUI(){
     _loadProductParts();
-    if(window._isAdmin){ _adminRenderBadge(); _adminLoadOverride('2026-06'); }
+    if(window._isAdmin){ _adminRenderBadge(); _adminLoadAllOverrides().then(_adminRefreshView); }
     else _adminRenderLock();
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _adminInitUI);

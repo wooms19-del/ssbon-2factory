@@ -970,6 +970,9 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
     });
   });
 
+  // ★ 관리자 9월 수정본: 다른 곳으로 빠진 부위 고기를 원육·전처리에서 뺀다 (월단위생산량과 같은 함수, 2026-10-07)
+  if(typeof adminApplyCut === 'function') adminApplyCut(rows, {typeKey:'rmType', rmKey:'rmKg', ppKey:'ppKg'});
+
   // 11) 테스트 행 별도 수집
   var testPkByKey={};
   testPk.forEach(function(r){
