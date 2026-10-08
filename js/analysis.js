@@ -534,6 +534,7 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
       window._moGD.mpRowsSplit = (window._mpProcess(pk, opData, ppMonth, thMonth, shMonth, ckMonth, undefined, 'product')||{}).rows || null;
     }
   } catch(e){ console.error('[일보] mpRows 빌드 실패', e); window._moGD.mpRows = null; window._moGD.mpRowsSplit = null; }
+  _moExportMonthlySummary(ym, [pk, opData, ppMonth, thMonth, shMonth, ckMonth, undefined, 'none']);
   _moRenderRows(null);
   renderPackingChart(dayEntries, opMap, _moYm || tod().slice(0,7));
   // 일별 원육 사용량 차트
@@ -760,6 +761,41 @@ async function renderMonthlyReport(pk, from, effectiveTo, ppMonth, thMonth, opDa
       }
     });
   });
+}
+
+// ── 외부 연동용: 월 원육 사용량을 monthly_summary/{YYYY-MM}에 저장 (daily_summary와 같은 방식) ──
+// 시설팀 등이 Firestore에서 바로 읽어가도록. 어느 기기에서 월별현황을 열든 같은 값이 되게
+// 기록값(rmKgRecorded)과 관리자 보정값(rmKgAdjusted, 빠지는고기 반영)을 둘 다 월단위생산량 계산으로 뽑는다.
+async function _moExportMonthlySummary(ym, mpArgs){
+  if(typeof db === 'undefined' || !db || !window._mpProcess) return;
+  try{
+    if(typeof window._adminLoadOverride === 'function') await window._adminLoadOverride(ym);
+    const was = window._isAdmin;
+    let rec, adj;
+    try{
+      window._isAdmin = false; rec = (window._mpProcess.apply(null, mpArgs)||{}).rows || [];
+      window._isAdmin = true;  adj = (window._mpProcess.apply(null, mpArgs)||{}).rows || [];
+    } finally { window._isAdmin = was; }
+    const byDate = {};
+    const add = (rows, key) => rows.forEach(r => {
+      if(!r || !r.date || r._isMainRow === false) return;
+      byDate[r.date] = byDate[r.date] || {date:r.date, rmKgRecorded:0, rmKgAdjusted:0};
+      byDate[r.date][key] += r.rmKg || 0;
+    });
+    add(rec, 'rmKgRecorded'); add(adj, 'rmKgAdjusted');
+    const daily = Object.keys(byDate).sort().map(d => ({date:d, rmKgRecorded:r2(byDate[d].rmKgRecorded), rmKgAdjusted:r2(byDate[d].rmKgAdjusted)}))
+      .filter(x => x.rmKgRecorded > 0 || x.rmKgAdjusted > 0);
+    const body = {
+      month: ym, factory: '2공장',
+      rmKgAdjusted: r2(daily.reduce((s,x)=>s+x.rmKgAdjusted, 0)),   // 월별현황(관리자) '총 원육 사용량'과 같은 값
+      rmKgRecorded: r2(daily.reduce((s,x)=>s+x.rmKgRecorded, 0)),   // 현장 기록 그대로(일반 화면)
+      workDays: daily.length, daily: daily
+    };
+    const key = JSON.stringify(body);
+    if(window._moSummaryLast === key) return;   // 같은 내용이면 다시 쓰지 않음
+    await db.collection('monthly_summary').doc(ym).set(Object.assign({updatedAt: new Date().toISOString()}, body));
+    window._moSummaryLast = key;
+  }catch(e){ console.warn('[monthly_summary] export 실패:', e && e.message); }
 }
 
 // ── 월간 보고서 테이블 렌더 (월단위생산량 rows 기반 — 값·그룹 완전 일치) ──────
