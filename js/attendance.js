@@ -899,6 +899,10 @@ async function _renderAttReport(){
       else if(t.indexOf('holiday')>=0){c.holiday++; off.push(_nm+'(휴무)');}
       if(t.indexOf('half-am')>=0){c.half++; off.push(_nm+'(오전반차)');}
       else if(t.indexOf('half-pm')>=0){c.half++; off.push(_nm+'(오후반차)');}
+      else if(t.indexOf('birth-am')>=0){c.half++; off.push(_nm+'(오전생일반차)');}   // 생일·결혼반차도 반차로 집계 (2026-10-15)
+      else if(t.indexOf('birth-pm')>=0){c.half++; off.push(_nm+'(오후생일반차)');}
+      else if(t.indexOf('wed-am')>=0){c.half++; off.push(_nm+'(오전결혼반차)');}
+      else if(t.indexOf('wed-pm')>=0){c.half++; off.push(_nm+'(오후결혼반차)');}
       if(t.indexOf('quarter-am')>=0){c.quarter++; off.push(_nm+'(오전반반차)');}
       else if(t.indexOf('quarter-pm')>=0){c.quarter++; off.push(_nm+'(오후반반차)');}
       else if(t.indexOf('quarter')>=0){c.quarter++; off.push(_nm+'(반반차)');}
@@ -986,6 +990,10 @@ function _buildEarlyMsg(){
     else if(t.indexOf('absent')>=0)off.push(_attDispName(e)+'(결근)');
     if(t.indexOf('half-am')>=0)off.push(_attDispName(e)+'(오전반차)');
     else if(t.indexOf('half-pm')>=0)off.push(_attDispName(e)+'(오후반차)');
+    else if(t.indexOf('birth-am')>=0)off.push(_attDispName(e)+'(오전생일반차)');
+    else if(t.indexOf('birth-pm')>=0)off.push(_attDispName(e)+'(오후생일반차)');
+    else if(t.indexOf('wed-am')>=0)off.push(_attDispName(e)+'(오전결혼반차)');
+    else if(t.indexOf('wed-pm')>=0)off.push(_attDispName(e)+'(오후결혼반차)');
     if(t.indexOf('quarter-am')>=0)off.push(_attDispName(e)+'(오전반반차)');
     else if(t.indexOf('quarter-pm')>=0)off.push(_attDispName(e)+'(오후반반차)');
     else if(t.indexOf('quarter')>=0)off.push(_attDispName(e)+'(반반차)');
