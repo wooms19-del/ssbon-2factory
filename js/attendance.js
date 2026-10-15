@@ -2319,9 +2319,11 @@ function _attErpCalcDay(r, ds){
   var lvTag=tags.filter(function(t){return /^(half|quarter|birth|wed)/.test(t);})[0];
   var lvMin=!lvTag?0:/^quarter/.test(lvTag)?120:240;
   var startH=9;
+  // 2026-10-15 계산 보정(오후휴가 시간코드·점심·연장)은 10월분부터. 마감 끝난 9월 이전은 예전 값 그대로
+  var _erpV2=(ds>='2026-10-01');
   // 오전 휴가(반차·반반차 오전)는 출근 시각이 휴가 때문에 늦춰진 것이라 시간코드는 9시 그대로.
   // 오후 휴가는 실제 출근 시각을 쓴다 — 조출 05:00 + 오후반차 → 5시출근 (2026-10-15)
-  if(r&&r.inTime&&!(lvTag && /-am$/.test(lvTag))){ var sm=_attErpToMin(r.inTime); if(sm!==null) startH=Math.floor(sm/60); }
+  if(r&&r.inTime&&!(lvTag && (!_erpV2 || /-am$/.test(lvTag)))){ var sm=_attErpToMin(r.inTime); if(sm!==null) startH=Math.floor(sm/60); }
   z.tcode=(isHolWork?'휴일근무':'정상근무')+'('+startH+'시출근)';
   if(tags.indexOf('annual')>=0){ z.code='연차'; z.annual=480; return z; }
   if(tags.indexOf('absent')>=0){ z.code='결근'; return z; }
@@ -2335,7 +2337,7 @@ function _attErpCalcDay(r, ds){
   if(outM<=st) return z;
   // 오후 휴가로 13시 전에 퇴근하면 점심을 먹고 간 게 아니라 점심을 빼지 않는다 (2026-10-15)
   //   예: 오후반차 09:00~13:00 → 4시간 (예전엔 3시간으로 잡혀 조퇴 1시간이 찍혔음)
-  var _pmHome=!!(lvTag && !/-am$/.test(lvTag) && outM<=13*60);
+  var _pmHome=!!(_erpV2 && lvTag && !/-am$/.test(lvTag) && outM<=13*60);
   var lunchIn=function(a,b){ return _pmHome?0:Math.max(0, Math.min(b,13*60)-Math.max(a,12*60)); };
   var cap=480-lvMin;
   if(isHolWork){
@@ -2350,7 +2352,7 @@ function _attErpCalcDay(r, ds){
     z.ext=Math.max(0, outM-Math.max(st,shiftEnd));
     // 오후 휴가 날 반차 한도(4h·반반차 6h)를 넘겨 일한 시간은 연장 (2026-10-15)
     //   예: 조출 05:00 출근 → 10:00 퇴근 + 오후반차 → 정상 4h + 연장 1h
-    if(lvTag && !/-am$/.test(lvTag)) z.ext+=Math.max(0, normWin-z.normal);
+    if(_erpV2 && lvTag && !/-am$/.test(lvTag)) z.ext+=Math.max(0, normWin-z.normal);
     z.w=z.normal+z.ext;
     z.leaveEarly=outM<shiftEnd?Math.max(0, cap-z.normal-z.late):0;
   }
