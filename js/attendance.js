@@ -330,10 +330,29 @@ function _applyLeaveRequests(date){
     var _isDefault = (!tags.length && (!r || (r.inTime==='09:00' && r.outTime==='18:00')));
     var worked=((r&&(r.inTime||r.outTime)) || tags.indexOf('checkin')>=0 || tags.indexOf('early')>=0)
                && !_isDefault;
-    if(worked) return;                                  // 실제 근무 기록 우선
     if(tags.indexOf('absent')>=0) return;                // 결근 처리도 우선
     var merged=_leaveMerge(lvs.map(function(x){return x.type;}));
     if(!merged) return;
+    if(worked){
+      // 실제 근무 기록이 있으면 하루 휴가(연차 등)는 반영하지 않는다.
+      // 반차·반반차는 근무와 같이 있는 게 정상이라 태그를 더해 준다 (2026-10-15)
+      //   예: 조출 05:00 출근 + 오후 반차 → 조출+반차(오후)
+      if(!merged.in) return;                             // 하루 휴가
+      var _isAm=merged.tags.some(function(t){ return /-am$/.test(t); });
+      if(_isAm && tags.indexOf('early')>=0) return;      // 조출 + 오전 반차는 불가능한 조합
+      var add=merged.tags.filter(function(t){ return tags.indexOf(t)<0; });
+      if(!add.length) return;                            // 이미 반영됨
+      var nt=tags.concat(add);
+      var inT=_isAm ? merged.in : (r.inTime||merged.in);
+      var outT=r.outTime||merged.out;
+      if(tags.indexOf('checkout')<0){
+        // 퇴근을 찍지 않았으면 출퇴근 입력 화면과 같은 방식으로 퇴근 시각 계산
+        var calcTags=nt.map(function(t){ return t.replace(/^(birth|wed)-/,'half-'); });
+        outT=_attAddH(inT, _calcWorkHours(calcTags));
+      }
+      _attRecs[name]={tags:nt, inTime:inT, outTime:outT};
+      return;
+    }
     // 이미 같은 결과면 그대로 둔다
     if(tags.length===merged.tags.length &&
        merged.tags.every(function(t){return tags.indexOf(t)>=0;})) return;
