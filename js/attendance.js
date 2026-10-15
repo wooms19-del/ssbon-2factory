@@ -2319,7 +2319,9 @@ function _attErpCalcDay(r, ds){
   var lvTag=tags.filter(function(t){return /^(half|quarter|birth|wed)/.test(t);})[0];
   var lvMin=!lvTag?0:/^quarter/.test(lvTag)?120:240;
   var startH=9;
-  if(r&&r.inTime&&!lvTag){ var sm=_attErpToMin(r.inTime); if(sm!==null) startH=Math.floor(sm/60); }
+  // 오전 휴가(반차·반반차 오전)는 출근 시각이 휴가 때문에 늦춰진 것이라 시간코드는 9시 그대로.
+  // 오후 휴가는 실제 출근 시각을 쓴다 — 조출 05:00 + 오후반차 → 5시출근 (2026-10-15)
+  if(r&&r.inTime&&!(lvTag && /-am$/.test(lvTag))){ var sm=_attErpToMin(r.inTime); if(sm!==null) startH=Math.floor(sm/60); }
   z.tcode=(isHolWork?'휴일근무':'정상근무')+'('+startH+'시출근)';
   if(tags.indexOf('annual')>=0){ z.code='연차'; z.annual=480; return z; }
   if(tags.indexOf('absent')>=0){ z.code='결근'; return z; }
