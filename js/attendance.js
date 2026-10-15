@@ -2342,8 +2342,12 @@ function _attErpCalcDay(r, ds){
   }else{
     var shiftEnd=startH*60+540;
     var nEnd=Math.max(st,Math.min(outM,shiftEnd));
-    z.normal=Math.min(cap, nEnd-st-lunchIn(st,nEnd));
+    var normWin=nEnd-st-lunchIn(st,nEnd);
+    z.normal=Math.min(cap, normWin);
     z.ext=Math.max(0, outM-Math.max(st,shiftEnd));
+    // 오후 휴가 날 반차 한도(4h·반반차 6h)를 넘겨 일한 시간은 연장 (2026-10-15)
+    //   예: 조출 05:00 출근 → 10:00 퇴근 + 오후반차 → 정상 4h + 연장 1h
+    if(lvTag && !/-am$/.test(lvTag)) z.ext+=Math.max(0, normWin-z.normal);
     z.w=z.normal+z.ext;
     z.leaveEarly=outM<shiftEnd?Math.max(0, cap-z.normal-z.late):0;
   }
