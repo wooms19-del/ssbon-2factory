@@ -61,7 +61,8 @@ var db=firebase.firestore();
 if(firebase.auth) firebase.auth().signInAnonymously().catch(function(e){ console.warn('[auth]',e&&e.message); });
 
 var LS='ssbon_leave_me';
-var TYPES=[{v:'annual',l:'연차 (하루 종일)',u:1},{v:'half-am',l:'반차 (오전)',u:.5},{v:'half-pm',l:'반차 (오후)',u:.5},{v:'quarter',l:'반반차',u:.25}];
+var TYPES=[{v:'annual',l:'연차 (하루 종일)',u:1},{v:'half-am',l:'반차 (오전)',u:.5},{v:'half-pm',l:'반차 (오후)',u:.5},{v:'quarter',l:'반반차',u:.25},
+  {v:'birth-am',l:'생일반차 (오전)',u:0},{v:'birth-pm',l:'생일반차 (오후)',u:0},{v:'wed-am',l:'결혼반차 (오전)',u:0},{v:'wed-pm',l:'결혼반차 (오후)',u:0}];  // 생일·결혼반차는 연차 차감 없음 (2026-10-15)
 var PART_ORDER=['실장·파트장','해동/전처리','자숙/소스','파쇄','내포장','외포장','물류','OP','공정QC','기술직선임','AR/도급'];
 var EMPS=[], LEAVES=[], HOLI={}, ME=null, TAB='new', MODE='one', EDIT=null;
 
@@ -223,9 +224,10 @@ function viewNew(){
   if(MODE==='many') h+='<div class="lb" style="margin-top:12px">종료일</div><input id="lvTo" type="date" value="'+vTo+'" onchange="preview()">';
   if(MODE==='half'){
     var ht=(DRAFT&&DRAFT.half)||((E&&E.type!=='annual')?E.type:'half-am');
-    var HL={'half-am':'오전 반차 — 오후에 출근 (0.5일)','half-pm':'오후 반차 — 오전만 근무 (0.5일)','quarter':'반반차 — 2시간만 쉼 (0.25일)'};
+    var HL={'half-am':'오전 반차 — 오후에 출근 (0.5일)','half-pm':'오후 반차 — 오전만 근무 (0.5일)','quarter':'반반차 — 2시간만 쉼 (0.25일)',
+      'birth-am':'생일반차 (오전) — 연차 차감 없음','birth-pm':'생일반차 (오후) — 연차 차감 없음','wed-am':'결혼반차 (오전) — 연차 차감 없음','wed-pm':'결혼반차 (오후) — 연차 차감 없음'};
     h+='<div class="lb" style="margin-top:12px">어떻게 쉬시나요</div><select id="lvHalf" onchange="preview()">'
-     + ['half-am','half-pm','quarter'].map(function(v){
+     + ['half-am','half-pm','quarter','birth-am','birth-pm','wed-am','wed-pm'].map(function(v){
          return '<option value="'+v+'"'+(ht===v?' selected':'')+'>'+HL[v]+'</option>';
        }).join('') + '</select>';
   }
@@ -276,7 +278,7 @@ function preview(){
   var days=Math.round(ds.length*typeUnit(curType())*100)/100;
   var rem=(ME.annualDays||0)-(ME.usedDays||0);
   el.innerHTML='<b>'+esc(fmtK(ds[0]))+(ds.length>1?(' 외 '+(ds.length-1)+'일'):'')+'</b><br>'
-   + typeLabel(curType())+' · <b>'+days+'일</b> 차감 · 남은 연차 '+rem+' → '+Math.round((rem-days)*100)/100+'일';
+   + typeLabel(curType())+(days>0?(' · <b>'+days+'일</b> 차감 · 남은 연차 '+rem+' → '+Math.round((rem-days)*100)/100+'일'):' · <b>연차 차감 없음</b>');
 }
 
 async function submitLeave(){
