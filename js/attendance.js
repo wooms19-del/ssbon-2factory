@@ -390,7 +390,7 @@ function _leaveMerge(types){
 
 // 휴가 종류별 실제 근무 시각 (점심 12:00~13:00)
 //   오전 반차  → 오후만 근무  13:00~18:00 (5h)
-//   오후 반차  → 오전만 근무  09:00~12:00 (3h, 점심 전 퇴근)
+//   오후 반차  → 오전만 근무  09:00~13:00 (4h, 점심 때 퇴근) — 출퇴근 입력 화면과 같게 (2026-10-15)
 //   오전 반반차 → 11:00~18:00 (6h)
 //   오후 반반차 → 09:00~16:00 (6h)
 function _leaveWorkTime(type){
@@ -400,7 +400,7 @@ function _leaveWorkTime(type){
     case 'wed-am':     return {in:'13:00', out:'18:00'};
     case 'half-pm':
     case 'birth-pm':
-    case 'wed-pm':     return {in:'09:00', out:'12:00'};
+    case 'wed-pm':     return {in:'09:00', out:'13:00'};
     case 'quarter-am': return {in:'11:00', out:'18:00'};
     case 'quarter':
     case 'quarter-pm': return {in:'09:00', out:'16:00'};
@@ -2333,7 +2333,10 @@ function _attErpCalcDay(r, ds){
   var st=inM;
   if(realM!==null && realM>inM){ z.late=realM-inM; st=realM; }
   if(outM<=st) return z;
-  var lunchIn=function(a,b){ return Math.max(0, Math.min(b,13*60)-Math.max(a,12*60)); };
+  // 오후 휴가로 13시 전에 퇴근하면 점심을 먹고 간 게 아니라 점심을 빼지 않는다 (2026-10-15)
+  //   예: 오후반차 09:00~13:00 → 4시간 (예전엔 3시간으로 잡혀 조퇴 1시간이 찍혔음)
+  var _pmHome=!!(lvTag && !/-am$/.test(lvTag) && outM<=13*60);
+  var lunchIn=function(a,b){ return _pmHome?0:Math.max(0, Math.min(b,13*60)-Math.max(a,12*60)); };
   var cap=480-lvMin;
   if(isHolWork){
     z.w=outM-st-lunchIn(st,outM);
