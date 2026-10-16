@@ -1068,7 +1068,8 @@ function renderPkPending(){
   }
   card.style.display = '';
 
-  el.innerHTML = pending.map(r => {
+  // ★ 같은 제품 2대 이상 진행 중이면 맨 위에 「한꺼번에 종료」 카드
+  el.innerHTML = _pkGroupCardsHtml(pending) + pending.map(r => {
     const prod = (L.products||[]).find(x => x.name === r.product);
     const isNoMeat = !!(prod && prod.noMeat);
     let wcText;
@@ -1371,17 +1372,28 @@ async function savePkEnd(id){
   if(!end){ toast('종료시간을 입력하세요','d'); return; }
   if(!ea){ toast('생산 EA를 입력하세요','d'); return; }
 
+  const fbId = await _pkCommitEnd(rec, {end, ea, pouch, defect, sauceKg, subKg}, sauceTanks);
+  if(fbId) toast(`${rec.machine||'설비'} 종료 저장됨 ✓`);
+  else toast('저장 실패 - 로컬에만 저장됨','d');
+  _pkAfterEndSave([id]);
+}
+
+// 종료 저장 공통 — 한 대 종료(savePkEnd)·한꺼번에 종료(savePkGroupEnd)가 같이 쓴다.
+//   packing_pending에서 빼고 fbDelete → packing에 fbSave → L.packing push → saveL
+//   extra: 기록에 덧붙일 필드 (한꺼번에 종료의 alloc)
+async function _pkCommitEnd(rec, vals, sauceTanks, extra){
   // 완성된 레코드
-  const completed = {...rec, end, ea, pouch, defect, sauceKg, subKg};
+  const completed = {...rec, ...vals};
   delete completed.fbId;  // ★ saveCkEnd와 동일 — rec(packing_pending)의 fbId가 packing으로 옮겨가지 않게
   if(sauceTanks){
     completed.sauceTanks = sauceTanks;
     // sauceTank 호환 필드 (콤마 문자열)
     completed.sauceTank = sauceTanks.map(s=>s.tank).join(',');
   }
+  if(extra) Object.assign(completed, extra);
 
   // pending에서 제거
-  L.packing_pending = L.packing_pending.filter(r=>r.id!==id);
+  L.packing_pending = L.packing_pending.filter(r=>r.id!==rec.id);
   saveL();
 
   // Firebase packing_pending 삭제
@@ -1395,11 +1407,13 @@ async function savePkEnd(id){
   if(fbId) completed.fbId = fbId;
   L.packing.push(completed);
   saveL();
-  if(fbId) toast(`${completed.machine||'설비'} 종료 저장됨 ✓`);
-  else toast('저장 실패 - 로컬에만 저장됨','d');
+  return fbId;
+}
 
-  // ★ 수정 모드 종료 (이 record가 편집 중이었으면)
-  if(_pkEditingId === id){
+// 종료 저장 뒤 화면 정리 공통
+function _pkAfterEndSave(ids){
+  // ★ 수정 모드 종료 (편집 중이던 record가 종료됐으면)
+  if(_pkEditingId && ids.indexOf(_pkEditingId) >= 0){
     _pkEditingId = null;
     _restorePkStartCardUI();
     const machRows = document.getElementById('pk_machRows');
@@ -1413,6 +1427,226 @@ async function savePkEnd(id){
   renderPL('packing');
   // ★ 파쇄 완료 와건 현황 갱신 (사용량 즉시 차감 표시)
   if(typeof renderPkWagonList === 'function') renderPkWagonList();
+}
+
+// ============================================================
+// 한꺼번에 종료 — 같은 제품을 여러 호기로 돌렸을 때
+//   제품 합계를 한 번만 넣고, 호기별 몫은 가동시간(종료−시작) 비율로 나눈다.
+//   (로타리 포장기 속도가 거의 같고 계수기를 못 믿어서)
+// ============================================================
+var _pkGrp = {};  // 'g0' → [packing_pending id, ...] (renderPkPending 때마다 다시 만듦)
+
+function _pkGroupCardsHtml(pending){
+  _pkGrp = {};
+  const byProd = {}, order = [];
+  pending.forEach(r => {
+    if(_pkEditingId && r.id === _pkEditingId) return;  // 수정 중인 기록은 빼고 묶는다
+    const k = r.product || '';
+    if(!byProd[k]){ byProd[k] = []; order.push(k); }
+    byProd[k].push(r);
+  });
+  let gi = 0;
+  return order.filter(k => byProd[k].length >= 2).map(prodName => {
+    const recs = byProd[prodName];
+    const g = 'g' + (gi++);
+    _pkGrp[g] = recs.map(r => r.id);
+    const sid = 'grp_' + g;  // 소스 탱크 행 함수(pkEndAddStankRow 등) 재사용용 id
+    const machRows = recs.map(r => `
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="min-width:64px;font-size:13px;font-weight:600">${r.machine||'설비미정'}</span>
+            <span style="font-size:12px;color:var(--g5);min-width:64px">시작 ${r.start||'-'}</span>
+            <input class="fc pk-grp-end" data-id="${r.id}" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" oninput="pkGrpPreview('${g}')" style="width:84px;flex:none;text-align:center;padding:5px 7px">
+          </div>`).join('');
+    const sub = pkNeedsSubmat(prodName);
+    return `
+    <div id="pkGrp_${g}" style="border:1.5px solid #1a56db;border-radius:8px;margin-bottom:10px;overflow:hidden">
+      <div style="background:#eef4ff;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--g8)">${prodName} · ${recs.length}대 진행중</div>
+          <div style="font-size:12px;color:var(--g5);margin-top:3px">${recs.map(r=>r.machine||'설비미정').join(' · ')} — 합계만 넣으면 가동시간 비율로 나눠 저장</div>
+        </div>
+        <button class="btn bp bsm" onclick="togglePkGrpForm('${g}')">한꺼번에 종료</button>
+      </div>
+      <div id="pkGrpForm_${g}" style="display:none;padding:12px;background:#fff">
+        <div class="fgrp" style="margin-bottom:10px">
+          <label class="fl">종료시간 <span class="req">*</span> <span style="font-size:11px;color:var(--g4)">(공통으로 채운 뒤 다른 호기만 고치세요)</span></label>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+            <input class="fc" id="pkGrpT_${g}" type="text" inputmode="decimal" maxlength="5" placeholder="HH:MM" oninput="pkGrpSetAll('${g}', this.value)" style="width:84px;flex:none;text-align:center;padding:5px 7px">
+            <button class="btn bo bsm" onclick="pkGrpNow('${g}')">지금</button>
+            <span style="font-size:11px;color:var(--g4)">→ 모든 호기에 채움</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">${machRows}
+          </div>
+        </div>
+        <div class="fg">
+          <div class="fgrp">
+            <label class="fl">생산 EA 합계 <span class="req">*</span></label>
+            <input class="fc" type="number" id="pkGrpEa_${g}" placeholder="0" oninput="pkGrpPreview('${g}')">
+          </div>
+          <div class="fgrp">
+            <label class="fl">파우치 사용량 합계</label>
+            <input class="fc" type="number" id="pkGrpPouch_${g}" placeholder="0">
+          </div>
+          <div class="fgrp">
+            <label class="fl">불량 수량 합계(EA)</label>
+            <input class="fc" type="number" id="pkGrpDefect_${g}" placeholder="0">
+          </div>
+          <div class="fgrp cs2">
+            <label class="fl">소스 탱크 <span style="font-size:11px;color:var(--g4)">(제품 합계 · 탱크마다 같은 비율로 나눔)</span></label>
+            <input type="hidden" id="pkEnd_skg_${sid}" value="0">
+            <div class="pk-end-stank-list" id="pkEndStank_${sid}" style="display:flex;flex-direction:column;gap:4px"></div>
+            <div style="display:flex;gap:4px;margin-top:4px;align-items:center;justify-content:space-between;font-size:11px">
+              <button onclick="pkEndAddStankRow('${sid}')" style="padding:3px 8px;font-size:11px;border:1px dashed #1a56db;background:#fff;color:#1a56db;border-radius:4px;cursor:pointer">+ 소스탱크 추가</button>
+              <span id="pkEndStankSum_${sid}" style="color:var(--g5);font-weight:500">합계 0kg</span>
+            </div>
+          </div>
+          ${sub ? `
+          <div class="fgrp">
+            <label class="fl">부재료량 합계 (${sub})</label>
+            <input class="fc" type="number" step="0.01" id="pkGrpSub_${g}" placeholder="0.00">
+          </div>` : ''}
+        </div>
+        <div id="pkGrpPrev_${g}" style="font-size:12px;color:#1a56db;background:#f5f8ff;border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.6">종료시간과 생산 EA를 넣으면 호기별 몫이 여기에 나옵니다</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn bs bblk" style="flex:1" onclick="savePkGroupEnd('${g}')">${recs.length}대 한꺼번에 종료 저장</button>
+          <button class="btn bo bsm" onclick="togglePkGrpForm('${g}')">취소</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function togglePkGrpForm(g){
+  const form = document.getElementById('pkGrpForm_'+g);
+  if(!form) return;
+  const isOpen = form.style.display !== 'none';
+  form.style.display = isOpen ? 'none' : '';
+  if(!isOpen){
+    const stankList = document.getElementById('pkEndStank_grp_'+g);
+    if(stankList && stankList.children.length === 0) pkEndAddStankRow('grp_'+g);
+  }
+}
+
+function pkGrpSetAll(g, v){
+  document.querySelectorAll('#pkGrp_'+g+' .pk-grp-end').forEach(inp => { inp.value = v; });
+  pkGrpPreview(g);
+}
+
+function pkGrpNow(g){
+  const d = new Date();
+  const v = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  const t = document.getElementById('pkGrpT_'+g);
+  if(t) t.value = v;
+  pkGrpSetAll(g, v);
+}
+
+// HH:MM → 분 (형식 틀리면 null)
+function _pkMinOf(t){
+  const m = String(t||'').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  const h = +m[1], mi = +m[2];
+  if(h > 23 || mi > 59) return null;
+  return h*60 + mi;
+}
+
+// 가동 분 = 종료 − 시작 (자정 넘으면 +24시간)
+function _pkRunMins(start, end){
+  const s = _pkMinOf(start), e = _pkMinOf(end);
+  if(s == null || e == null) return null;
+  return e >= s ? e - s : e - s + 1440;
+}
+
+// 정수 배분 — 버림 뒤 남는 수를 소수부가 큰 순으로 1씩 (합계가 정확히 같게)
+function _pkSplitInt(total, shares){
+  const raw = shares.map(s => total*s);
+  const out = raw.map(Math.floor);
+  let left = Math.round(total - out.reduce((a,b)=>a+b, 0));
+  raw.map((v,i)=>({i, f:v-Math.floor(v)})).sort((a,b)=>b.f-a.f || a.i-b.i)
+    .forEach(x => { if(left > 0){ out[x.i]++; left--; } });
+  return out;
+}
+
+// 소수 둘째 자리 배분 — 끝자리 차이는 마지막 호기에 몰아 합계 맞춤
+function _pkSplit2(total, shares){
+  const out = shares.map(s => Math.round(total*s*100)/100);
+  const head = out.slice(0,-1).reduce((a,b)=>a+b, 0);
+  out[out.length-1] = Math.round((total - head)*100)/100;
+  return out;
+}
+
+// 그룹 입력값 읽기 + 호기별 가동시간·비율 계산
+function _pkGrpRead(g){
+  const ids = _pkGrp[g] || [];
+  const recs = ids.map(id => (L.packing_pending||[]).find(r => r.id === id));
+  const ends = ids.map(id => {
+    const inp = document.querySelector(`#pkGrp_${g} .pk-grp-end[data-id="${id}"]`);
+    return inp ? inp.value.trim() : '';
+  });
+  const mins = recs.map((r,i) => r ? _pkRunMins(r.start, ends[i]) : null);
+  const totMin = mins.reduce((a,b)=>a+(b||0), 0);
+  const shares = mins.map(m => totMin > 0 ? (m||0)/totMin : 0);
+  return {ids, recs, ends, mins, totMin, shares};
+}
+
+function pkGrpPreview(g){
+  const el = document.getElementById('pkGrpPrev_'+g);
+  if(!el) return;
+  const {recs, mins, totMin, shares} = _pkGrpRead(g);
+  if(mins.some(m => m == null) || totMin <= 0){
+    el.textContent = '종료시간과 생산 EA를 넣으면 호기별 몫이 여기에 나옵니다';
+    return;
+  }
+  const ea = parseFloat((document.getElementById('pkGrpEa_'+g)||{}).value) || 0;
+  const eas = ea > 0 ? _pkSplitInt(ea, shares) : null;
+  el.textContent = recs.map((r,i) =>
+    `${r.machine||'설비'} ${(mins[i]/60).toFixed(1)}시간` + (eas ? ` → ${eas[i].toLocaleString()}개` : '')
+  ).join(' · ');
+}
+
+async function savePkGroupEnd(g){
+  if(!L.packing_pending) L.packing_pending = [];
+  const {ids, recs, ends, mins, shares} = _pkGrpRead(g);
+  if(!ids.length || recs.some(r => !r)){ toast('진행중 데이터가 바뀌었습니다. 다시 열어 주세요','d'); renderPkPending(); return; }
+  for(let i=0; i<recs.length; i++){
+    if(mins[i] == null){ toast(`${recs[i].machine||'설비'} 종료시간을 HH:MM으로 입력하세요`,'d'); return; }
+    if(mins[i] <= 0){ toast(`${recs[i].machine||'설비'} 종료시간이 시작시간과 같습니다`,'d'); return; }
+  }
+  const tot = {
+    ea:      parseFloat((document.getElementById('pkGrpEa_'+g)||{}).value) || 0,
+    pouch:   parseFloat((document.getElementById('pkGrpPouch_'+g)||{}).value) || 0,
+    defect:  parseFloat((document.getElementById('pkGrpDefect_'+g)||{}).value) || 0,
+    sauceKg: parseFloat((document.getElementById('pkEnd_skg_grp_'+g)||{}).value) || 0,
+    subKg:   parseFloat((document.getElementById('pkGrpSub_'+g)||{}).value) || 0,
+  };
+  if(!tot.ea){ toast('생산 EA 합계를 입력하세요','d'); return; }
+
+  const eas = _pkSplitInt(tot.ea, shares);
+  const pouches = _pkSplitInt(tot.pouch, shares);
+  const defects = _pkSplitInt(tot.defect, shares);
+  const subs = _pkSplit2(tot.subKg, shares);
+  // 소스: 탱크마다 같은 비율로 나눈다. 기록의 sauceKg는 자기 탱크 몫의 합(탱크 kg가 합계 전부일 때)
+  const tanks = getPkEndSauceTanks('grp_'+g);
+  const tankParts = tanks ? tanks.map(t => _pkSplit2(t.kg, shares)) : null;
+  const tankSum = tanks ? Math.round(tanks.reduce((a,t)=>a+t.kg, 0)*100)/100 : 0;
+  const sauceByTank = tanks && Math.abs(tankSum - tot.sauceKg) < 0.005;
+  const sauces = sauceByTank
+    ? recs.map((_,i) => Math.round(tankParts.reduce((a,p)=>a+p[i], 0)*100)/100)
+    : _pkSplit2(tot.sauceKg, shares);
+
+  let fail = 0;
+  for(let i=0; i<recs.length; i++){
+    // packing 문서 ID가 밀리초 시각이라 연달아 저장하면 같은 ID로 덮어쓸 수 있다 → 호기 사이 5ms 띄움
+    if(i > 0) await new Promise(res => setTimeout(res, 5));
+    const sauceTanks = tanks ? tanks.map((t,k) => ({tank: t.tank, kg: tankParts[k][i]})) : null;
+    const alloc = {by:'time', share: Math.round(shares[i]*10000)/10000, mins: mins[i], total: {...tot}, n: recs.length};
+    const fbId = await _pkCommitEnd(recs[i],
+      {end: ends[i], ea: eas[i], pouch: pouches[i], defect: defects[i], sauceKg: sauces[i], subKg: subs[i]},
+      sauceTanks, {alloc});
+    if(!fbId) fail++;
+  }
+  if(fail) toast(`${fail}대 저장 실패 - 로컬에만 저장됨`,'d');
+  else toast(`${recs[0].product} ${recs.length}대 종료 저장됨 ✓`);
+  _pkAfterEndSave(ids);
 }
 
 // onPkWagonChange - 마지막 설비 행 와건에 자동 입력
