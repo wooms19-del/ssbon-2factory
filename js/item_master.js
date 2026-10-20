@@ -123,6 +123,7 @@ function buildProductsFromMaster(){
           if(x.code === '200006' || x.code === '200007' || x.code === '200008'){ kgea = x.qty; hasMeat = true; }
           if(x.code === '200011') sauce = 'FP 장조림 소스';
           if(x.code === '200009') sauce = 'FC 장조림 소스';
+          if(x.code === '200012') sauce = '순한간장 장조림소스';
         });
       }
     }
@@ -304,3 +305,92 @@ async function renderMasterRecipeFor(prodName){
   el.innerHTML = html;
 }
 window.renderMasterRecipeFor = renderMasterRecipeFor;
+
+// ============================================================
+// 신규 품목 반영 (2026-10-19) — 저당 장조림 80g 6입 · 순한간장 장조림소스
+// 관리자 전용 단추. 모든 쓰기는 set(merge) / arrayUnion → 여러 번 눌러도 같은 결과.
+// ============================================================
+var _IM_NEW_20261019 = (function(){
+  var L_ = function(code, name, qty, unit){ return { code: code, name: name, qty: qty, unit: unit }; };
+  var M_ = function(code, name, unit, category, part){ return { code: code, name: name, unit: unit, category: category, part: part || '' }; };
+  var BAN = '[본죽]저당 본 쇠고기 장조림 80g_FC_반제품(설도)';
+  var FIN = '[본죽]저당 본 쇠고기 장조림 80g_FC(6입_설도)';
+  var WEB = '저당 장조림 80g 6입';
+  return {
+    web: WEB,
+    master: [
+      M_('100026','에리스리톨','KG','원료부자재'),
+      M_('100027','알룰로오스 분말','KG','원료부자재'),
+      M_('100028','스테비텐후레쉬','G','원료부자재'),
+      M_('100029','수크랄로스','G','원료부자재'),
+      M_('100030','매일 맛있고 순한 진간장','KG','원료부자재'),
+      M_('200012','순한간장 장조림소스','KG','소스'),
+      M_('500014','[본죽]저당 쇠고기장조림 80g_FC_파우치','EA','파우치'),
+      M_('500015','[본죽]저당 쇠고기장조림 80g_FC인박스','EA','포장재'),
+      M_('500016','저당장조림 외박스','EA','포장재'),
+      M_('320009', BAN, 'EA', '반제품', '설도'),
+      M_('600031', FIN, 'EA', '완제품', '설도')
+    ],
+    recipe: {
+      '200012': { parentCode:'200012', kind:'소스', name:'순한간장 장조림소스', unit:'KG', inner:[
+        L_('199999','정제수',0.5738,'KG'), L_('100030','매일 맛있고 순한 진간장',0.199,'KG'),
+        L_('100005','미향(오뚜기)',0.052,'KG'), L_('100026','에리스리톨',0.05,'KG'),
+        L_('100004','정백당',0.038,'KG'), L_('100007','L-글루탐산나트륨',0.024,'KG'),
+        L_('100008','다림쇠고기육수(푸드에스엠)',0.022,'KG'), L_('100006','생강엑기스(동방푸드마스타)',0.02,'KG'),
+        L_('100021','무즙분말',0.007,'KG'), L_('100027','알룰로오스 분말',0.005,'KG'),
+        L_('100017','포리믹스-씨에스(우리상사)',0.0039,'KG'), L_('100011',"5'-리보뉴클레오티드이나트륨",0.0018,'KG'),
+        L_('100009','양파농축액(엔에프티)',0.001,'KG'), L_('100012','지미맥스(카스인바이오)',0.001,'KG'),
+        L_('100024','카라멜색소 Ⅲ',0.001,'KG'), L_('100016','잔탄검(우리상사)',0.0004,'KG'),
+        L_('100028','스테비텐후레쉬',0.03,'G'), L_('100029','수크랄로스',0.03,'G') ]},
+      '320009': { parentCode:'320009', kind:'반제품', name: BAN, unit:'EA', inner:[
+        L_('200007','파쇄_쇠고기_설도_외국산',0.024,'KG'), L_('200012','순한간장 장조림소스',0.056,'KG'),
+        L_('500014','[본죽]저당 쇠고기장조림 80g_FC_파우치',1,'EA') ]},
+      // components = 6입 세트의 반제품 (기존 5입 600001 과 같은 모양 — 원료육·소스를 여기서 읽음)
+      '600031': { parentCode:'600031', kind:'완제품', name: FIN, unit:'EA',
+        components:[ L_('320009', BAN, 6, 'EA') ],
+        outer:[ L_('500015','[본죽]저당 쇠고기장조림 80g_FC인박스',1,'EA'), L_('500016','저당장조림 외박스',0.1,'EA') ]}
+    },
+    keyMap: { webName: WEB, erpCodes: ['600031'] },
+    capa: '700',
+    sauce: { name:'순한간장 장조림소스', memo:'저당 80g용' }
+  };
+})();
+
+async function imApplyNewItems20261019(){
+  if(!window._isAdmin){ if(typeof toast==='function') toast('관리자만 사용할 수 있습니다','d'); return; }
+  var N = _IM_NEW_20261019, n = 0;
+  try {
+    // 문서별 set — 스테이징의 쓰기 차단(doc.set 감쌈)을 그대로 타도록 batch 는 쓰지 않음
+    var writes = [];
+    N.master.forEach(function(m){ writes.push(db.collection('item_master').doc(m.code).set(m, {merge:true})); });
+    Object.keys(N.recipe).forEach(function(code){ writes.push(db.collection('item_recipe').doc(code).set(N.recipe[code], {merge:true})); });
+    writes.push(db.collection('external_key_map').doc(N.web).set(N.keyMap, {merge:true}));
+    var capa = {}; capa[N.web] = N.capa;
+    writes.push(db.collection('item_config').doc('product_capa').set({capaMap: capa}, {merge:true}));
+    await Promise.all(writes); n += writes.length;
+    // 소스: 같은 이름이 없을 때만 배열 끝에 추가 (배열·문서 통째 덮어쓰기 금지)
+    var cfgRef = db.collection('settings').doc('config');
+    var cfg = await cfgRef.get();
+    var sauces = (cfg.exists && cfg.data().sauces) || [];
+    if(!sauces.some(function(s){ return s && s.name === N.sauce.name; })){
+      await cfgRef.update({ sauces: firebase.firestore.FieldValue.arrayUnion(N.sauce) }); n++;
+    }
+    if(typeof L !== 'undefined' && L.sauces && !L.sauces.some(function(s){ return s.name === N.sauce.name; })) L.sauces.push(N.sauce);
+    if(typeof toast==='function') toast('신규 품목 반영 ✓ 문서 '+n+'개 저장','s');
+    await applyMasterProducts();
+    if(document.getElementById('im_view') && document.getElementById('im_view').innerHTML) loadItemMasterView();
+  } catch(e){
+    console.error('[신규 품목 반영] 실패', e);
+    if(typeof toast==='function') toast('신규 품목 반영 실패: '+(e && e.message),'d');
+  }
+}
+window.imApplyNewItems20261019 = imApplyNewItems20261019;
+
+// 관리자일 때만 단추 표시 (로그인/로그아웃 시 admin.js 에서 다시 부름)
+function _imRenderAdminBtn(){
+  var b = document.getElementById('im_new_20261019');
+  if(b) b.style.display = window._isAdmin ? '' : 'none';
+}
+window._imRenderAdminBtn = _imRenderAdminBtn;
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _imRenderAdminBtn);
+else _imRenderAdminBtn();

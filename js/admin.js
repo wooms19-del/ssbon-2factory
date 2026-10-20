@@ -200,6 +200,7 @@
 
   // 관리자 로그인/로그아웃 시 현재 보고 있는 화면 재렌더 (override 반영/해제)
   function _adminRefreshView(){
+    try { if(typeof _imRenderAdminBtn === 'function') _imRenderAdminBtn(); } catch(e){}     // 품목 마스터 관리자 단추
     try { if(typeof refreshCurrentTab_ === 'function') refreshCurrentTab_(); } catch(e){}   // 입력 모드
     try {
       if(typeof MODE !== 'undefined'){
