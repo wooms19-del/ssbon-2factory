@@ -300,11 +300,12 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
   var d = function(r){return String(r.date||'').slice(0,10);};
   var idOf = function(r){return r.fbId||r.id||r._id||'';};
 
-  // 0) sauce 날짜별 FP/FC 집계
-  var scFP={}, scFC={};
+  // 0) sauce 날짜별 FP/FC/저당(순한간장) 집계
+  var scFP={}, scFC={}, scLow={};
   (sc||[]).forEach(function(r){
     var dt=d(r); var nm=r.name||''; var kg=parseInt(r.kg)||0;
-    if(nm.indexOf('FP')>=0){ scFP[dt]=(scFP[dt]||0)+kg; }
+    if(nm.indexOf('순한간장')>=0 || nm.indexOf('저당')>=0){ scLow[dt]=(scLow[dt]||0)+kg; }
+    else if(nm.indexOf('FP')>=0){ scFP[dt]=(scFP[dt]||0)+kg; }
     else if(nm.indexOf('FC')>=0){ scFC[dt]=(scFC[dt]||0)+kg; }
   });
 
@@ -920,6 +921,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
               outBoxes: isFR ? outBoxVal : 0,
               sauceFP: isDF ? (scFP[date]||0) : 0,
               sauceFC: isDF ? (scFC[date]||0) : 0,
+              sauceLow: isDF ? (scLow[date]||0) : 0,
               qaiKg: isFR ? qaiKg : 0,
               pouch: isFR ? Math.round(pkr.pouch) : 0,
               boxUse: isFR ? boxUse : 0,
@@ -960,6 +962,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
             unitCnt: opR.unitCnt, outBoxes: outBoxVal,
             sauceFP: isDayFirst ? (scFP[date]||0) : 0,
             sauceFC: isDayFirst ? (scFC[date]||0) : 0,
+            sauceLow: isDayFirst ? (scLow[date]||0) : 0,
             qaiKg: qaiKg,
             pouch: Math.round(pkr.pouch), boxUse: boxUse,
             isTest: false,
@@ -1018,7 +1021,7 @@ function _perfBuildRows(th, pp, ck, sh, pk, op, sc){
       ppKg:0, ckKg:0, shKg:0, sauceKg:0,
       innerEa:innerEa, defPouch:defPouch,
       outerBoxes:opT.boxes, boxDef:0, tray:0, trayDef:0, unitCnt:0,
-      outBoxes:opT.boxes, sauceFP:0, sauceFC:0, qaiKg:0,
+      outBoxes:opT.boxes, sauceFP:0, sauceFC:0, sauceLow:0, qaiKg:0,
       pouch:Math.round(r.pouch), boxUse:opT.boxes,
       isTest:true, isPending:false
     });
@@ -1133,8 +1136,8 @@ function _perfRenderTable(rows){
   wrap.style.display='';
 
   // 0~3: 일수·날짜·소비기한·제품명  4~8: 원육  9~11: 공정kg  12: 소스kg(비병합)
-  // 13~20: 내포장~출고박스  21~22: FP·FC소스  23: 메추리알  24~25: 파우치·박스합계
-  var MCOLS=new Set([0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]);
+  // 13~19: 내포장~출고박스  20~22: FP·FC·저당소스  23: 메추리알  24~25: 파우치·박스합계
+  var MCOLS=new Set([0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]);
   // 날짜별 공유 병합 대상 (일수·날짜·소비기한)
   var DAY_MCOLS=new Set([0,1]);  // 일수, 날짜만 그날 단위 병합 (소비기한은 제품마다 다를 수 있어 제외)
   // 무육 제외 병합 대상 (전처리·자숙·파쇄 — meat 행만 묶고 noMeat는 빈셀)
@@ -1146,7 +1149,7 @@ function _perfRenderTable(rows){
     '전처리<br>(kg)','자숙<br>(kg)','파쇄<br>(kg)','소스<br>(kg)',
     '내포장<br>(EA)','불량<br>파우치','완박스','불량<br>박스',
     '트레이','트레이<br>불량','출고<br>박스',
-    'FP소스<br>(kg)','FC소스<br>(kg)','메추리<br>알(kg)','파우치<br>합계','박스<br>합계'
+    'FP소스<br>(kg)','FC소스<br>(kg)','저당소스<br>(kg)','메추리<br>알(kg)','파우치<br>합계','박스<br>합계'
   ];
   var _mkTestBox=function(base, t){
     var b=(base==null||base==='')?'':String(base);
@@ -1186,7 +1189,7 @@ function _perfRenderTable(rows){
       r.innerEa ? r.innerEa.toLocaleString('ko-KR') : '', fmt(r.defPouch,1),
       fmt(r.outerBoxes,1), r.boxDef||'',
       fmt(r.tray,1), r.trayDef||'', fmt(r.outBoxes,1),
-      fmt(r.sauceFP,1), fmt(r.sauceFC,1), fmt(r.qaiKg),
+      fmt(r.sauceFP,1), fmt(r.sauceFC,1), fmt(r.sauceLow,1), fmt(r.qaiKg),
       r.pouch ? r.pouch.toLocaleString('ko-KR') : '', fmt(r.boxUse,1)
     ];
     var rowKey = (r.date||'') + '|' + (r.product||'') + '|' + (r.rmType||'') + '|' + (isSubRow?'s'+r.subRowIdx:'');
@@ -1278,9 +1281,9 @@ function perfDownloadXlsx(){
     '전처리(kg)','자숙(kg)','파쇄(kg)','소스사용량(kg)',
     '내포장수량(EA)','불량파우치(EA)','완박스','불량박스',
     '트레이(EA)','트레이불량(EA)','출고박스',
-    'FP소스배합(kg)','FC소스배합(kg)','깐메추리알(kg)','파우치사용량','박스사용량'
+    'FP소스배합(kg)','FC소스배합(kg)','저당소스배합(kg)','깐메추리알(kg)','파우치사용량','박스사용량'
   ];
-  var MCOLS_ARR=[0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24];
+  var MCOLS_ARR=[0,1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25];
   var MCOLS=new Set(MCOLS_ARR);
 
   var aoa=[headers];
@@ -1312,6 +1315,7 @@ function perfDownloadXlsx(){
       (!isSubRow) ? (r.outBoxes||'') : '',
       (!isSubRow) ? (r.sauceFP||'') : '',
       (!isSubRow) ? (r.sauceFC||'') : '',
+      (!isSubRow) ? (r.sauceLow||'') : '',
       (!isSubRow) ? (r.qaiKg||'') : '',
       (!isSubRow) ? (r.pouch||'') : '',
       (!isSubRow) ? (r.boxUse||'') : ''
@@ -1356,7 +1360,7 @@ function perfDownloadXlsx(){
     {wch:10},{wch:9},{wch:9},{wch:11},
     {wch:12},{wch:10},{wch:8},{wch:8},
     {wch:9},{wch:11},{wch:9},
-    {wch:11},{wch:11},{wch:10},{wch:11},{wch:9}
+    {wch:11},{wch:11},{wch:12},{wch:10},{wch:11},{wch:9}
   ];
   if(merges.length) ws['!merges']=merges;
   ws['!freeze']={xSplit:4,ySplit:1};
