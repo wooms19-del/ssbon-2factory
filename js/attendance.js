@@ -85,10 +85,10 @@ async function _fetchHolidaysFromApi(year){
 function _isHoliday(date){ return !!(_attHolidays && _attHolidays[date]); }
 function _holidayName(date){ return (_attHolidays && _attHolidays[date]) || ''; }
 
-// 공휴일이면, 실제 출근한 사람(출퇴근 시간 또는 checkin/early 태그)만 남기고
+// 공휴일 · 주말(토 · 일)이면, 실제 출근한 사람(출퇴근 시간 또는 checkin/early 태그)만 남기고
 // 나머지(결근/연차/무기록)는 전부 '휴무'로 처리.
 function _applyAutoHoliday(date){
-  if(!_isHoliday(date)) return;
+  if(!_isHoliday(date) && !_attIsWeekend(date)) return;
   (_attEmps||[]).forEach(function(e){
     var r = _attRecs[e.name];
     var tags = (r && r.tags) || [];
@@ -211,7 +211,9 @@ function attSave(){
       // 입사일 이전 날짜에는 기록을 만들지 않는다 (2026-09-29)
       var _jd=_attJoinDateOf(e.name);
       if(_jd && _attDate<_jd) return;
-      full[e.name] = _attRecs[e.name]||{tags:[],inTime:'09:00',outTime:'18:00'};
+      // 기록 없는 사람 기본값: 평일은 09:00~18:00 출근, 주말 · 공휴일은 휴무 (2026-10-23)
+      var _off = _isHoliday(_attDate) || _attIsWeekend(_attDate);
+      full[e.name] = _attRecs[e.name]||(_off ? {tags:['holiday'],inTime:'',outTime:''} : {tags:[],inTime:'09:00',outTime:'18:00'});
     });
     Object.keys(full).forEach(function(n){
       var tags=(full[n]||{}).tags||[];
@@ -2039,7 +2041,7 @@ function attPsExcel(){
 // ─────────────────────────────────────────────────────────
 async function attDownloadWeekly(){
   // 화면에서 보고 있는 주를 그대로 뽑는다. (_attDate 는 오늘이라 과거 주가 안 나왔음)
-  // 서명표는 일요일부터 토요일까지 7일을 항상 채운다. 근무가 없는 날도 칸은 남긴다.
+  // 서명표는 일요일부터 토요일까지 7일에서, 일 안 한 주말 · 공휴일은 뺀다(2026-10-23).
   var sun = _attWeekStart ? new Date(_attWeekStart) : (function(){
     var t=new Date(_attDate);
     var s=new Date(t); s.setDate(t.getDate()-t.getDay()); return s;
@@ -2075,6 +2077,19 @@ async function attDownloadWeekly(){
     return;
   }
 
+  // 일 안 한 주말 · 공휴일은 서명표에서 뺀다 — 칸이 넓어진다 (2026-10-23).
+  dates=dates.filter(function(dt){
+    var ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+    if(!_attIsWeekend(ds) && !_isHoliday(ds)) return true;
+    var raw=localStorage.getItem(_attDateKey(ds)); if(!raw) return false;
+    var dayRec; try{ dayRec=JSON.parse(raw)||{}; }catch(e){ return false; }
+    return Object.keys(dayRec).some(function(n){
+      var r=dayRec[n], tags=(r&&r.tags)||[];
+      if(tags.indexOf('absent')>=0||tags.indexOf('holiday')>=0||tags.indexOf('annual')>=0) return false;
+      if(!tags.length && r && r.inTime==='09:00' && r.outTime==='18:00') return false;
+      return !!((r&&(r.inTime||r.outTime)) || tags.indexOf('checkin')>=0 || tags.indexOf('early')>=0);
+    });
+  });
   var DS=8;
   var numDays=dates.length;
   var dlabelsByDate=dates.map(function(dt){return dlabels[dt.getDay()];});
