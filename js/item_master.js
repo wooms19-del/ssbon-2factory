@@ -113,9 +113,11 @@ function buildProductsFromMaster(){
   var out = [];
   _imData.map.forEach(function(mp){
     var web = mp.webName, codes = mp.erpCodes || [];
-    if(!codes.length) return;
-    var fin = _imData.recipe[codes[0]];
+    // ERP 코드·레시피가 아직 없는 신규 제품: 매핑 문서의 임시 kgea/sauce 로 목록에만 올린다 (2026-10-28)
+    if(!codes.length && mp.kgea == null) return;
+    var fin = codes.length ? _imData.recipe[codes[0]] : null;
     var kgea = 0, sauce = null, hasMeat = false;
+    if(!fin && mp.kgea != null){ kgea = parseFloat(mp.kgea) || 0; sauce = mp.sauce || null; hasMeat = kgea > 0; }
     if(fin && fin.components && fin.components.length){
       var ban = _imData.recipe[fin.components[0].code];
       if(ban && ban.inner){
