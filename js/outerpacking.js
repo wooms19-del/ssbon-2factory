@@ -380,7 +380,23 @@ function opCalc(i, innerEa) {
 }
 
 // ─ 외포장 작업시간 기록 (생산성용) ─
-function opDocId(date, product){ return 'op_'+date+'_'+String(product).replace(/[\s\W]/g,'_').slice(0,20); }
+// ★ 한글을 지우지 않는다. 예전 방식(한글 → '_', 20자 자르기)은 '미니쇠고기 장조림 70g 리뉴얼'과
+//   '…맥스용'이 같은 ID가 되어, 한쪽 완료가 다른 쪽 기록을 덮어썼다 (2026-10-23).
+function opDocId(date, product){ return 'op_'+date+'_'+String(product).trim().replace(/[\s\/]+/g,'_'); }
+
+// 그 날짜·제품의 외포장 문서 ref. 이미 있는 문서(예전 ID로 저장된 것 포함)는 date·product 필드로 찾아 그대로 쓰고,
+// 없으면 새 ID로 만든다. ID만 보고 고르면 예전 ID가 겹친 다른 제품 문서를 건드릴 수 있다.
+async function _opRef(date, product){
+  const col = db.collection('outerpacking');
+  try{
+    const snap = await col.where('date','==',date).where('product','==',product).get();
+    if(!snap.empty){
+      const docs = snap.docs.slice().sort((a,b)=> (a.data()._timeOnly?1:0) - (b.data()._timeOnly?1:0));
+      return docs[0].ref;
+    }
+  }catch(e){ console.warn('[외포장] 기존 문서 조회 실패 — 새 ID 사용', e); }
+  return col.doc(opDocId(date, product));
+}
 
 async function opTimeSave(i, date, product){
   const norm = v => {
@@ -399,7 +415,7 @@ async function opTimeSave(i, date, product){
   if(!start || !end){ toast('시간을 HH:MM 형식으로 입력하세요 (예: 10:30 또는 1030)','d'); return; }
   if(!n){ toast('인원을 입력하세요','d'); return; }
   try{
-    const ref = db.collection('outerpacking').doc(opDocId(date, product));
+    const ref = await _opRef(date, product);
     const snap = await ref.get();
     const logs = (snap.exists && snap.data().workLogs) || [];
     const rec = { start, end, workers:n };
@@ -424,7 +440,7 @@ function opTimeEdit(i, idx, start, end, workers){
 async function opTimeDel(i, date, product, idx){
   if(!confirm('이 작업 기록을 삭제할까요?')) return;
   try{
-    const ref = db.collection('outerpacking').doc(opDocId(date, product));
+    const ref = await _opRef(date, product);
     const snap = await ref.get();
     if(!snap.exists) return;
     const logs = snap.data().workLogs||[];
@@ -482,10 +498,11 @@ async function completeOuterPacking(i, date, product, innerEa) {
     savedAt: new Date().toISOString()
   };
 
-  const docId = opDocId(date, product);
+  const opRef = await _opRef(date, product);
+  const docId = opRef.id;
   // ★ 시간 기록 보존: fbSave는 통째 set이라 기존 workLogs를 rec에 합쳐서 저장
   try{
-    const ex = await db.collection('outerpacking').doc(docId).get();
+    const ex = await opRef.get();
     if(ex.exists && ex.data().workLogs) rec.workLogs = ex.data().workLogs;
   }catch(e){ console.warn('[외포장] workLogs 보존 실패', e); }
   const ok = await fbSave('outerpacking', rec, docId);
